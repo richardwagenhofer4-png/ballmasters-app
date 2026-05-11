@@ -10,6 +10,8 @@ import {
   GoogleAuthProvider,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { saveUserProfile } from "@/lib/firestore";
+import { setAuthCookies } from "@/lib/cookies";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -68,8 +70,18 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
+      const ageNum = parseInt(age, 10);
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(credential.user, { displayName: fullName.trim() });
+      await saveUserProfile({
+        uid: credential.user.uid,
+        email: credential.user.email ?? email,
+        fullName: fullName.trim(),
+        role: role as "student" | "coach",
+        age: ageNum,
+        ...(ageNum < 13 && parentEmail ? { parentEmail } : {}),
+      });
+      setAuthCookies(role);
       router.push("/dashboard");
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
@@ -87,7 +99,15 @@ export default function RegisterPage() {
     setError("");
     setGoogleLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const credential = await signInWithPopup(auth, googleProvider);
+      await saveUserProfile({
+        uid: credential.user.uid,
+        email: credential.user.email ?? "",
+        fullName: credential.user.displayName ?? "",
+        role: role as "student" | "coach",
+        age: null,
+      });
+      setAuthCookies(role);
       router.push("/dashboard");
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";

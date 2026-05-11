@@ -9,6 +9,8 @@ import {
   GoogleAuthProvider,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { getUserProfile } from "@/lib/firestore";
+import { setAuthCookies } from "@/lib/cookies";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -35,13 +37,19 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  async function afterLogin(uid: string) {
+    const profile = await getUserProfile(uid);
+    setAuthCookies(profile?.role ?? "student");
+    router.push("/dashboard");
+  }
+
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard");
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      await afterLogin(credential.user.uid);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
       setError(getErrorMessage(code));
@@ -54,8 +62,8 @@ export default function LoginPage() {
     setError("");
     setGoogleLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
-      router.push("/dashboard");
+      const credential = await signInWithPopup(auth, googleProvider);
+      await afterLogin(credential.user.uid);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
       setError(getErrorMessage(code));
