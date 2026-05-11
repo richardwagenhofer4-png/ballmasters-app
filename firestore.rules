@@ -4,7 +4,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow create: if request.auth != null && request.auth.uid == userId;
-      allow read, update: if request.auth != null && request.auth.uid == userId;
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
     }
 
     match /inviteCodes/{code} {
