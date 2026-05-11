@@ -72,7 +72,7 @@ export default function CoachDashboardPage() {
           )}
           <button
             onClick={() => setModalOpen(true)}
-            className="w-full rounded-lg border border-red-300 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
+            className="w-full rounded-lg py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 transition"
           >
             Delete my account
           </button>
