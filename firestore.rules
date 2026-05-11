@@ -5,6 +5,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      // Coaches can read all user profiles (needed for the student selector)
+      allow read: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
     }
 
     match /inviteCodes/{code} {
@@ -25,6 +28,20 @@ service cloud.firestore {
           && request.resource.data.usedBy.size() == resource.data.usedBy.size() + 1
         )
       );
+    }
+
+    match /videos/{videoId} {
+      // Coaches can create videos assigned to themselves
+      allow create: if request.auth != null
+        && request.resource.data.coachId == request.auth.uid;
+
+      // Coaches can read, update, and delete their own videos
+      allow read, update, delete: if request.auth != null
+        && resource.data.coachId == request.auth.uid;
+
+      // Students can read videos where they are in the studentIds array
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.studentIds;
     }
 
   }
