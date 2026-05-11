@@ -1,0 +1,204 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+
+interface VideoMeta {
+  id: string;
+  title: string;
+  coachName: string;
+  coachId: string;
+  viewedBy: string[];
+  createdAt: string;
+  downloadAllowed: boolean;
+  fileName: string;
+}
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
+export default function VideoPlayerPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const [uid, setUid] = useState<string | null>(null);
+  const [meta, setMeta] = useState<VideoMeta | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [watched, setWatched] = useState(false);
+  const hasRecordedView = useRef(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) { router.push("/login"); return; }
+      setUid(user.uid);
+
+      try {
+        // 1. Load video metadata from Firestore (client SDK, rules enforce access)
+        const snap = await getDoc(doc(db, "videos", id));
+        if (!snap.exists()) {
+          setError("Video not found.");
+          setLoading(false);
+          return;
+        }
+        const data = { id: snap.id, ...(snap.data() as Omit<VideoMeta, "id">) };
+        setMeta(data);
+        setWatched((data.viewedBy ?? []).includes(user.uid));
+
+        // 2. Get a fresh presigned URL from the server
+        const idToken = await user.getIdToken();
+        const res = await fetch(`/api/videos/${id}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        if (!res.ok) {
+          const { error: msg } = await res.json();
+          throw new Error(msg ?? "Failed to load video");
+        }
+        const { videoUrl: url } = await res.json();
+        setVideoUrl(url);
+      } catch (err: unknown) {
+        console.error("[video-player]", err);
+        setError((err as Error).message ?? "Failed to load video.");
+      } finally {
+        setLoading(false);
+      }
+    });
+    return unsub;
+  }, [id, router]);
+
+  async function handlePlay() {
+    if (hasRecordedView.current || !uid || !id || watched) return;
+    hasRecordedView.current = true;
+    try {
+      await updateDoc(doc(db, "videos", id), {
+        viewedBy: arrayUnion(uid),
+      });
+      setWatched(true);
+    } catch (err) {
+      // Non-fatal — don't interrupt playback
+      console.error("[video-player] failed to record view:", err);
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <svg className="h-10 w-10 animate-spin text-white opacity-40" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <p className="text-red-600 font-medium mb-4">{error}</p>
+          <Link
+            href="/student/videos"
+            className="text-sm font-semibold hover:underline"
+            style={{ color: "#1A6B45" }}
+          >
+            ← Back to videos
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-950 flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-900">
+        <Link
+          href="/student/videos"
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+          </svg>
+          All videos
+        </Link>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-xl">⚽</span>
+          <span className="text-sm font-bold text-white">Ballmasters</span>
+        </div>
+
+        {/* Watched indicator */}
+        {watched && (
+          <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#4ade80" }}>
+            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
+            </svg>
+            Watched
+          </div>
+        )}
+        {!watched && <div className="w-16" />}
+      </div>
+
+      {/* Video player */}
+      <div className="flex-1 flex flex-col items-center justify-center bg-black">
+        {videoUrl ? (
+          <video
+            ref={videoRef}
+            src={videoUrl}
+            controls
+            controlsList={meta?.downloadAllowed ? undefined : "nodownload"}
+            onPlay={handlePlay}
+            className="w-full max-h-[70vh] bg-black"
+            playsInline
+          >
+            Your browser does not support video playback.
+          </video>
+        ) : (
+          <div className="text-gray-500 text-sm">Video unavailable.</div>
+        )}
+      </div>
+
+      {/* Metadata panel */}
+      <div className="bg-gray-900 px-6 py-5">
+        <h1 className="text-lg font-bold text-white leading-snug mb-1">
+          {meta?.title ?? "Untitled"}
+        </h1>
+        <div className="flex items-center gap-3 text-sm text-gray-400">
+          <span>{meta?.coachName}</span>
+          {meta?.createdAt && (
+            <>
+              <span>·</span>
+              <span>{formatDate(meta.createdAt)}</span>
+            </>
+          )}
+          {!watched && (
+            <>
+              <span>·</span>
+              <span
+                className="font-semibold text-xs px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "#14532d", color: "#4ade80" }}
+              >
+                New
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+    </main>
+  );
+}

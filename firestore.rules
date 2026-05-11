@@ -42,6 +42,13 @@ service cloud.firestore {
       // Students can read videos where they are in the studentIds array
       allow read: if request.auth != null
         && request.auth.uid in resource.data.studentIds;
+
+      // Students can mark a video as viewed by appending their uid to viewedBy (append-only)
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.studentIds
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
+        && request.resource.data.viewedBy.hasAll(resource.data.viewedBy)
+        && request.resource.data.viewedBy.size() == resource.data.viewedBy.size() + 1;
     }
 
   }
