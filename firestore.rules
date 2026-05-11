@@ -1,11 +1,31 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     match /users/{userId} {
-      // A user can create their own document (set on registration)
       allow create: if request.auth != null && request.auth.uid == userId;
-      // A user can read and update their own document
       allow read, update: if request.auth != null && request.auth.uid == userId;
     }
+
+    match /inviteCodes/{code} {
+      // Anyone can read a code to validate it — links are meant to be shared
+      allow read: if true;
+
+      // Only authenticated coaches can create codes for themselves
+      allow create: if request.auth != null
+        && request.resource.data.createdBy == request.auth.uid;
+
+      // The coach who owns the code can update anything (e.g. deactivate)
+      // Any authenticated user can append their own uid to usedBy
+      allow update: if request.auth != null && (
+        resource.data.createdBy == request.auth.uid
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy'])
+          && request.resource.data.usedBy.hasAll(resource.data.usedBy)
+          && request.resource.data.usedBy.size() == resource.data.usedBy.size() + 1
+        )
+      );
+    }
+
   }
 }
