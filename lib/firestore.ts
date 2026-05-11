@@ -17,6 +17,13 @@ export interface UserProfile {
 export async function saveUserProfile(
   profile: Omit<UserProfile, "createdAt" | "school">
 ): Promise<void> {
+  console.log("[saveUserProfile] called with:", {
+    uid: profile.uid,
+    email: profile.email,
+    role: profile.role,
+    age: profile.age,
+  });
+
   const ref = doc(db, "users", profile.uid);
   const data: Record<string, unknown> = {
     uid: profile.uid,
@@ -30,7 +37,15 @@ export async function saveUserProfile(
   if (profile.parentEmail) {
     data.parentEmail = profile.parentEmail;
   }
-  await setDoc(ref, data);
+
+  console.log("[saveUserProfile] writing to Firestore path: users/" + profile.uid);
+  try {
+    await setDoc(ref, data);
+    console.log("[saveUserProfile] write succeeded");
+  } catch (err) {
+    console.error("[saveUserProfile] write FAILED:", err);
+    throw err;
+  }
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {

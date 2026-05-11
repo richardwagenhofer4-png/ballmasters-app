@@ -71,8 +71,13 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const ageNum = parseInt(age, 10);
+
+      console.log("[register] creating Firebase Auth account for:", email);
       const credential = await createUserWithEmailAndPassword(auth, email, password);
+      console.log("[register] Auth account created, uid:", credential.user.uid);
+
       await updateProfile(credential.user, { displayName: fullName.trim() });
+
       await saveUserProfile({
         uid: credential.user.uid,
         email: credential.user.email ?? email,
@@ -81,11 +86,21 @@ export default function RegisterPage() {
         age: ageNum,
         ...(ageNum < 13 && parentEmail ? { parentEmail } : {}),
       });
+
       setAuthCookies(role);
+      console.log("[register] complete — redirecting to /dashboard");
       router.push("/dashboard");
     } catch (err: unknown) {
-      const code = (err as { code?: string }).code ?? "";
-      setError(getErrorMessage(code));
+      const firebaseErr = err as { code?: string; message?: string };
+      console.error("[register] error:", firebaseErr.code, firebaseErr.message, err);
+
+      if (firebaseErr.code?.startsWith("auth/")) {
+        setError(getErrorMessage(firebaseErr.code));
+      } else if (firebaseErr.code === "permission-denied") {
+        setError("Unable to save your profile. Firestore permissions are not configured — please contact support.");
+      } else {
+        setError(`Registration error: ${firebaseErr.message ?? "Unknown error"}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -99,7 +114,10 @@ export default function RegisterPage() {
     setError("");
     setGoogleLoading(true);
     try {
+      console.log("[register/google] opening Google sign-in popup");
       const credential = await signInWithPopup(auth, googleProvider);
+      console.log("[register/google] signed in, uid:", credential.user.uid);
+
       await saveUserProfile({
         uid: credential.user.uid,
         email: credential.user.email ?? "",
@@ -107,11 +125,21 @@ export default function RegisterPage() {
         role: role as "student" | "coach",
         age: null,
       });
+
       setAuthCookies(role);
+      console.log("[register/google] complete — redirecting to /dashboard");
       router.push("/dashboard");
     } catch (err: unknown) {
-      const code = (err as { code?: string }).code ?? "";
-      setError(getErrorMessage(code));
+      const firebaseErr = err as { code?: string; message?: string };
+      console.error("[register/google] error:", firebaseErr.code, firebaseErr.message, err);
+
+      if (firebaseErr.code?.startsWith("auth/")) {
+        setError(getErrorMessage(firebaseErr.code));
+      } else if (firebaseErr.code === "permission-denied") {
+        setError("Unable to save your profile. Firestore permissions are not configured — please contact support.");
+      } else {
+        setError(`Registration error: ${firebaseErr.message ?? "Unknown error"}`);
+      }
     } finally {
       setGoogleLoading(false);
     }
