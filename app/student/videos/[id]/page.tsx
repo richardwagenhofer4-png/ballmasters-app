@@ -16,6 +16,8 @@ interface VideoMeta {
   createdAt: string;
   downloadAllowed: boolean;
   fileName: string;
+  startTime?: number;
+  endTime?: number;
 }
 
 function formatDate(iso: string): string {
@@ -95,6 +97,22 @@ export default function VideoPlayerPage() {
     }
   }
 
+  // Seek to clip start on load; stop at clip end
+  function handleLoadedMetadata() {
+    if (videoRef.current && meta?.startTime) {
+      videoRef.current.currentTime = meta.startTime;
+    }
+  }
+
+  function handleTimeUpdate() {
+    if (videoRef.current && meta?.endTime !== undefined && meta.endTime > 0) {
+      if (videoRef.current.currentTime >= meta.endTime) {
+        videoRef.current.pause();
+        videoRef.current.currentTime = meta.endTime;
+      }
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -163,6 +181,8 @@ export default function VideoPlayerPage() {
             controls
             controlsList={meta?.downloadAllowed ? undefined : "nodownload"}
             onPlay={handlePlay}
+            onLoadedMetadata={handleLoadedMetadata}
+            onTimeUpdate={handleTimeUpdate}
             className="w-full max-h-[70vh] bg-black"
             playsInline
           >

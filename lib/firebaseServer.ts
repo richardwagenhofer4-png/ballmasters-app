@@ -118,6 +118,29 @@ export async function createFirestoreDoc(
   return (doc.name as string).split("/").pop()!;
 }
 
+export async function updateFirestoreDoc(
+  collection: string,
+  docId: string,
+  data: Record<string, unknown>,
+  idToken: string
+): Promise<void> {
+  const mask = Object.keys(data)
+    .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
+    .join("&");
+  const res = await fetch(`${FIRESTORE}/${collection}/${docId}?${mask}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ fields: toFields(data) }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error?.message ?? "Firestore update failed");
+  }
+}
+
 type Filter = { field: string; op: string; value: unknown };
 
 export async function queryFirestore(
