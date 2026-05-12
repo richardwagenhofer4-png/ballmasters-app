@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import CommentsSection from "@/components/CommentsSection";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -938,6 +939,19 @@ export default function AnnotatePage() {
               </div>
             ))}
           </>
+        )}
+
+        {/* Comments divider */}
+        <div className="border-t-4 border-gray-100 mt-2" />
+
+        {/* Coach comments */}
+        {uid && video && (
+          <CommentsSection
+            videoId={id}
+            uid={uid}
+            authorName={video.coachName}
+            role="coach"
+          />
         )}
       </div>
     </main>

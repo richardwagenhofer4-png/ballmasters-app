@@ -4,10 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs } from "firebase/firestore";
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { renderAnnotations } from "@/app/coach/videos/[id]/annotate/page";
 import type { AnnotationFrame } from "@/app/coach/videos/[id]/annotate/page";
+import CommentsSection from "@/components/CommentsSection";
+
+const REACTIONS = [
+  { emoji: "👍", label: "Good" },
+  { emoji: "💪", label: "Great effort" },
+  { emoji: "❓", label: "Question" },
+  { emoji: "🔄", label: "Will retry" },
+] as const;
 
 interface VideoMeta {
   id: string;
@@ -59,14 +67,29 @@ export default function VideoPlayerPage() {
   const [activeAnnotation, setActiveAnnotation] = useState<AnnotationFrame | null>(null);
   const [voiceoverMeta, setVoiceoverMeta] = useState<VoiceoverMeta | null>(null);
   const [voiceoverActive, setVoiceoverActive] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [reactions, setReactions] = useState<Record<string, string>>({});
   const hasRecordedView = useRef(false);
   const voiceoverAudioRef = useRef<HTMLAudioElement | null>(null);
+  const reactionsUnsubRef = useRef<(() => void) | null>(null);
 
   // Load video metadata, presigned URL, and annotations
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
+
+      // Load student's display name
+      const userSnap = await getDoc(doc(db, "users", user.uid));
+      setUserName((userSnap.data()?.name as string) ?? user.displayName ?? "Student");
+
+      // Real-time reactions listener
+      if (reactionsUnsubRef.current) reactionsUnsubRef.current();
+      reactionsUnsubRef.current = onSnapshot(collection(db, "videos", id, "reactions"), (snap) => {
+        const map: Record<string, string> = {};
+        snap.docs.forEach(d => { map[d.id] = (d.data() as { emoji: string }).emoji; });
+        setReactions(map);
+      });
 
       try {
         const snap = await getDoc(doc(db, "videos", id));
@@ -137,9 +160,13 @@ export default function VideoPlayerPage() {
     return () => obs.disconnect();
   }, [videoUrl]);
 
-  // Voiceover cleanup
+  // Voiceover + reactions cleanup
   useEffect(() => {
-    return () => { voiceoverAudioRef.current?.pause(); voiceoverAudioRef.current = null; };
+    return () => {
+      voiceoverAudioRef.current?.pause();
+      voiceoverAudioRef.current = null;
+      reactionsUnsubRef.current?.();
+    };
   }, []);
 
   // Render active annotation on canvas
@@ -153,6 +180,16 @@ export default function VideoPlayerPage() {
       renderAnnotations(ctx, activeAnnotation.drawings, canvas.width, canvas.height);
     }
   }, [activeAnnotation]);
+
+  async function toggleReaction(emoji: string) {
+    if (!uid) return;
+    const ref = doc(db, "videos", id, "reactions", uid);
+    if (reactions[uid] === emoji) {
+      await deleteDoc(ref);
+    } else {
+      await setDoc(ref, { emoji, authorId: uid, createdAt: new Date().toISOString() });
+    }
+  }
 
   function syncVoiceover(videoPaused: boolean) {
     const audio = voiceoverAudioRef.current;
@@ -280,7 +317,7 @@ export default function VideoPlayerPage() {
       </div>
 
       {/* Video player with canvas overlay */}
-      <div className="flex-1 flex flex-col items-center justify-center bg-black">
+      <div className="bg-black shrink-0">
         {videoUrl ? (
           <div className="relative w-full" style={{ lineHeight: 0 }}>
             <video
@@ -294,7 +331,7 @@ export default function VideoPlayerPage() {
               onTimeUpdate={handleTimeUpdate}
               onSeeked={handleSeeked}
               className="w-full bg-black"
-              style={{ maxHeight: "70vh", display: "block" }}
+              style={{ maxHeight: "50vh", display: "block" }}
               playsInline
             >
               Your browser does not support video playback.
@@ -369,6 +406,9 @@ export default function VideoPlayerPage() {
         )}
       </div>
 
+      {/* Scrollable content below video */}
+      <div className="flex-1 overflow-y-auto">
+
       {/* Metadata panel */}
       <div className="bg-gray-900 px-6 py-5">
         <h1 className="text-lg font-bold text-white leading-snug mb-1">
@@ -402,6 +442,41 @@ export default function VideoPlayerPage() {
             </>
           )}
         </div>
+      </div>
+
+      {/* Reactions */}
+      <div className="bg-gray-900 border-t border-gray-800 px-4 py-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {REACTIONS.map(r => {
+            const count = Object.values(reactions).filter(e => e === r.emoji).length;
+            const selected = uid ? reactions[uid] === r.emoji : false;
+            return (
+              <button
+                key={r.emoji}
+                onClick={() => toggleReaction(r.emoji)}
+                title={r.label}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition"
+                style={{
+                  backgroundColor: selected ? "#14532d" : "#1f2937",
+                  color: selected ? "#4ade80" : "#9ca3af",
+                  border: `1px solid ${selected ? "#16a34a" : "transparent"}`,
+                }}
+              >
+                <span>{r.emoji}</span>
+                {count > 0 && <span className="text-xs">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Comments */}
+      <div className="bg-white">
+        {uid && userName && (
+          <CommentsSection videoId={id} uid={uid} authorName={userName} role="student" />
+        )}
+      </div>
+
       </div>
     </main>
   );
