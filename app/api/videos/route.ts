@@ -27,37 +27,69 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const {
+      type = "standard",
       title,
       fileName,
+      coachVideoKey,
+      studentVideoKey,
       studentIds = [],
       folderId = null,
       downloadAllowed = false,
       status = "published",
+      layout = "side_by_side",
+      syncPlayback = true,
     } = body as {
+      type?: string;
       title: string;
-      fileName: string;
+      fileName?: string;
+      coachVideoKey?: string;
+      studentVideoKey?: string;
       studentIds?: string[];
       folderId?: string | null;
       downloadAllowed?: boolean;
       status?: "draft" | "published";
+      layout?: string;
+      syncPlayback?: boolean;
     };
 
-    if (!title?.trim() || !fileName) {
-      return Response.json({ error: "title and fileName are required" }, { status: 400 });
+    if (!title?.trim()) {
+      return Response.json({ error: "title is required" }, { status: 400 });
+    }
+
+    if (type === "drill_comparison") {
+      if (!coachVideoKey || !studentVideoKey) {
+        return Response.json(
+          { error: "coachVideoKey and studentVideoKey are required for drill comparison" },
+          { status: 400 }
+        );
+      }
+    } else {
+      if (!fileName) {
+        return Response.json({ error: "title and fileName are required" }, { status: 400 });
+      }
     }
 
     const videoData: Record<string, unknown> = {
+      type,
       title: title.trim(),
       coachId: uid,
       coachName: (profile.fullName as string) ?? "",
       studentIds,
-      fileName,
       folderId,
       downloadAllowed,
       status,
       viewedBy: [],
       createdAt: new Date().toISOString(),
     };
+
+    if (type === "drill_comparison") {
+      videoData.coachVideoKey = coachVideoKey;
+      videoData.studentVideoKey = studentVideoKey;
+      videoData.layout = layout;
+      videoData.syncPlayback = syncPlayback;
+    } else {
+      videoData.fileName = fileName;
+    }
 
     const docId = await createFirestoreDoc("videos", videoData, idToken);
 
@@ -70,8 +102,6 @@ export async function POST(request: NextRequest) {
 
 // ---------------------------------------------------------------------------
 // GET /api/videos — list videos for the current user
-//   Coaches see all their own videos.
-//   Students see only videos where their uid is in studentIds.
 // ---------------------------------------------------------------------------
 export async function GET(request: NextRequest) {
   try {
@@ -103,6 +133,9 @@ export async function GET(request: NextRequest) {
     // Attach fresh presigned read URLs (valid 24 h)
     const withUrls = await Promise.all(
       videos.map(async (v) => {
+        if (v.type === "drill_comparison") {
+          return { ...v, videoUrl: null };
+        }
         const key = v.fileName as string | undefined;
         const videoUrl = key ? await getVideoUrl(key) : null;
         return { ...v, videoUrl };

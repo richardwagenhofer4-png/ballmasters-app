@@ -17,10 +17,17 @@ export async function GET(
 
     await verifyIdToken(idToken);
 
-    // Fetch via the user's own token — Firestore rules enforce access
     const video = await getFirestoreDoc("videos", id, idToken);
     if (!video) {
       return Response.json({ error: "Video not found or access denied" }, { status: 404 });
+    }
+
+    if (video.type === "drill_comparison") {
+      const [coachVideoUrl, studentVideoUrl] = await Promise.all([
+        getVideoUrl(video.coachVideoKey as string),
+        getVideoUrl(video.studentVideoKey as string),
+      ]);
+      return Response.json({ ...video, coachVideoUrl, studentVideoUrl });
     }
 
     const videoUrl = await getVideoUrl(video.fileName as string);

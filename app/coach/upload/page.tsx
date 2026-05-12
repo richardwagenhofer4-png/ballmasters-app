@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
-const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
+const MAX_BYTES = 500 * 1024 * 1024;
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mov"];
 
 type Student = { id: string; fullName: string; email: string };
 type UploadStatus = "idle" | "requesting" | "uploading" | "saving" | "success" | "error";
+type Mode = "standard" | "drill_comparison";
+type Layout = "side_by_side" | "stacked" | "tabs";
 
-// Upload a file to a presigned R2 URL via XHR so we can track progress
 function putToR2(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -33,14 +34,108 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function validateFile(f: File): string | null {
+  if (!f.type.startsWith("video/") && !ACCEPTED.includes(f.type))
+    return "Please select a video file (MP4, MOV, AVI, WebM).";
+  if (f.size > MAX_BYTES)
+    return `File is too large (${formatBytes(f.size)}). Maximum size is 500 MB.`;
+  return null;
+}
+
+interface DropZoneProps {
+  label: string;
+  file: File | null;
+  fileError: string;
+  isDragging: boolean;
+  isWorking: boolean;
+  onPickFile: (f: File) => void;
+  onClear: () => void;
+  onBrowse: () => void;
+  onDragEnter: () => void;
+  onDragLeave: () => void;
+}
+
+function DropZone({ label, file, fileError, isDragging, isWorking, onPickFile, onClear, onBrowse, onDragEnter, onDragLeave }: DropZoneProps) {
+  return (
+    <div>
+      <p className="text-sm font-medium text-gray-700 mb-2">{label}</p>
+      {file ? (
+        <div
+          className="flex items-center justify-between rounded-xl border-2 px-4 py-3"
+          style={{ borderColor: "#1A6B45", backgroundColor: "#f0faf5" }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <svg className="h-7 w-7 shrink-0" style={{ color: "#1A6B45" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+            </svg>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+              <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
+            </div>
+          </div>
+          {!isWorking && (
+            <button onClick={onClear} className="ml-3 text-gray-400 hover:text-gray-600 transition shrink-0">
+              <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+              </svg>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); onDragEnter(); }}
+          onDragLeave={onDragLeave}
+          onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onPickFile(f); }}
+          onClick={onBrowse}
+          className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-8 cursor-pointer transition"
+          style={{
+            borderColor: isDragging ? "#1A6B45" : "#d1d5db",
+            backgroundColor: isDragging ? "#f0faf5" : "white",
+          }}
+        >
+          <svg className="h-9 w-9 text-gray-300 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+          </svg>
+          <p className="text-sm font-medium text-gray-600">
+            Drag & drop or <span style={{ color: "#1A6B45" }} className="font-semibold">browse</span>
+          </p>
+          <p className="mt-1 text-xs text-gray-400">MP4, MOV · max 500 MB</p>
+        </div>
+      )}
+      {fileError && <p className="mt-1.5 text-xs text-red-600">{fileError}</p>}
+    </div>
+  );
+}
+
 export default function UploadPage() {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mode
+  const [mode, setMode] = useState<Mode>("standard");
+
+  // Standard video
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
 
+  // Drill comparison — coach video
+  const coachInputRef = useRef<HTMLInputElement>(null);
+  const [coachFile, setCoachFile] = useState<File | null>(null);
+  const [coachFileError, setCoachFileError] = useState("");
+  const [isDraggingCoach, setIsDraggingCoach] = useState(false);
+
+  // Drill comparison — student video
+  const studentInputRef = useRef<HTMLInputElement>(null);
+  const [studentFile, setStudentFile] = useState<File | null>(null);
+  const [studentFileError, setStudentFileError] = useState("");
+  const [isDraggingStudent, setIsDraggingStudent] = useState(false);
+
+  // Drill comparison settings
+  const [layout, setLayout] = useState<Layout>("side_by_side");
+  const [syncPlayback, setSyncPlayback] = useState(true);
+
+  // Shared
   const [title, setTitle] = useState("");
   const [students, setStudents] = useState<Student[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
@@ -48,6 +143,8 @@ export default function UploadPage() {
   const [studentsLoading, setStudentsLoading] = useState(true);
 
   const [progress, setProgress] = useState(0);
+  const [coachProgress, setCoachProgress] = useState(0);
+  const [studentProgress, setStudentProgress] = useState(0);
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState("");
 
@@ -57,7 +154,6 @@ export default function UploadPage() {
       s.email.toLowerCase().includes(studentSearch.toLowerCase())
   );
 
-  // Load student list from Firestore (rule allows coaches to read all users)
   useEffect(() => {
     async function load() {
       try {
@@ -79,25 +175,36 @@ export default function UploadPage() {
     load();
   }, []);
 
-  function pickFile(f: File) {
+  function handleModeChange(newMode: Mode) {
+    if (newMode === mode) return;
+    setMode(newMode);
+    setFile(null); setFileError("");
+    setCoachFile(null); setCoachFileError("");
+    setStudentFile(null); setStudentFileError("");
+    setError("");
+  }
+
+  function pickStandardFile(f: File) {
+    const err = validateFile(f);
+    if (err) { setFileError(err); return; }
     setFileError("");
-    if (!f.type.startsWith("video/") && !ACCEPTED.includes(f.type)) {
-      setFileError("Please select a video file (MP4, MOV, AVI, WebM).");
-      return;
-    }
-    if (f.size > MAX_BYTES) {
-      setFileError(`File is too large (${formatBytes(f.size)}). Maximum size is 500 MB.`);
-      return;
-    }
     setFile(f);
     if (!title) setTitle(f.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
   }
 
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setIsDragging(false);
-    const f = e.dataTransfer.files[0];
-    if (f) pickFile(f);
+  function pickCoachFile(f: File) {
+    const err = validateFile(f);
+    if (err) { setCoachFileError(err); return; }
+    setCoachFileError("");
+    setCoachFile(f);
+    if (!title) setTitle(f.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "));
+  }
+
+  function pickStudentFile(f: File) {
+    const err = validateFile(f);
+    if (err) { setStudentFileError(err); return; }
+    setStudentFileError("");
+    setStudentFile(f);
   }
 
   function toggleStudent(id: string) {
@@ -109,65 +216,104 @@ export default function UploadPage() {
   }
 
   async function handleUpload() {
-    if (!file) { setError("Please select a video file."); return; }
     if (!title.trim()) { setError("Please enter a video title."); return; }
+
+    if (mode === "standard") {
+      if (!file) { setError("Please select a video file."); return; }
+    } else {
+      if (!coachFile) { setError("Please select the Coach Demo video."); return; }
+      if (!studentFile) { setError("Please select the Student Attempt video."); return; }
+    }
 
     const user = auth.currentUser;
     if (!user) { router.push("/login"); return; }
 
     setError("");
-    setProgress(0);
+    setStatus("requesting");
 
     try {
-      // 1. Get a fresh ID token
-      setStatus("requesting");
       const idToken = await user.getIdToken();
 
-      // 2. Request a presigned upload URL from our API
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-        }),
-      });
+      if (mode === "standard") {
+        const uploadRes = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ fileName: file!.name, fileType: file!.type, fileSize: file!.size }),
+        });
+        if (!uploadRes.ok) {
+          const { error: msg } = await uploadRes.json();
+          throw new Error(msg ?? "Failed to get upload URL");
+        }
+        const { uploadUrl, key } = await uploadRes.json();
 
-      if (!uploadRes.ok) {
-        const { error: msg } = await uploadRes.json();
-        throw new Error(msg ?? "Failed to get upload URL");
-      }
+        setStatus("uploading");
+        setProgress(0);
+        await putToR2(uploadUrl, file!, setProgress);
 
-      const { uploadUrl, key } = await uploadRes.json();
+        setStatus("saving");
+        const saveRes = await fetch("/api/videos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({
+            title: title.trim(),
+            fileName: key,
+            studentIds: Array.from(selectedIds),
+            downloadAllowed: false,
+            status: "published",
+          }),
+        });
+        if (!saveRes.ok) {
+          const { error: msg } = await saveRes.json();
+          throw new Error(msg ?? "Failed to save video metadata");
+        }
+      } else {
+        // Drill comparison — get two presigned URLs in parallel
+        const [coachUploadRes, studentUploadRes] = await Promise.all([
+          fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ fileName: coachFile!.name, fileType: coachFile!.type, fileSize: coachFile!.size }),
+          }),
+          fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+            body: JSON.stringify({ fileName: studentFile!.name, fileType: studentFile!.type, fileSize: studentFile!.size }),
+          }),
+        ]);
+        if (!coachUploadRes.ok) throw new Error((await coachUploadRes.json()).error ?? "Failed to get coach upload URL");
+        if (!studentUploadRes.ok) throw new Error((await studentUploadRes.json()).error ?? "Failed to get student upload URL");
 
-      // 3. Upload the file directly to R2 (presigned PUT)
-      setStatus("uploading");
-      await putToR2(uploadUrl, file, setProgress);
+        const { uploadUrl: coachUploadUrl, key: coachKey } = await coachUploadRes.json();
+        const { uploadUrl: studentUploadUrl, key: studentKey } = await studentUploadRes.json();
 
-      // 4. Save video metadata to Firestore via our API
-      setStatus("saving");
-      const saveRes = await fetch("/api/videos", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          fileName: key,
-          studentIds: Array.from(selectedIds),
-          downloadAllowed: false,
-          status: "published",
-        }),
-      });
+        setStatus("uploading");
+        setCoachProgress(0);
+        setStudentProgress(0);
+        await Promise.all([
+          putToR2(coachUploadUrl, coachFile!, setCoachProgress),
+          putToR2(studentUploadUrl, studentFile!, setStudentProgress),
+        ]);
 
-      if (!saveRes.ok) {
-        const { error: msg } = await saveRes.json();
-        throw new Error(msg ?? "Failed to save video metadata");
+        setStatus("saving");
+        const saveRes = await fetch("/api/videos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({
+            type: "drill_comparison",
+            title: title.trim(),
+            coachVideoKey: coachKey,
+            studentVideoKey: studentKey,
+            studentIds: Array.from(selectedIds),
+            layout,
+            syncPlayback,
+            downloadAllowed: false,
+            status: "published",
+          }),
+        });
+        if (!saveRes.ok) {
+          const { error: msg } = await saveRes.json();
+          throw new Error(msg ?? "Failed to save video metadata");
+        }
       }
 
       setStatus("success");
@@ -179,32 +325,37 @@ export default function UploadPage() {
   }
 
   function reset() {
-    setFile(null);
-    setFileError("");
+    setFile(null); setFileError("");
+    setCoachFile(null); setCoachFileError("");
+    setStudentFile(null); setStudentFileError("");
     setTitle("");
     setSelectedIds(new Set());
     setStudentSearch("");
     setProgress(0);
+    setCoachProgress(0);
+    setStudentProgress(0);
     setStatus("idle");
     setError("");
   }
 
   const isWorking = ["requesting", "uploading", "saving"].includes(status);
+  const canSubmit = !isWorking && !!title.trim() && (
+    mode === "standard" ? !!file : (!!coachFile && !!studentFile)
+  );
 
   // ---- SUCCESS SCREEN ----
   if (status === "success") {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="bg-white rounded-2xl shadow-lg p-10 max-w-md w-full text-center">
-          <div
-            className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-            style={{ backgroundColor: "#f0faf5" }}
-          >
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ backgroundColor: "#f0faf5" }}>
             <svg className="h-8 w-8" style={{ color: "#1A6B45" }} viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Video uploaded!</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {mode === "drill_comparison" ? "Drill comparison uploaded!" : "Video uploaded!"}
+          </h2>
           <p className="text-gray-500 text-sm mb-8">
             <span className="font-semibold text-gray-700">{title}</span> has been saved and
             {selectedIds.size > 0
@@ -237,10 +388,7 @@ export default function UploadPage() {
       <div className="mx-auto max-w-xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-            style={{ backgroundColor: "#1A6B45" }}
-          >
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ backgroundColor: "#1A6B45" }}>
             <span className="text-3xl">⚽</span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: "#1A6B45" }}>
@@ -250,6 +398,24 @@ export default function UploadPage() {
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
+          {/* Mode toggle */}
+          <div className="flex rounded-xl overflow-hidden border border-gray-200">
+            {(["standard", "drill_comparison"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => handleModeChange(m)}
+                disabled={isWorking}
+                className="flex-1 py-2.5 text-sm font-semibold transition disabled:opacity-60"
+                style={{
+                  backgroundColor: mode === m ? "#1A6B45" : "white",
+                  color: mode === m ? "white" : "#6b7280",
+                }}
+              >
+                {m === "standard" ? "Standard Video" : "Drill Comparison"}
+              </button>
+            ))}
+          </div>
+
           {/* Global error */}
           {error && (
             <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
@@ -260,65 +426,117 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Drop zone */}
-          <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">Video file</p>
-            {file ? (
-              <div
-                className="flex items-center justify-between rounded-xl border-2 px-4 py-3"
-                style={{ borderColor: "#1A6B45", backgroundColor: "#f0faf5" }}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <svg className="h-8 w-8 shrink-0" style={{ color: "#1A6B45" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
-                  </svg>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                    <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
-                  </div>
-                </div>
-                {!isWorking && (
-                  <button
-                    onClick={() => setFile(null)}
-                    className="ml-3 text-gray-400 hover:text-gray-600 transition shrink-0"
-                  >
-                    <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          {/* Video file(s) */}
+          {mode === "standard" ? (
+            <>
+              <DropZone
+                label="Video file"
+                file={file}
+                fileError={fileError}
+                isDragging={isDragging}
+                isWorking={isWorking}
+                onPickFile={pickStandardFile}
+                onClear={() => setFile(null)}
+                onBrowse={() => fileInputRef.current?.click()}
+                onDragEnter={() => setIsDragging(true)}
                 onDragLeave={() => setIsDragging(false)}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-10 cursor-pointer transition"
-                style={{
-                  borderColor: isDragging ? "#1A6B45" : "#d1d5db",
-                  backgroundColor: isDragging ? "#f0faf5" : "white",
-                }}
-              >
-                <svg className="h-10 w-10 text-gray-300 mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                </svg>
-                <p className="text-sm font-medium text-gray-600">
-                  Drag & drop a video here, or{" "}
-                  <span style={{ color: "#1A6B45" }} className="font-semibold">browse</span>
-                </p>
-                <p className="mt-1 text-xs text-gray-400">MP4, MOV, AVI, WebM · max 500 MB</p>
+              />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickStandardFile(f); e.target.value = ""; }}
+              />
+            </>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <DropZone
+                  label="Coach Demo"
+                  file={coachFile}
+                  fileError={coachFileError}
+                  isDragging={isDraggingCoach}
+                  isWorking={isWorking}
+                  onPickFile={pickCoachFile}
+                  onClear={() => setCoachFile(null)}
+                  onBrowse={() => coachInputRef.current?.click()}
+                  onDragEnter={() => setIsDraggingCoach(true)}
+                  onDragLeave={() => setIsDraggingCoach(false)}
+                />
+                <DropZone
+                  label="Student Attempt"
+                  file={studentFile}
+                  fileError={studentFileError}
+                  isDragging={isDraggingStudent}
+                  isWorking={isWorking}
+                  onPickFile={pickStudentFile}
+                  onClear={() => setStudentFile(null)}
+                  onBrowse={() => studentInputRef.current?.click()}
+                  onDragEnter={() => setIsDraggingStudent(true)}
+                  onDragLeave={() => setIsDraggingStudent(false)}
+                />
               </div>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              className="hidden"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) pickFile(f); }}
-            />
-            {fileError && <p className="mt-1.5 text-xs text-red-600">{fileError}</p>}
-          </div>
+              <input
+                ref={coachInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickCoachFile(f); e.target.value = ""; }}
+              />
+              <input
+                ref={studentInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) pickStudentFile(f); e.target.value = ""; }}
+              />
+
+              {/* Layout selector */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Layout</p>
+                <div className="flex gap-2">
+                  {(["side_by_side", "stacked", "tabs"] as const).map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setLayout(l)}
+                      disabled={isWorking}
+                      className="flex-1 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-60"
+                      style={{
+                        backgroundColor: layout === l ? "#1A6B45" : "#f3f4f6",
+                        color: layout === l ? "white" : "#374151",
+                      }}
+                    >
+                      {l === "side_by_side" ? "Side by Side" : l === "stacked" ? "Stacked" : "Separate Tabs"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Playback selector */}
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Playback</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSyncPlayback(true)}
+                    disabled={isWorking}
+                    className="flex-1 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-60"
+                    style={{ backgroundColor: syncPlayback ? "#1A6B45" : "#f3f4f6", color: syncPlayback ? "white" : "#374151" }}
+                  >
+                    Synced
+                  </button>
+                  <button
+                    onClick={() => setSyncPlayback(false)}
+                    disabled={isWorking}
+                    className="flex-1 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-60"
+                    style={{ backgroundColor: !syncPlayback ? "#1A6B45" : "#f3f4f6", color: !syncPlayback ? "white" : "#374151" }}
+                  >
+                    Independent
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Title */}
           <div>
@@ -346,10 +564,7 @@ export default function UploadPage() {
                 <span className="text-gray-400 font-normal">(optional)</span>
               </span>
               {selectedIds.size > 0 && (
-                <span
-                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}
-                >
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}>
                   {selectedIds.size} selected
                 </span>
               )}
@@ -364,12 +579,9 @@ export default function UploadPage() {
                 Loading students…
               </div>
             ) : students.length === 0 ? (
-              <p className="text-sm text-gray-400 py-2">
-                No students have registered yet.
-              </p>
+              <p className="text-sm text-gray-400 py-2">No students have registered yet.</p>
             ) : (
               <div className="rounded-xl border border-gray-200 overflow-hidden">
-                {/* Search */}
                 <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2">
                   <svg className="h-4 w-4 text-gray-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                     <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
@@ -383,8 +595,6 @@ export default function UploadPage() {
                     className="w-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent disabled:opacity-60"
                   />
                 </div>
-
-                {/* List */}
                 <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
                   {filteredStudents.length === 0 ? (
                     <p className="px-4 py-3 text-sm text-gray-400">No students match your search.</p>
@@ -392,10 +602,7 @@ export default function UploadPage() {
                     filteredStudents.map((s) => {
                       const checked = selectedIds.has(s.id);
                       return (
-                        <label
-                          key={s.id}
-                          className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition"
-                        >
+                        <label key={s.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 transition">
                           <input
                             type="checkbox"
                             checked={checked}
@@ -416,23 +623,34 @@ export default function UploadPage() {
             )}
           </div>
 
-          {/* Progress bar — only visible while uploading */}
-          {status === "uploading" && (
+          {/* Progress */}
+          {status === "uploading" && mode === "standard" && (
             <div>
               <div className="flex justify-between text-xs text-gray-500 mb-1">
                 <span>Uploading…</span>
                 <span>{progress}%</span>
               </div>
               <div className="h-2.5 w-full rounded-full bg-gray-200 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{ width: `${progress}%`, backgroundColor: "#1A6B45" }}
-                />
+                <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: "#1A6B45" }} />
               </div>
             </div>
           )}
+          {status === "uploading" && mode === "drill_comparison" && (
+            <div className="space-y-3">
+              {([["Coach Demo", coachProgress], ["Student Attempt", studentProgress]] as [string, number][]).map(([label, pct]) => (
+                <div key={label}>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>{label}</span>
+                    <span>{pct}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: "#1A6B45" }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* Status label for non-progress steps */}
           {(status === "requesting" || status === "saving") && (
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -443,17 +661,15 @@ export default function UploadPage() {
             </div>
           )}
 
-          {/* Upload button */}
+          {/* Submit */}
           <button
             type="button"
             onClick={handleUpload}
-            disabled={!file || isWorking}
+            disabled={!canSubmit}
             className="w-full rounded-lg py-3 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed"
-            style={{
-              backgroundColor: !file || isWorking ? "#86c9a8" : "#1A6B45",
-            }}
+            style={{ backgroundColor: canSubmit ? "#1A6B45" : "#86c9a8" }}
           >
-            {isWorking ? "Uploading…" : "Upload video"}
+            {isWorking ? "Uploading…" : mode === "drill_comparison" ? "Upload drill comparison" : "Upload video"}
           </button>
         </div>
       </div>

@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import { renderAnnotations } from "@/app/coach/videos/[id]/annotate/page";
 import type { AnnotationFrame } from "@/app/coach/videos/[id]/annotate/page";
 import CommentsSection from "@/components/CommentsSection";
+import DrillComparisonPlayer from "@/components/DrillComparisonPlayer";
 
 const REACTIONS = [
   { emoji: "👍", label: "Good" },
@@ -25,9 +26,12 @@ interface VideoMeta {
   viewedBy: string[];
   createdAt: string;
   downloadAllowed: boolean;
-  fileName: string;
+  fileName?: string;
   startTime?: number;
   endTime?: number;
+  type?: string;
+  layout?: "side_by_side" | "stacked" | "tabs";
+  syncPlayback?: boolean;
 }
 
 interface VoiceoverMeta {
@@ -60,6 +64,7 @@ export default function VideoPlayerPage() {
   const [uid, setUid] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [drillUrls, setDrillUrls] = useState<{ coachVideoUrl: string; studentVideoUrl: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [watched, setWatched] = useState(false);
@@ -110,30 +115,38 @@ export default function VideoPlayerPage() {
           const { error: msg } = await res.json();
           throw new Error(msg ?? "Failed to load video");
         }
-        const { videoUrl: url } = await res.json();
-        setVideoUrl(url);
+        const resData = await res.json();
 
-        // Load coach annotations (subcollection — rules allow student reads)
-        const annotSnap = await getDocs(collection(db, "videos", id, "annotations"));
-        setAnnotations(
-          annotSnap.docs
-            .map(d => ({ id: d.id, ...(d.data() as Omit<AnnotationFrame, "id">) }))
-            .sort((a, b) => a.timestamp - b.timestamp)
-        );
-
-        // Load voiceover if exists
-        const voSnap = await getDoc(doc(db, "videos", id, "voiceover", "main"));
-        if (voSnap.exists()) {
-          const voMeta = voSnap.data() as VoiceoverMeta;
-          setVoiceoverMeta(voMeta);
-          const voRes = await fetch(`/api/voiceover/${id}`, {
-            headers: { Authorization: `Bearer ${idToken}` },
+        if (data.type === "drill_comparison") {
+          setDrillUrls({
+            coachVideoUrl: resData.coachVideoUrl as string,
+            studentVideoUrl: resData.studentVideoUrl as string,
           });
-          if (voRes.ok) {
-            const { audioUrl } = await voRes.json();
-            const audio = new Audio(audioUrl);
-            audio.preload = "auto";
-            voiceoverAudioRef.current = audio;
+        } else {
+          setVideoUrl(resData.videoUrl as string);
+
+          // Load coach annotations (subcollection — rules allow student reads)
+          const annotSnap = await getDocs(collection(db, "videos", id, "annotations"));
+          setAnnotations(
+            annotSnap.docs
+              .map(d => ({ id: d.id, ...(d.data() as Omit<AnnotationFrame, "id">) }))
+              .sort((a, b) => a.timestamp - b.timestamp)
+          );
+
+          // Load voiceover if exists
+          const voSnap = await getDoc(doc(db, "videos", id, "voiceover", "main"));
+          if (voSnap.exists()) {
+            const voMeta = voSnap.data() as VoiceoverMeta;
+            setVoiceoverMeta(voMeta);
+            const voRes = await fetch(`/api/voiceover/${id}`, {
+              headers: { Authorization: `Bearer ${idToken}` },
+            });
+            if (voRes.ok) {
+              const { audioUrl } = await voRes.json();
+              const audio = new Audio(audioUrl);
+              audio.preload = "auto";
+              voiceoverAudioRef.current = audio;
+            }
           }
         }
       } catch (err: unknown) {
@@ -283,6 +296,29 @@ export default function VideoPlayerPage() {
           </Link>
         </div>
       </main>
+    );
+  }
+
+  // Drill comparison — render dedicated player
+  if (drillUrls && meta && uid) {
+    return (
+      <DrillComparisonPlayer
+        videoId={id}
+        uid={uid}
+        userName={userName}
+        meta={{
+          id: meta.id,
+          title: meta.title,
+          coachName: meta.coachName,
+          viewedBy: meta.viewedBy ?? [],
+          createdAt: meta.createdAt,
+          downloadAllowed: meta.downloadAllowed ?? false,
+          layout: meta.layout ?? "side_by_side",
+          syncPlayback: meta.syncPlayback ?? true,
+        }}
+        coachVideoUrl={drillUrls.coachVideoUrl}
+        studentVideoUrl={drillUrls.studentVideoUrl}
+      />
     );
   }
 
