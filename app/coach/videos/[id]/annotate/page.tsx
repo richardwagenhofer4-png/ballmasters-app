@@ -155,6 +155,7 @@ export default function AnnotatePage() {
   const [color, setColor] = useState(COLORS[0].value);
   const [pauseOnPlay, setPauseOnPlay] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [drawingMode, setDrawingMode] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -235,8 +236,20 @@ export default function AnnotatePage() {
     };
   }
 
+  function toggleDrawingMode() {
+    setDrawingMode(prev => {
+      const next = !prev;
+      // Auto-pause the video when entering drawing mode so there's a frame to annotate
+      if (next && videoRef.current && !videoRef.current.paused) {
+        videoRef.current.pause();
+      }
+      return next;
+    });
+    cancelDraw();
+  }
+
   function handlePointerDown(e: React.MouseEvent | React.TouchEvent) {
-    if (!isPaused) return;
+    if (!drawingMode) return;
     e.preventDefault();
     const pos = getPos(e);
     if (tool === "text") {
@@ -420,7 +433,15 @@ export default function AnnotatePage() {
       </div>
 
       {/* Video + Canvas */}
-      <div className="bg-black shrink-0" style={{ position: "relative", lineHeight: 0 }}>
+      <div
+        className="bg-black shrink-0"
+        style={{
+          position: "relative",
+          lineHeight: 0,
+          outline: drawingMode ? "3px solid #22c55e" : "none",
+          outlineOffset: "-3px",
+        }}
+      >
         {videoUrl ? (
           <video
             ref={videoRef}
@@ -447,8 +468,8 @@ export default function AnnotatePage() {
             inset: 0,
             width: "100%",
             height: "100%",
-            cursor: isPaused ? (tool === "text" ? "text" : "crosshair") : "default",
-            pointerEvents: isPaused ? "auto" : "none",
+            cursor: drawingMode ? (tool === "text" ? "text" : "crosshair") : "default",
+            pointerEvents: drawingMode ? "auto" : "none",
             touchAction: "none",
           }}
           onMouseDown={handlePointerDown}
@@ -485,8 +506,8 @@ export default function AnnotatePage() {
           />
         )}
 
-        {/* "Saved" badge when at an annotated frame */}
-        {atSavedFrame && isPaused && (
+        {/* "Annotated frame" badge */}
+        {atSavedFrame && (
           <div
             style={{
               position: "absolute",
@@ -504,42 +525,46 @@ export default function AnnotatePage() {
             ✓ Annotated frame
           </div>
         )}
-
-        {/* Prompt to pause */}
-        {!isPaused && videoUrl && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: 48,
-              left: "50%",
-              transform: "translateX(-50%)",
-              backgroundColor: "rgba(0,0,0,0.55)",
-              color: "rgba(255,255,255,0.7)",
-              borderRadius: "9999px",
-              padding: "4px 14px",
-              fontSize: "12px",
-              pointerEvents: "none",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Pause to annotate
-          </div>
-        )}
       </div>
 
       {/* Toolbar */}
       <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 shrink-0">
-        {/* Tool buttons */}
-        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+
+        {/* ── Drawing mode toggle — the primary control ── */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={toggleDrawingMode}
+            className="flex items-center gap-2 h-10 px-4 rounded-lg text-sm font-bold transition"
+            style={{
+              backgroundColor: drawingMode ? "#16a34a" : "#374151",
+              color: "white",
+              minWidth: 160,
+            }}
+          >
+            <span style={{ fontSize: 16 }}>{drawingMode ? "✏" : "▶"}</span>
+            {drawingMode ? "Drawing ON" : "Drawing OFF"}
+          </button>
+          <span className="text-xs leading-snug" style={{ color: drawingMode ? "#86efac" : "#6b7280" }}>
+            {drawingMode
+              ? "Canvas active — draw on the frame"
+              : "Video controls active — seek, play, fullscreen"}
+          </span>
+        </div>
+
+        {/* Tool buttons — dimmed when drawing mode is off */}
+        <div
+          className="flex items-center gap-1.5 mb-3 flex-wrap transition-opacity"
+          style={{ opacity: drawingMode ? 1 : 0.35 }}
+        >
           {TOOLS.map(t => (
             <button
               key={t.type}
               title={t.label}
-              onClick={() => setTool(t.type)}
+              onClick={() => { setTool(t.type); if (!drawingMode) toggleDrawingMode(); }}
               className="h-9 px-3 rounded-lg text-sm font-semibold transition"
               style={{
-                backgroundColor: tool === t.type ? "#1A6B45" : "#374151",
-                color: tool === t.type ? "white" : "#9ca3af",
+                backgroundColor: tool === t.type && drawingMode ? "#1A6B45" : "#374151",
+                color: tool === t.type && drawingMode ? "white" : "#9ca3af",
               }}
             >
               {t.icon} {t.label}
@@ -547,8 +572,11 @@ export default function AnnotatePage() {
           ))}
         </div>
 
-        {/* Color swatches */}
-        <div className="flex items-center gap-2 mb-3">
+        {/* Color swatches — dimmed when drawing mode is off */}
+        <div
+          className="flex items-center gap-2 mb-3 transition-opacity"
+          style={{ opacity: drawingMode ? 1 : 0.35 }}
+        >
           <span className="text-xs text-gray-500 mr-1">Color</span>
           {COLORS.map(c => (
             <button
@@ -558,7 +586,7 @@ export default function AnnotatePage() {
               className="h-7 w-7 rounded-full transition"
               style={{
                 backgroundColor: c.value,
-                outline: color === c.value ? `2px solid white` : "2px solid transparent",
+                outline: color === c.value ? "2px solid white" : "2px solid transparent",
                 outlineOffset: "2px",
                 border: c.value === "#ffffff" ? "1px solid #6b7280" : "none",
               }}
