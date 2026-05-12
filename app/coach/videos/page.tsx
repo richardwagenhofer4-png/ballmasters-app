@@ -9,6 +9,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
+import { sendVideoNotification } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -231,6 +232,12 @@ export default function CoachVideosPage() {
       };
       await updateDoc(doc(db, "videos", editingVideo.id), updated);
       setVideos(prev => prev.map(v => v.id === editingVideo.id ? { ...v, ...updated } : v));
+
+      const wasPublishedNow = editStatus === "published" && editingVideo.status !== "published";
+      if (wasPublishedNow && updated.studentIds.length > 0) {
+        sendVideoNotification(updated.studentIds, updated.title, editingVideo.id).catch(console.error);
+      }
+
       setEditingVideo(null);
     } catch (err) {
       console.error("[edit video]", err);

@@ -7,6 +7,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
+import { requestNotificationPermission } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -114,8 +115,18 @@ export default function StudentDashboard() {
   const [studentName, setStudentName] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [activity, setActivity] = useState<CoachActivity[]>([]);
+  const [showNotifBanner, setShowNotifBanner] = useState(false);
+  const [notifEnabling, setNotifEnabling] = useState(false);
 
   const greeting = getGreeting();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const dismissed = localStorage.getItem("notif_banner_dismissed");
+    if (!dismissed && typeof Notification !== "undefined" && Notification.permission === "default") {
+      setShowNotifBanner(true);
+    }
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -198,6 +209,24 @@ export default function StudentDashboard() {
     router.push("/login");
   }
 
+  async function handleEnableNotifications() {
+    setNotifEnabling(true);
+    try {
+      await requestNotificationPermission();
+    } catch (err) {
+      console.error("[notifications]", err);
+    } finally {
+      localStorage.setItem("notif_banner_dismissed", "1");
+      setShowNotifBanner(false);
+      setNotifEnabling(false);
+    }
+  }
+
+  function dismissNotifBanner() {
+    localStorage.setItem("notif_banner_dismissed", "1");
+    setShowNotifBanner(false);
+  }
+
   // ---- LOADING ----
   if (loading) {
     return (
@@ -212,6 +241,31 @@ export default function StudentDashboard() {
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Notification permission banner                                       */}
+      {/* ------------------------------------------------------------------ */}
+      {showNotifBanner && (
+        <div className="fixed top-0 inset-x-0 z-50 flex items-center gap-3 px-4 py-3 text-sm text-white shadow-lg" style={{ backgroundColor: "#14532d", paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+          <svg className="h-5 w-5 shrink-0 text-green-300" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M5.85 3.5a.75.75 0 00-1.117-1 9.719 9.719 0 00-2.348 4.876.75.75 0 001.479.248A8.219 8.219 0 015.85 3.5zM19.267 2.5a.75.75 0 10-1.118 1 8.22 8.22 0 011.987 4.124.75.75 0 001.48-.248A9.72 9.72 0 0019.266 2.5z" />
+            <path fillRule="evenodd" d="M12 2.25A6.75 6.75 0 005.25 9v.75a8.217 8.217 0 01-2.119 5.52.75.75 0 00.298 1.206c1.544.57 3.16.99 4.831 1.243a3.75 3.75 0 107.48 0 24.583 24.583 0 004.83-1.244.75.75 0 00.298-1.205 8.217 8.217 0 01-2.118-5.52V9A6.75 6.75 0 0012 2.25zM9.75 18c0-.034 0-.067.002-.1a25.05 25.05 0 004.496 0l.002.1a2.25 2.25 0 11-4.5 0z" clipRule="evenodd" />
+          </svg>
+          <p className="flex-1 leading-snug text-green-100">Enable notifications to know when your coach posts new videos</p>
+          <button
+            onClick={handleEnableNotifications}
+            disabled={notifEnabling}
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold bg-green-500 hover:bg-green-400 text-white disabled:opacity-60 transition"
+          >
+            {notifEnabling ? "…" : "Enable"}
+          </button>
+          <button onClick={dismissNotifBanner} className="shrink-0 text-green-400 hover:text-white transition">
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}

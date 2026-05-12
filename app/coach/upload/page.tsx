@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { sendVideoNotification } from "@/lib/notifications";
 
 const MAX_BYTES = 500 * 1024 * 1024;
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mov"];
@@ -266,6 +267,11 @@ export default function UploadPage() {
           const { error: msg } = await saveRes.json();
           throw new Error(msg ?? "Failed to save video metadata");
         }
+        const saved = await saveRes.json();
+        const assignedIds = Array.from(selectedIds);
+        if (assignedIds.length > 0) {
+          sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
+        }
       } else {
         // Drill comparison — get two presigned URLs in parallel
         const [coachUploadRes, studentUploadRes] = await Promise.all([
@@ -313,6 +319,11 @@ export default function UploadPage() {
         if (!saveRes.ok) {
           const { error: msg } = await saveRes.json();
           throw new Error(msg ?? "Failed to save video metadata");
+        }
+        const saved = await saveRes.json();
+        const assignedIds = Array.from(selectedIds);
+        if (assignedIds.length > 0) {
+          sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
         }
       }
 
