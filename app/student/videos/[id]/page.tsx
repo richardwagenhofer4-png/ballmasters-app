@@ -22,6 +22,14 @@ interface VideoMeta {
   endTime?: number;
 }
 
+interface VoiceoverMeta {
+  fileName: string;
+  startTime: number;
+  duration: number;
+  mimeType: string;
+  createdAt: string;
+}
+
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString("en-US", {
@@ -49,7 +57,10 @@ export default function VideoPlayerPage() {
   const [watched, setWatched] = useState(false);
   const [annotations, setAnnotations] = useState<AnnotationFrame[]>([]);
   const [activeAnnotation, setActiveAnnotation] = useState<AnnotationFrame | null>(null);
+  const [voiceoverMeta, setVoiceoverMeta] = useState<VoiceoverMeta | null>(null);
+  const [voiceoverActive, setVoiceoverActive] = useState(false);
   const hasRecordedView = useRef(false);
+  const voiceoverAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load video metadata, presigned URL, and annotations
   useEffect(() => {
@@ -86,6 +97,22 @@ export default function VideoPlayerPage() {
             .map(d => ({ id: d.id, ...(d.data() as Omit<AnnotationFrame, "id">) }))
             .sort((a, b) => a.timestamp - b.timestamp)
         );
+
+        // Load voiceover if exists
+        const voSnap = await getDoc(doc(db, "videos", id, "voiceover", "main"));
+        if (voSnap.exists()) {
+          const voMeta = voSnap.data() as VoiceoverMeta;
+          setVoiceoverMeta(voMeta);
+          const voRes = await fetch(`/api/voiceover/${id}`, {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+          if (voRes.ok) {
+            const { audioUrl } = await voRes.json();
+            const audio = new Audio(audioUrl);
+            audio.preload = "auto";
+            voiceoverAudioRef.current = audio;
+          }
+        }
       } catch (err: unknown) {
         console.error("[video-player]", err);
         setError((err as Error).message ?? "Failed to load video.");
@@ -110,6 +137,11 @@ export default function VideoPlayerPage() {
     return () => obs.disconnect();
   }, [videoUrl]);
 
+  // Voiceover cleanup
+  useEffect(() => {
+    return () => { voiceoverAudioRef.current?.pause(); voiceoverAudioRef.current = null; };
+  }, []);
+
   // Render active annotation on canvas
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -122,7 +154,28 @@ export default function VideoPlayerPage() {
     }
   }, [activeAnnotation]);
 
+  function syncVoiceover(videoPaused: boolean) {
+    const audio = voiceoverAudioRef.current;
+    const video = videoRef.current;
+    if (!audio || !video || !voiceoverMeta) return;
+    const expected = video.currentTime - voiceoverMeta.startTime;
+    if (expected < 0 || expected > voiceoverMeta.duration + 0.5) {
+      audio.pause();
+      setVoiceoverActive(false);
+      return;
+    }
+    if (Math.abs(audio.currentTime - expected) > 0.3) audio.currentTime = expected;
+    if (videoPaused) {
+      audio.pause();
+      setVoiceoverActive(false);
+    } else {
+      audio.play().catch(() => {});
+      setVoiceoverActive(true);
+    }
+  }
+
   async function handlePlay() {
+    syncVoiceover(false);
     if (hasRecordedView.current || !uid || !id || watched) return;
     hasRecordedView.current = true;
     try {
@@ -131,6 +184,11 @@ export default function VideoPlayerPage() {
     } catch (err) {
       console.error("[video-player] failed to record view:", err);
     }
+  }
+
+  function handlePause() {
+    voiceoverAudioRef.current?.pause();
+    setVoiceoverActive(false);
   }
 
   function handleLoadedMetadata() {
@@ -163,8 +221,8 @@ export default function VideoPlayerPage() {
   }
 
   function handleSeeked() {
-    // Reset auto-pause memory so the same annotation can pause again after seeking back
     lastPausedAt.current = null;
+    syncVoiceover(videoRef.current?.paused ?? true);
   }
 
   if (loading) {
@@ -231,6 +289,7 @@ export default function VideoPlayerPage() {
               controls
               controlsList={meta?.downloadAllowed ? undefined : "nodownload"}
               onPlay={handlePlay}
+              onPause={handlePause}
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
               onSeeked={handleSeeked}
@@ -252,6 +311,32 @@ export default function VideoPlayerPage() {
                 pointerEvents: "none",
               }}
             />
+
+            {/* Voiceover active badge */}
+            {voiceoverActive && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  left: 10,
+                  backgroundColor: "rgba(0,0,0,0.68)",
+                  color: "white",
+                  borderRadius: "9999px",
+                  padding: "4px 12px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  pointerEvents: "none",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2a3 3 0 013 3v6a3 3 0 11-6 0V5a3 3 0 013-3zm-1 15.93V20H9a1 1 0 100 2h6a1 1 0 100-2h-2v-2.07A8.001 8.001 0 0020 11a1 1 0 10-2 0 6 6 0 01-12 0 1 1 0 10-2 0 8.001 8.001 0 007 7.93z" />
+                </svg>
+                Coach voiceover
+              </div>
+            )}
 
             {/* Coach annotation badge */}
             {activeAnnotation && (

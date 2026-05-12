@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, collection, getDocs, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -40,6 +40,14 @@ interface VideoDoc {
   fileName: string;
   studentIds: string[];
   downloadAllowed: boolean;
+}
+
+interface VoiceoverMeta {
+  fileName: string;
+  startTime: number;
+  duration: number;
+  mimeType: string;
+  createdAt: string;
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -161,6 +169,11 @@ export default function AnnotatePage() {
   const [error, setError] = useState("");
   const [textInput, setTextInput] = useState({ x: 0, y: 0, visible: false });
   const [textValue, setTextValue] = useState("");
+  const [voiceover, setVoiceover] = useState<VoiceoverMeta | null>(null);
+  const [recordingState, setRecordingState] = useState<"idle" | "recording" | "stopping" | "uploading">("idle");
+  const [recordingTimer, setRecordingTimer] = useState(0);
+  const [previewing, setPreviewing] = useState(false);
+  const [voiceoverError, setVoiceoverError] = useState("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -168,6 +181,16 @@ export default function AnnotatePage() {
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
   const freehandRef = useRef<{ x: number; y: number }[]>([]);
   const annotationsRef = useRef<AnnotationFrame[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const uploadUrlRef = useRef<string>("");
+  const fileNameRef = useRef<string>("");
+  const recordingStartVideoTimeRef = useRef<number>(0);
+  const wallStartRef = useRef<number>(0);
+  const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewBlobUrlRef = useRef<string | null>(null);
 
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
 
@@ -192,12 +215,24 @@ export default function AnnotatePage() {
             .map(d => ({ id: d.id, ...(d.data() as Omit<AnnotationFrame, "id">) }))
             .sort((a, b) => a.timestamp - b.timestamp)
         );
+
+        const voSnap = await getDoc(doc(db, "videos", id, "voiceover", "main"));
+        if (voSnap.exists()) setVoiceover(voSnap.data() as VoiceoverMeta);
       } catch (err) {
         setError((err as Error).message);
       }
     });
     return unsub;
   }, [id, router]);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (previewBlobUrlRef.current) URL.revokeObjectURL(previewBlobUrlRef.current);
+      previewAudioRef.current?.pause();
+    };
+  }, []);
 
   // ── Keep canvas sized to video element ──────────────────────────────────────
   useEffect(() => {
@@ -398,6 +433,139 @@ export default function AnnotatePage() {
     if (!videoRef.current) return;
     videoRef.current.currentTime = t;
     videoRef.current.pause();
+  }
+
+  async function startRecording() {
+    setVoiceoverError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "audio/mp4";
+
+      const token = await auth.currentUser!.getIdToken();
+      const res = await fetch("/api/voiceover", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId: id, mimeType }),
+      });
+      if (!res.ok) throw new Error("Failed to prepare upload");
+      const { uploadUrl, fileName } = await res.json();
+      uploadUrlRef.current = uploadUrl;
+      fileNameRef.current = fileName;
+
+      audioChunksRef.current = [];
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recordingStartVideoTimeRef.current = videoRef.current?.currentTime ?? 0;
+      wallStartRef.current = Date.now();
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        const duration = (Date.now() - wallStartRef.current) / 1000;
+        doUploadVoiceover(blob, duration, mimeType);
+      };
+
+      recorder.start(1000);
+      setRecordingState("recording");
+      setRecordingTimer(0);
+      timerIntervalRef.current = setInterval(() => setRecordingTimer(prev => prev + 1), 1000);
+    } catch (err) {
+      setVoiceoverError((err as Error).message);
+      streamRef.current?.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+  }
+
+  function stopRecording() {
+    setRecordingState("stopping");
+    if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
+    mediaRecorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }
+
+  async function doUploadVoiceover(blob: Blob, duration: number, mimeType: string) {
+    setRecordingState("uploading");
+    try {
+      await fetch(uploadUrlRef.current, {
+        method: "PUT",
+        body: blob,
+        headers: { "Content-Type": mimeType },
+      });
+      const meta: VoiceoverMeta = {
+        fileName: fileNameRef.current,
+        startTime: recordingStartVideoTimeRef.current,
+        duration,
+        mimeType,
+        createdAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, "videos", id, "voiceover", "main"), meta);
+      if (previewBlobUrlRef.current) URL.revokeObjectURL(previewBlobUrlRef.current);
+      previewBlobUrlRef.current = URL.createObjectURL(blob);
+      previewAudioRef.current = null;
+      setVoiceover(meta);
+    } catch (err) {
+      setVoiceoverError((err as Error).message);
+    } finally {
+      setRecordingState("idle");
+    }
+  }
+
+  async function togglePreview() {
+    if (previewing) {
+      previewAudioRef.current?.pause();
+      videoRef.current?.pause();
+      setPreviewing(false);
+      return;
+    }
+    if (!voiceover) return;
+    try {
+      if (!previewAudioRef.current) {
+        let src: string;
+        if (previewBlobUrlRef.current) {
+          src = previewBlobUrlRef.current;
+        } else {
+          const token = await auth.currentUser!.getIdToken();
+          const res = await fetch(`/api/voiceover/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error("Failed to load voiceover audio");
+          const { audioUrl } = await res.json();
+          src = audioUrl;
+        }
+        previewAudioRef.current = new Audio(src);
+      }
+      const audio = previewAudioRef.current;
+      audio.currentTime = 0;
+      audio.onended = () => { videoRef.current?.pause(); setPreviewing(false); };
+      if (videoRef.current) videoRef.current.currentTime = voiceover.startTime;
+      await audio.play();
+      videoRef.current?.play();
+      setPreviewing(true);
+    } catch (err) {
+      setVoiceoverError((err as Error).message);
+    }
+  }
+
+  async function deleteVoiceover() {
+    try {
+      await deleteDoc(doc(db, "videos", id, "voiceover", "main"));
+      if (previewBlobUrlRef.current) { URL.revokeObjectURL(previewBlobUrlRef.current); previewBlobUrlRef.current = null; }
+      previewAudioRef.current?.pause();
+      previewAudioRef.current = null;
+      setVoiceover(null);
+      setPreviewing(false);
+    } catch (err) {
+      setVoiceoverError((err as Error).message);
+    }
   }
 
   const atSavedFrame = annotations.some(
@@ -638,6 +806,81 @@ export default function AnnotatePage() {
         </div>
         {error && (
           <p className="mt-2 text-xs text-red-400">{error}</p>
+        )}
+      </div>
+
+      {/* Voiceover section */}
+      <div className="bg-gray-800 border-t border-gray-700 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2 mb-2">
+          <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2a3 3 0 013 3v6a3 3 0 11-6 0V5a3 3 0 013-3zm-1 15.93V20H9a1 1 0 100 2h6a1 1 0 100-2h-2v-2.07A8.001 8.001 0 0020 11a1 1 0 10-2 0 6 6 0 01-12 0 1 1 0 10-2 0 8.001 8.001 0 007 7.93z" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Voiceover</span>
+          {voiceover && recordingState === "idle" && (
+            <span className="ml-auto text-xs text-gray-500">
+              Starts at {fmt(voiceover.startTime)} · {Math.round(voiceover.duration)}s
+            </span>
+          )}
+        </div>
+
+        {recordingState === "idle" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={startRecording}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold text-white transition"
+              style={{ backgroundColor: "#374151" }}
+            >
+              <span className="h-2 w-2 rounded-full bg-red-500 inline-block" />
+              {voiceover ? "Re-record" : "Record Voiceover"}
+            </button>
+            {voiceover && (
+              <>
+                <button
+                  onClick={togglePreview}
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold text-white transition"
+                  style={{ backgroundColor: previewing ? "#1A6B45" : "#374151" }}
+                >
+                  {previewing ? "⏸ Stop" : "▶ Preview"}
+                </button>
+                <button
+                  onClick={deleteVoiceover}
+                  className="h-8 px-3 rounded-lg text-sm text-gray-400 bg-gray-700 hover:text-red-400 transition"
+                >
+                  ✕ Delete
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {recordingState === "recording" && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse inline-block" />
+              <span className="text-sm font-mono font-semibold text-red-400">{fmt(recordingTimer)}</span>
+            </div>
+            <span className="text-xs text-gray-400">Recording from mic…</span>
+            <button
+              onClick={stopRecording}
+              className="ml-auto flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold text-white bg-red-700 hover:bg-red-600 transition"
+            >
+              ■ Stop
+            </button>
+          </div>
+        )}
+
+        {(recordingState === "stopping" || recordingState === "uploading") && (
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            {recordingState === "uploading" ? "Uploading voiceover…" : "Processing…"}
+          </div>
+        )}
+
+        {voiceoverError && (
+          <p className="mt-1 text-xs text-red-400">{voiceoverError}</p>
         )}
       </div>
 
