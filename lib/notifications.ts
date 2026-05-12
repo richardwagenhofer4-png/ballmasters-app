@@ -1,5 +1,3 @@
-"use client";
-
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
@@ -9,8 +7,37 @@ async function getMessagingModule() {
   return { getMessaging, getToken, isSupported, getApp };
 }
 
+async function registerAndActivateSW(): Promise<ServiceWorkerRegistration> {
+  const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js", {
+    scope: "/",
+  });
+
+  // SW is already active (common on subsequent page loads)
+  if (reg.active) return reg;
+
+  // Wait for the installing/waiting SW to reach "activated"
+  return new Promise((resolve, reject) => {
+    const sw = reg.installing ?? reg.waiting;
+    if (!sw) {
+      // Nothing to wait for — fall back to the ready promise
+      navigator.serviceWorker.ready.then(resolve).catch(reject);
+      return;
+    }
+    sw.addEventListener("statechange", function handler() {
+      if (sw.state === "activated") {
+        sw.removeEventListener("statechange", handler);
+        resolve(reg);
+      } else if (sw.state === "redundant") {
+        sw.removeEventListener("statechange", handler);
+        reject(new Error("Service worker became redundant before activating"));
+      }
+    });
+  });
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  if (!("serviceWorker" in navigator) || !("Notification" in window)) return false;
 
   const { isSupported, getMessaging, getToken, getApp } = await getMessagingModule();
   const supported = await isSupported();
@@ -20,16 +47,18 @@ export async function requestNotificationPermission(): Promise<boolean> {
   if (permission !== "granted") return false;
 
   try {
+    const registration = await registerAndActivateSW();
+
     const messaging = getMessaging(getApp());
     const token = await getToken(messaging, {
       vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-      serviceWorkerRegistration: await navigator.serviceWorker.register(
-        "/firebase-messaging-sw.js"
-      ),
+      serviceWorkerRegistration: registration,
     });
 
+    if (!token) return false;
+
     const user = auth.currentUser;
-    if (user && token) {
+    if (user) {
       await setDoc(doc(db, "users", user.uid), { fcmToken: token }, { merge: true });
     }
     return true;
