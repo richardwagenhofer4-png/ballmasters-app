@@ -49,6 +49,16 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
         && request.resource.data.viewedBy.hasAll(resource.data.viewedBy)
         && request.resource.data.viewedBy.size() == resource.data.viewedBy.size() + 1;
+
+      match /annotations/{annotationId} {
+        // Coach who owns the parent video can read and write annotations
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/videos/$(videoId)).data.coachId == request.auth.uid;
+
+        // Students assigned to the parent video can read annotations
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds;
+      }
     }
 
   }

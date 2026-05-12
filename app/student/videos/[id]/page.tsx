@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { renderAnnotations } from "@/app/coach/videos/[id]/annotate/page";
+import type { AnnotationFrame } from "@/app/coach/videos/[id]/annotate/page";
 
 interface VideoMeta {
   id: string;
@@ -36,6 +38,8 @@ export default function VideoPlayerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastPausedAt = useRef<number | null>(null);
 
   const [uid, setUid] = useState<string | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
@@ -43,15 +47,17 @@ export default function VideoPlayerPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [watched, setWatched] = useState(false);
+  const [annotations, setAnnotations] = useState<AnnotationFrame[]>([]);
+  const [activeAnnotation, setActiveAnnotation] = useState<AnnotationFrame | null>(null);
   const hasRecordedView = useRef(false);
 
+  // Load video metadata, presigned URL, and annotations
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
 
       try {
-        // 1. Load video metadata from Firestore (client SDK, rules enforce access)
         const snap = await getDoc(doc(db, "videos", id));
         if (!snap.exists()) {
           setError("Video not found.");
@@ -62,7 +68,6 @@ export default function VideoPlayerPage() {
         setMeta(data);
         setWatched((data.viewedBy ?? []).includes(user.uid));
 
-        // 2. Get a fresh presigned URL from the server
         const idToken = await user.getIdToken();
         const res = await fetch(`/api/videos/${id}`, {
           headers: { Authorization: `Bearer ${idToken}` },
@@ -73,6 +78,14 @@ export default function VideoPlayerPage() {
         }
         const { videoUrl: url } = await res.json();
         setVideoUrl(url);
+
+        // Load coach annotations (subcollection — rules allow student reads)
+        const annotSnap = await getDocs(collection(db, "videos", id, "annotations"));
+        setAnnotations(
+          annotSnap.docs
+            .map(d => ({ id: d.id, ...(d.data() as Omit<AnnotationFrame, "id">) }))
+            .sort((a, b) => a.timestamp - b.timestamp)
+        );
       } catch (err: unknown) {
         console.error("[video-player]", err);
         setError((err as Error).message ?? "Failed to load video.");
@@ -83,21 +96,43 @@ export default function VideoPlayerPage() {
     return unsub;
   }, [id, router]);
 
+  // Keep canvas sized to video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const obs = new ResizeObserver(() => {
+      if (canvasRef.current) {
+        canvasRef.current.width = video.clientWidth;
+        canvasRef.current.height = video.clientHeight;
+      }
+    });
+    obs.observe(video);
+    return () => obs.disconnect();
+  }, [videoUrl]);
+
+  // Render active annotation on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (activeAnnotation) {
+      renderAnnotations(ctx, activeAnnotation.drawings, canvas.width, canvas.height);
+    }
+  }, [activeAnnotation]);
+
   async function handlePlay() {
     if (hasRecordedView.current || !uid || !id || watched) return;
     hasRecordedView.current = true;
     try {
-      await updateDoc(doc(db, "videos", id), {
-        viewedBy: arrayUnion(uid),
-      });
+      await updateDoc(doc(db, "videos", id), { viewedBy: arrayUnion(uid) });
       setWatched(true);
     } catch (err) {
-      // Non-fatal — don't interrupt playback
       console.error("[video-player] failed to record view:", err);
     }
   }
 
-  // Seek to clip start on load; stop at clip end
   function handleLoadedMetadata() {
     if (videoRef.current && meta?.startTime) {
       videoRef.current.currentTime = meta.startTime;
@@ -105,12 +140,31 @@ export default function VideoPlayerPage() {
   }
 
   function handleTimeUpdate() {
-    if (videoRef.current && meta?.endTime !== undefined && meta.endTime > 0) {
-      if (videoRef.current.currentTime >= meta.endTime) {
-        videoRef.current.pause();
-        videoRef.current.currentTime = meta.endTime;
-      }
+    const video = videoRef.current;
+    if (!video) return;
+    const t = video.currentTime;
+
+    // Clip boundary enforcement
+    if (meta?.endTime !== undefined && meta.endTime > 0 && t >= meta.endTime) {
+      video.pause();
+      video.currentTime = meta.endTime;
+      return;
     }
+
+    // Find matching annotation (within ±0.5 s)
+    const found = annotations.find(a => Math.abs(a.timestamp - t) < 0.5) ?? null;
+    setActiveAnnotation(found);
+
+    // Auto-pause once per annotation (resets on seek)
+    if (found?.pauseOnPlay && lastPausedAt.current !== found.timestamp) {
+      lastPausedAt.current = found.timestamp;
+      video.pause();
+    }
+  }
+
+  function handleSeeked() {
+    // Reset auto-pause memory so the same annotation can pause again after seeking back
+    lastPausedAt.current = null;
   }
 
   if (loading) {
@@ -129,11 +183,7 @@ export default function VideoPlayerPage() {
       <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center">
           <p className="text-red-600 font-medium mb-4">{error}</p>
-          <Link
-            href="/student/videos"
-            className="text-sm font-semibold hover:underline"
-            style={{ color: "#1A6B45" }}
-          >
+          <Link href="/student/videos" className="text-sm font-semibold hover:underline" style={{ color: "#1A6B45" }}>
             ← Back to videos
           </Link>
         </div>
@@ -160,7 +210,6 @@ export default function VideoPlayerPage() {
           <span className="text-sm font-bold text-white">Ballmasters</span>
         </div>
 
-        {/* Watched indicator */}
         {watched && (
           <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#4ade80" }}>
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
@@ -172,22 +221,64 @@ export default function VideoPlayerPage() {
         {!watched && <div className="w-16" />}
       </div>
 
-      {/* Video player */}
+      {/* Video player with canvas overlay */}
       <div className="flex-1 flex flex-col items-center justify-center bg-black">
         {videoUrl ? (
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            controls
-            controlsList={meta?.downloadAllowed ? undefined : "nodownload"}
-            onPlay={handlePlay}
-            onLoadedMetadata={handleLoadedMetadata}
-            onTimeUpdate={handleTimeUpdate}
-            className="w-full max-h-[70vh] bg-black"
-            playsInline
-          >
-            Your browser does not support video playback.
-          </video>
+          <div className="relative w-full" style={{ lineHeight: 0 }}>
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              controls
+              controlsList={meta?.downloadAllowed ? undefined : "nodownload"}
+              onPlay={handlePlay}
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
+              onSeeked={handleSeeked}
+              className="w-full bg-black"
+              style={{ maxHeight: "70vh", display: "block" }}
+              playsInline
+            >
+              Your browser does not support video playback.
+            </video>
+
+            {/* Annotation canvas — pointer-events:none so video controls still work */}
+            <canvas
+              ref={canvasRef}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
+            />
+
+            {/* Coach annotation badge */}
+            {activeAnnotation && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  backgroundColor: "rgba(0,0,0,0.68)",
+                  color: "white",
+                  borderRadius: "9999px",
+                  padding: "4px 12px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  pointerEvents: "none",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3a2 2 0 01.586-1.414z" />
+                </svg>
+                Coach note
+              </div>
+            )}
+          </div>
         ) : (
           <div className="text-gray-500 text-sm">Video unavailable.</div>
         )}
@@ -204,6 +295,14 @@ export default function VideoPlayerPage() {
             <>
               <span>·</span>
               <span>{formatDate(meta.createdAt)}</span>
+            </>
+          )}
+          {annotations.length > 0 && (
+            <>
+              <span>·</span>
+              <span className="text-xs" style={{ color: "#9ca3af" }}>
+                {annotations.length} coach note{annotations.length !== 1 ? "s" : ""}
+              </span>
             </>
           )}
           {!watched && (
