@@ -27,7 +27,7 @@ function putToR2(url: string, file: File, onProgress: (pct: number) => void): Pr
     });
     xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
     xhr.open("PUT", url);
-    // No Content-Type header — omitting it avoids signing mismatches with R2
+    xhr.setRequestHeader("Content-Type", file.type);
     xhr.send(file);
   });
 }

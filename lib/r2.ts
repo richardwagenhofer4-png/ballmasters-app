@@ -14,11 +14,11 @@ const r2 = new S3Client({
 
 const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
-export async function getUploadUrl(fileName: string): Promise<string> {
+export async function getUploadUrl(fileName: string, fileType: string): Promise<string> {
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: fileName,
-    // No ContentType — omitting it means the browser can PUT without signing Content-Type
+    ContentType: fileType,
   });
   return getSignedUrl(r2, command, { expiresIn: 3600 });
 }

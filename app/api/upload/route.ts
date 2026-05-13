@@ -49,14 +49,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { fileName, fileSize } = body as {
+    const { fileName, fileType, fileSize } = body as {
       fileName: string;
       fileType: string;
       fileSize?: number;
     };
 
-    if (!fileName) {
-      return Response.json({ error: "fileName is required" }, { status: 400 });
+    if (!fileName || !fileType) {
+      return Response.json({ error: "fileName and fileType are required" }, { status: 400 });
     }
     if (fileSize && fileSize > MAX_BYTES) {
       return Response.json({ error: "File exceeds the 500 MB limit" }, { status: 400 });
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     let uploadUrl: string;
     try {
-      uploadUrl = await getUploadUrl(key);
+      uploadUrl = await getUploadUrl(key, fileType);
     } catch (r2Err: unknown) {
       const msg = r2Err instanceof Error ? r2Err.message : String(r2Err);
       console.error("[api/upload] getUploadUrl failed:", r2Err);

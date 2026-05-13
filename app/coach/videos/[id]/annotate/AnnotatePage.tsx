@@ -402,8 +402,11 @@ export default function AnnotatePage() {
   async function doUploadVoiceover(blob: Blob, duration: number, mimeType: string) {
     setRecordingState("uploading");
     try {
-      // No Content-Type header — omitting it avoids signing mismatches with R2
-      const uploadRes = await fetch(uploadUrlRef.current, { method: "PUT", body: blob });
+      const uploadRes = await fetch(uploadUrlRef.current, {
+        method: "PUT",
+        body: blob,
+        headers: { "Content-Type": mimeType },
+      });
       if (!uploadRes.ok) throw new Error(`Voiceover upload failed (${uploadRes.status})`);
       const meta: VoiceoverMeta = {
         fileName: fileNameRef.current,
