@@ -1,6 +1,4 @@
-import { SignatureV4 } from "@smithy/signature-v4";
-import { HttpRequest } from "@smithy/protocol-http";
-import { Hash } from "@smithy/hash-node";
+import { createHmac, createHash } from "crypto";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -19,42 +17,62 @@ const r2 = new S3Client({
 
 const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
-// Manually build a SigV4 presigned PUT URL that signs ONLY the host header.
-// The AWS SDK always injects extra headers (Content-Type, checksum) into signed
-// headers; using @smithy/signature-v4 directly gives us exact control.
-export async function getUploadUrl(key: string): Promise<string> {
-  const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT!;
-  const { hostname: endpointHostname } = new URL(endpoint);
-  // Virtual-hosted style: bucket in subdomain, not path
+function hmac(key: Buffer | string, data: string): Buffer {
+  return createHmac("sha256", key).update(data).digest();
+}
+
+function sha256hex(data: string): string {
+  return createHash("sha256").update(data).digest("hex");
+}
+
+// Pure Node.js SigV4 presigned PUT URL — matches curl --aws-sigv4 exactly.
+// Only the host header is signed so the browser's Content-Type doesn't break the signature.
+export function getUploadUrl(key: string): string {
+  const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!;
+  const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!;
+  const { hostname: endpointHostname } = new URL(process.env.CLOUDFLARE_R2_ENDPOINT!);
   const hostname = `${BUCKET}.${endpointHostname}`;
 
-  const signer = new SignatureV4({
-    credentials: {
-      accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
-    },
-    region: "auto",
-    service: "s3",
-    sha256: Hash.bind(null, "sha256"),
+  const now = new Date();
+  const datetime = now.toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z"; // YYYYMMDDTHHMMSSZ
+  const date = datetime.slice(0, 8); // YYYYMMDD
+
+  const credentialScope = `${date}/auto/s3/aws4_request`;
+
+  // Build and sort query params — URLSearchParams encodes / as %2F (required by SigV4)
+  const queryParams = new URLSearchParams({
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": `${accessKeyId}/${credentialScope}`,
+    "X-Amz-Date": datetime,
+    "X-Amz-Expires": "3600",
+    "X-Amz-SignedHeaders": "host",
   });
+  queryParams.sort();
+  const canonicalQueryString = queryParams.toString();
 
-  const request = new HttpRequest({
-    method: "PUT",
-    protocol: "https:",
-    hostname,
-    path: `/${key}`,
-    headers: { host: hostname }, // only header — so SignedHeaders=host
-  });
+  const canonicalRequest = [
+    "PUT",
+    `/${key}`,
+    canonicalQueryString,
+    `host:${hostname}\n`, // trailing newline = blank line after headers block
+    "host",
+    "UNSIGNED-PAYLOAD",
+  ].join("\n");
 
-  const presigned = await signer.presign(request, { expiresIn: 3600 });
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    datetime,
+    credentialScope,
+    sha256hex(canonicalRequest),
+  ].join("\n");
 
-  // Convert the signed HttpRequest back to a URL string
-  const params = new URLSearchParams(
-    Object.entries(presigned.query ?? {}).flatMap(([k, v]) =>
-      Array.isArray(v) ? v.map((val) => [k, val] as [string, string]) : [[k, v as string]]
-    )
+  const signingKey = hmac(
+    hmac(hmac(hmac(`AWS4${secretAccessKey}`, date), "auto"), "s3"),
+    "aws4_request"
   );
-  return `https://${presigned.hostname}${presigned.path}?${params.toString()}`;
+  const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
+
+  return `https://${hostname}/${key}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
 }
 
 export async function getVideoUrl(fileName: string): Promise<string> {
