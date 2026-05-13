@@ -14,19 +14,27 @@ const r2 = new S3Client({
 
 const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
-export async function getUploadUrl(fileName: string, fileType: string): Promise<string> {
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: fileName,
-    ContentType: fileType,
-  });
-  return getSignedUrl(r2, command, { expiresIn: 3600 });
+export async function putObject(
+  key: string,
+  contentType: string,
+  body: ReadableStream<Uint8Array> | Buffer | Uint8Array,
+  contentLength?: number
+): Promise<void> {
+  await r2.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      ContentType: contentType,
+      Body: body as never, // SDK accepts ReadableStream in Node 18+
+      ...(contentLength !== undefined && { ContentLength: contentLength }),
+    })
+  );
 }
 
 export async function getVideoUrl(fileName: string): Promise<string> {
-  const command = new GetObjectCommand({
-    Bucket: BUCKET,
-    Key: fileName,
-  });
-  return getSignedUrl(r2, command, { expiresIn: 60 * 60 * 24 });
+  return getSignedUrl(
+    r2,
+    new GetObjectCommand({ Bucket: BUCKET, Key: fileName }),
+    { expiresIn: 60 * 60 * 24 }
+  );
 }

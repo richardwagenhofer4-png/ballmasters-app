@@ -1,6 +1,8 @@
 import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc } from "@/lib/firebaseServer";
-import { getUploadUrl } from "@/lib/r2";
+import { putObject } from "@/lib/r2";
+
+export const maxDuration = 300; // 5-minute timeout for large video uploads
 
 const MAX_BYTES = 500 * 1024 * 1024; // 500 MB
 
@@ -23,8 +25,11 @@ export async function GET() {
   );
 }
 
+// POST /api/upload?fileName=safe_name&fileSize=12345
+// Authorization: Bearer <token>
+// Content-Type: video/mp4
+// Body: raw file bytes
 export async function POST(request: NextRequest) {
-  // Check R2 env vars before doing anything else
   const missingVars = REQUIRED_R2_VARS.filter((key) => !process.env[key]);
   if (missingVars.length > 0) {
     console.error("[api/upload] Missing R2 env vars:", missingVars);
@@ -43,47 +48,39 @@ export async function POST(request: NextRequest) {
 
     const { uid } = await verifyIdToken(idToken);
     const profile = await getFirestoreDoc("users", uid, idToken);
-
     if (profile?.role !== "coach") {
       return Response.json({ error: "Only coaches can upload videos" }, { status: 403 });
     }
 
-    const body = await request.json();
-    const { fileName, fileType, fileSize } = body as {
-      fileName: string;
-      fileType: string;
-      fileSize?: number;
-    };
+    const fileName = request.nextUrl.searchParams.get("fileName");
+    const fileSize = parseInt(request.nextUrl.searchParams.get("fileSize") ?? "0", 10);
+    const contentType = request.headers.get("content-type") || "application/octet-stream";
 
-    if (!fileName || !fileType) {
-      return Response.json({ error: "fileName and fileType are required" }, { status: 400 });
+    if (!fileName) {
+      return Response.json({ error: "fileName query param required" }, { status: 400 });
     }
-    if (fileSize && fileSize > MAX_BYTES) {
+    if (fileSize > MAX_BYTES) {
       return Response.json({ error: "File exceeds the 500 MB limit" }, { status: 400 });
     }
+    if (!request.body) {
+      return Response.json({ error: "No file body" }, { status: 400 });
+    }
 
-    // Sanitise filename and namespace by coach uid + timestamp
     const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
     const key = `${uid}/${Date.now()}-${safe}`;
 
-    let uploadUrl: string;
     try {
-      uploadUrl = await getUploadUrl(key, fileType);
+      await putObject(key, contentType, request.body, fileSize || undefined);
     } catch (r2Err: unknown) {
       const msg = r2Err instanceof Error ? r2Err.message : String(r2Err);
-      console.error("[api/upload] getUploadUrl failed:", r2Err);
-      return Response.json(
-        { error: `Failed to generate upload URL: ${msg}` },
-        { status: 500 }
-      );
+      console.error("[api/upload] putObject failed:", r2Err);
+      return Response.json({ error: `R2 upload failed: ${msg}` }, { status: 500 });
     }
 
-    return Response.json({ uploadUrl, key });
+    return Response.json({ key });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : undefined;
-    console.error("[api/upload]", { message, stack });
-    const status = message.startsWith("auth/") ? 401 : 500;
-    return Response.json({ error: message }, { status });
+    console.error("[api/upload]", { message, stack: err instanceof Error ? err.stack : undefined });
+    return Response.json({ error: message }, { status: message.startsWith("auth/") ? 401 : 500 });
   }
 }

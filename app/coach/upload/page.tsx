@@ -14,19 +14,30 @@ type UploadStatus = "idle" | "requesting" | "uploading" | "saving" | "success" |
 type Mode = "standard" | "drill_comparison";
 type Layout = "side_by_side" | "stacked" | "tabs";
 
-function putToR2(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+function uploadToServer(
+  file: File,
+  idToken: string,
+  onProgress: (pct: number) => void
+): Promise<{ key: string }> {
   return new Promise((resolve, reject) => {
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const url = `/api/upload?fileName=${encodeURIComponent(safe)}&fileSize=${file.size}`;
     const xhr = new XMLHttpRequest();
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     });
     xhr.addEventListener("load", () => {
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`R2 upload failed (${xhr.status}): ${xhr.responseText}`));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try { resolve(JSON.parse(xhr.responseText)); }
+        catch { reject(new Error("Invalid response from upload server")); }
+      } else {
+        try { reject(new Error(JSON.parse(xhr.responseText).error ?? `Upload failed (${xhr.status})`)); }
+        catch { reject(new Error(`Upload failed (${xhr.status})`)); }
+      }
     });
     xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
-    xhr.open("PUT", url);
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Authorization", `Bearer ${idToken}`);
     xhr.setRequestHeader("Content-Type", file.type);
     xhr.send(file);
   });
@@ -232,26 +243,14 @@ export default function UploadPage() {
     if (!user) { router.push("/login"); return; }
 
     setError("");
-    setStatus("requesting");
 
     try {
       const idToken = await user.getIdToken();
 
       if (mode === "standard") {
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-          body: JSON.stringify({ fileName: file!.name, fileType: file!.type, fileSize: file!.size }),
-        });
-        if (!uploadRes.ok) {
-          const { error: msg } = await uploadRes.json();
-          throw new Error(msg ?? "Failed to get upload URL");
-        }
-        const { uploadUrl, key } = await uploadRes.json();
-
         setStatus("uploading");
         setProgress(0);
-        await putToR2(uploadUrl, file!, setProgress);
+        const { key } = await uploadToServer(file!, idToken, setProgress);
 
         setStatus("saving");
         const saveRes = await fetch("/api/videos", {
@@ -275,31 +274,13 @@ export default function UploadPage() {
           sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
         }
       } else {
-        // Drill comparison — get two presigned URLs in parallel
-        const [coachUploadRes, studentUploadRes] = await Promise.all([
-          fetch("/api/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-            body: JSON.stringify({ fileName: coachFile!.name, fileType: coachFile!.type, fileSize: coachFile!.size }),
-          }),
-          fetch("/api/upload", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-            body: JSON.stringify({ fileName: studentFile!.name, fileType: studentFile!.type, fileSize: studentFile!.size }),
-          }),
-        ]);
-        if (!coachUploadRes.ok) throw new Error((await coachUploadRes.json()).error ?? "Failed to get coach upload URL");
-        if (!studentUploadRes.ok) throw new Error((await studentUploadRes.json()).error ?? "Failed to get student upload URL");
-
-        const { uploadUrl: coachUploadUrl, key: coachKey } = await coachUploadRes.json();
-        const { uploadUrl: studentUploadUrl, key: studentKey } = await studentUploadRes.json();
-
+        // Drill comparison — upload both files in parallel
         setStatus("uploading");
         setCoachProgress(0);
         setStudentProgress(0);
-        await Promise.all([
-          putToR2(coachUploadUrl, coachFile!, setCoachProgress),
-          putToR2(studentUploadUrl, studentFile!, setStudentProgress),
+        const [{ key: coachKey }, { key: studentKey }] = await Promise.all([
+          uploadToServer(coachFile!, idToken, setCoachProgress),
+          uploadToServer(studentFile!, idToken, setStudentProgress),
         ]);
 
         setStatus("saving");
