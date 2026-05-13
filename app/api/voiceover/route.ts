@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
 
     const ext = mimeType?.includes("mp4") ? "mp4" : "webm";
     const fileName = `voiceovers/${videoId}-${Date.now()}.${ext}`;
-    const { url: uploadUrl, fields: uploadFields } = await getUploadUrl(fileName, mimeType ?? "audio/webm");
+    const uploadUrl = await getUploadUrl(fileName);
 
-    return Response.json({ uploadUrl, uploadFields, fileName });
+    return Response.json({ uploadUrl, fileName });
   } catch (err: unknown) {
     console.error("[api/voiceover POST]", err);
     return Response.json({ error: (err as Error).message }, { status: 500 });

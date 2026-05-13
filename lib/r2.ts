@@ -1,6 +1,5 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 
 const r2 = new S3Client({
   region: "auto",
@@ -15,16 +14,13 @@ const r2 = new S3Client({
 
 const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
-export type PresignedPost = { url: string; fields: Record<string, string> };
-
-export async function getUploadUrl(fileName: string, fileType: string): Promise<PresignedPost> {
-  return createPresignedPost(r2, {
+export async function getUploadUrl(fileName: string): Promise<string> {
+  const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: fileName,
-    Fields: { "Content-Type": fileType },
-    Expires: 3600,
-    Conditions: [["content-length-range", 1, 500 * 1024 * 1024]],
+    // No ContentType — omitting it means the browser can PUT without signing Content-Type
   });
+  return getSignedUrl(r2, command, { expiresIn: 3600 });
 }
 
 export async function getVideoUrl(fileName: string): Promise<string> {

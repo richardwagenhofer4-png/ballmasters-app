@@ -92,7 +92,6 @@ export default function AnnotatePage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const uploadUrlRef = useRef<string>("");
-  const uploadFieldsRef = useRef<Record<string, string>>({});
   const fileNameRef = useRef<string>("");
   const recordingStartVideoTimeRef = useRef<number>(0);
   const wallStartRef = useRef<number>(0);
@@ -362,9 +361,8 @@ export default function AnnotatePage() {
         body: JSON.stringify({ videoId: id, mimeType }),
       });
       if (!res.ok) throw new Error("Failed to prepare upload");
-      const { uploadUrl, uploadFields, fileName } = await res.json();
+      const { uploadUrl, fileName } = await res.json();
       uploadUrlRef.current = uploadUrl;
-      uploadFieldsRef.current = uploadFields;
       fileNameRef.current = fileName;
 
       audioChunksRef.current = [];
@@ -404,10 +402,8 @@ export default function AnnotatePage() {
   async function doUploadVoiceover(blob: Blob, duration: number, mimeType: string) {
     setRecordingState("uploading");
     try {
-      const formData = new FormData();
-      for (const [k, v] of Object.entries(uploadFieldsRef.current)) formData.append(k, v);
-      formData.append("file", new Blob([blob], { type: mimeType }));
-      const uploadRes = await fetch(uploadUrlRef.current, { method: "POST", body: formData });
+      // No Content-Type header — omitting it avoids signing mismatches with R2
+      const uploadRes = await fetch(uploadUrlRef.current, { method: "PUT", body: blob });
       if (!uploadRes.ok) throw new Error(`Voiceover upload failed (${uploadRes.status})`);
       const meta: VoiceoverMeta = {
         fileName: fileNameRef.current,
