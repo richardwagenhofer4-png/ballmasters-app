@@ -8,6 +8,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const r2 = new S3Client({
   region: "auto",
   endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
+  forcePathStyle: false,
   credentials: {
     accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
     secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
@@ -23,7 +24,9 @@ const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 // headers; using @smithy/signature-v4 directly gives us exact control.
 export async function getUploadUrl(key: string): Promise<string> {
   const endpoint = process.env.CLOUDFLARE_R2_ENDPOINT!;
-  const { hostname } = new URL(endpoint);
+  const { hostname: endpointHostname } = new URL(endpoint);
+  // Virtual-hosted style: bucket in subdomain, not path
+  const hostname = `${BUCKET}.${endpointHostname}`;
 
   const signer = new SignatureV4({
     credentials: {
@@ -32,7 +35,6 @@ export async function getUploadUrl(key: string): Promise<string> {
     },
     region: "auto",
     service: "s3",
-    // Hash.bind(null, "sha256") satisfies HashConstructor: new(secret?) => HashInterface
     sha256: Hash.bind(null, "sha256"),
   });
 
@@ -40,7 +42,7 @@ export async function getUploadUrl(key: string): Promise<string> {
     method: "PUT",
     protocol: "https:",
     hostname,
-    path: `/${BUCKET}/${key}`,
+    path: `/${key}`,
     headers: { host: hostname }, // only header — so SignedHeaders=host
   });
 
