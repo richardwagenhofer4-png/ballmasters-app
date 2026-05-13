@@ -67,8 +67,11 @@ export async function POST(request: NextRequest) {
     const key = `${uid}/${Date.now()}-${safe}`;
 
     let uploadUrl: string;
+    let uploadFields: Record<string, string>;
     try {
-      uploadUrl = await getUploadUrl(key, fileType);
+      const post = await getUploadUrl(key, fileType);
+      uploadUrl = post.url;
+      uploadFields = post.fields;
     } catch (r2Err: unknown) {
       const msg = r2Err instanceof Error ? r2Err.message : String(r2Err);
       console.error("[api/upload] getUploadUrl failed:", r2Err);
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return Response.json({ uploadUrl, key });
+    return Response.json({ uploadUrl, uploadFields, key });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     const stack = err instanceof Error ? err.stack : undefined;

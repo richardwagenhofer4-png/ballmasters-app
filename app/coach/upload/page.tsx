@@ -14,19 +14,28 @@ type UploadStatus = "idle" | "requesting" | "uploading" | "saving" | "success" |
 type Mode = "standard" | "drill_comparison";
 type Layout = "side_by_side" | "stacked" | "tabs";
 
-function putToR2(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+function putToR2(
+  url: string,
+  fields: Record<string, string>,
+  file: File,
+  onProgress: (pct: number) => void
+): Promise<void> {
   return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    for (const [k, v] of Object.entries(fields)) formData.append(k, v);
+    formData.append("file", file); // file must be last per S3 presigned POST spec
     const xhr = new XMLHttpRequest();
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     });
     xhr.addEventListener("load", () => {
-      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`R2 upload failed (${xhr.status})`));
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`R2 upload failed (${xhr.status}): ${xhr.responseText}`));
     });
     xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", file.type);
-    xhr.send(file);
+    xhr.open("POST", url);
+    xhr.send(formData);
   });
 }
 
@@ -245,11 +254,11 @@ export default function UploadPage() {
           const { error: msg } = await uploadRes.json();
           throw new Error(msg ?? "Failed to get upload URL");
         }
-        const { uploadUrl, key } = await uploadRes.json();
+        const { uploadUrl, uploadFields, key } = await uploadRes.json();
 
         setStatus("uploading");
         setProgress(0);
-        await putToR2(uploadUrl, file!, setProgress);
+        await putToR2(uploadUrl, uploadFields, file!, setProgress);
 
         setStatus("saving");
         const saveRes = await fetch("/api/videos", {
@@ -289,15 +298,15 @@ export default function UploadPage() {
         if (!coachUploadRes.ok) throw new Error((await coachUploadRes.json()).error ?? "Failed to get coach upload URL");
         if (!studentUploadRes.ok) throw new Error((await studentUploadRes.json()).error ?? "Failed to get student upload URL");
 
-        const { uploadUrl: coachUploadUrl, key: coachKey } = await coachUploadRes.json();
-        const { uploadUrl: studentUploadUrl, key: studentKey } = await studentUploadRes.json();
+        const { uploadUrl: coachUploadUrl, uploadFields: coachUploadFields, key: coachKey } = await coachUploadRes.json();
+        const { uploadUrl: studentUploadUrl, uploadFields: studentUploadFields, key: studentKey } = await studentUploadRes.json();
 
         setStatus("uploading");
         setCoachProgress(0);
         setStudentProgress(0);
         await Promise.all([
-          putToR2(coachUploadUrl, coachFile!, setCoachProgress),
-          putToR2(studentUploadUrl, studentFile!, setStudentProgress),
+          putToR2(coachUploadUrl, coachUploadFields, coachFile!, setCoachProgress),
+          putToR2(studentUploadUrl, studentUploadFields, studentFile!, setStudentProgress),
         ]);
 
         setStatus("saving");
