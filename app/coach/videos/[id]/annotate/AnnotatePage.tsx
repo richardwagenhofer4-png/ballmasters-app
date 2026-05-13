@@ -91,6 +91,8 @@ export default function AnnotatePage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const uploadUrlRef = useRef<string>("");
+  const fileNameRef = useRef<string>("");
   const recordingStartVideoTimeRef = useRef<number>(0);
   const wallStartRef = useRef<number>(0);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -352,6 +354,17 @@ export default function AnnotatePage() {
         ? "audio/webm"
         : "audio/mp4";
 
+      const token = await auth.currentUser!.getIdToken();
+      const res = await fetch("/api/voiceover", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId: id, mimeType }),
+      });
+      if (!res.ok) throw new Error("Failed to prepare upload");
+      const { uploadUrl, fileName } = await res.json();
+      uploadUrlRef.current = uploadUrl;
+      fileNameRef.current = fileName;
+
       audioChunksRef.current = [];
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
@@ -389,24 +402,13 @@ export default function AnnotatePage() {
   async function doUploadVoiceover(blob: Blob, duration: number, mimeType: string) {
     setRecordingState("uploading");
     try {
-      const token = await auth.currentUser!.getIdToken();
-      const startTime = recordingStartVideoTimeRef.current;
-      const uploadRes = await fetch(
-        `/api/voiceover?videoId=${encodeURIComponent(id)}&startTime=${startTime}&duration=${duration}`,
-        {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": mimeType },
-          body: blob,
-        }
-      );
-      if (!uploadRes.ok) {
-        const { error } = await uploadRes.json().catch(() => ({}));
-        throw new Error(error ?? `Voiceover upload failed (${uploadRes.status})`);
-      }
-      const { fileName } = await uploadRes.json();
+      // No Content-Type header — Content-Type is not in SignedHeaders so the
+      // browser can send whatever it naturally sends without breaking the signature.
+      const uploadRes = await fetch(uploadUrlRef.current, { method: "PUT", body: blob });
+      if (!uploadRes.ok) throw new Error(`Voiceover upload failed (${uploadRes.status})`);
       const meta: VoiceoverMeta = {
-        fileName,
-        startTime,
+        fileName: fileNameRef.current,
+        startTime: recordingStartVideoTimeRef.current,
         duration,
         mimeType,
         createdAt: new Date().toISOString(),

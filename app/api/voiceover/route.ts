@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc } from "@/lib/firebaseServer";
-import { putObject, getVideoUrl } from "@/lib/r2";
+import { getUploadUrl, getVideoUrl } from "@/lib/r2";
 
 // GET /api/voiceover?videoId=xxx
 export async function GET(request: NextRequest) {
@@ -28,10 +28,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/voiceover?videoId=xxx&startTime=0&duration=12.3
-// Authorization: Bearer <token>
-// Content-Type: audio/webm
-// Body: raw audio bytes
+// POST /api/voiceover — returns a presigned PUT URL for the audio blob
 export async function POST(request: NextRequest) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -41,7 +38,7 @@ export async function POST(request: NextRequest) {
     const idToken = authHeader.slice(7);
     const { uid } = await verifyIdToken(idToken);
 
-    const videoId = request.nextUrl.searchParams.get("videoId");
+    const { videoId, mimeType } = (await request.json()) as { videoId: string; mimeType: string };
     if (!videoId) return Response.json({ error: "videoId required" }, { status: 400 });
 
     const video = await getFirestoreDoc("videos", videoId, idToken);
@@ -49,18 +46,11 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Not found or forbidden" }, { status: 404 });
     }
 
-    if (!request.body) {
-      return Response.json({ error: "No audio body" }, { status: 400 });
-    }
-
-    const mimeType = request.headers.get("content-type") || "audio/webm";
-    const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+    const ext = mimeType?.includes("mp4") ? "mp4" : "webm";
     const fileName = `voiceovers/${videoId}-${Date.now()}.${ext}`;
+    const uploadUrl = await getUploadUrl(fileName);
 
-    const contentLength = request.headers.get("content-length");
-    await putObject(fileName, mimeType, request.body, contentLength ? parseInt(contentLength) : undefined);
-
-    return Response.json({ fileName });
+    return Response.json({ uploadUrl, fileName });
   } catch (err: unknown) {
     console.error("[api/voiceover POST]", err);
     return Response.json({ error: (err as Error).message }, { status: 500 });
