@@ -1,6 +1,32 @@
 import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc } from "@/lib/firebaseServer";
-import { getUploadUrl } from "@/lib/r2";
+import { getUploadUrl, getVideoUrl } from "@/lib/r2";
+
+// GET /api/voiceover?videoId=xxx
+export async function GET(request: NextRequest) {
+  try {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const idToken = authHeader.slice(7);
+    await verifyIdToken(idToken);
+
+    const videoId = request.nextUrl.searchParams.get("videoId");
+    if (!videoId) return Response.json({ error: "videoId required" }, { status: 400 });
+
+    const voiceover = await getFirestoreDoc(`videos/${videoId}/voiceover`, "main", idToken);
+    if (!voiceover) {
+      return Response.json({ error: "No voiceover found" }, { status: 404 });
+    }
+
+    const audioUrl = await getVideoUrl(voiceover.fileName as string);
+    return Response.json({ ...voiceover, audioUrl });
+  } catch (err: unknown) {
+    console.error("[api/voiceover GET]", err);
+    return Response.json({ error: (err as Error).message }, { status: 500 });
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {

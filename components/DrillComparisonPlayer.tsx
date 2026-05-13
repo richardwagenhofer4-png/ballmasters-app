@@ -4,8 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { collection, getDocs, onSnapshot, setDoc, deleteDoc, doc, updateDoc, arrayUnion } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
-import { renderAnnotations } from "@/app/coach/videos/[id]/annotate/page";
-import type { AnnotationFrame } from "@/app/coach/videos/[id]/annotate/page";
+import { renderAnnotations, type AnnotationFrame } from "@/lib/annotations";
 import CommentsSection from "@/components/CommentsSection";
 
 const REACTIONS = [
