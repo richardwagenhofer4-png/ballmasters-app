@@ -646,7 +646,7 @@ export default function AnnotatePage() {
             src={videoUrl}
             controls
             className="w-full"
-            style={{ maxHeight: "42vh", display: "block" }}
+            style={{ maxHeight: "65vh", display: "block" }}
             playsInline
             onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime ?? 0)}
             onPlay={() => setIsPaused(false)}
@@ -725,96 +725,85 @@ export default function AnnotatePage() {
         )}
       </div>
 
-      {/* Toolbar */}
-      <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 shrink-0">
+      {/* Compact toolbar */}
+      <div className="bg-gray-900 border-b border-gray-800 px-3 py-2 shrink-0 space-y-1.5">
 
-        {/* ── Drawing mode toggle — the primary control ── */}
-        <div className="flex items-center gap-3 mb-4">
+        {/* Row 1: Drawing toggle · tools · colors · undo */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={toggleDrawingMode}
-            className="flex items-center gap-2 h-10 px-4 rounded-lg text-sm font-bold transition"
-            style={{
-              backgroundColor: drawingMode ? "#16a34a" : "#374151",
-              color: "white",
-              minWidth: 160,
-            }}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition shrink-0"
+            style={{ backgroundColor: drawingMode ? "#16a34a" : "#374151", color: "white" }}
           >
-            <span style={{ fontSize: 16 }}>{drawingMode ? "✏" : "▶"}</span>
+            <span>{drawingMode ? "✏" : "▶"}</span>
             {drawingMode ? "Drawing ON" : "Drawing OFF"}
           </button>
-          <span className="text-xs leading-snug" style={{ color: drawingMode ? "#86efac" : "#6b7280" }}>
-            {drawingMode
-              ? "Canvas active — draw on the frame"
-              : "Video controls active — seek, play, fullscreen"}
-          </span>
-        </div>
 
-        {/* Tool buttons — dimmed when drawing mode is off */}
-        <div
-          className="flex items-center gap-1.5 mb-3 flex-wrap transition-opacity"
-          style={{ opacity: drawingMode ? 1 : 0.35 }}
-        >
-          {TOOLS.map(t => (
-            <button
-              key={t.type}
-              title={t.label}
-              onClick={() => { setTool(t.type); if (!drawingMode) toggleDrawingMode(); }}
-              className="h-9 px-3 rounded-lg text-sm font-semibold transition"
-              style={{
-                backgroundColor: tool === t.type && drawingMode ? "#1A6B45" : "#374151",
-                color: tool === t.type && drawingMode ? "white" : "#9ca3af",
-              }}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
+          <div className="w-px h-5 bg-gray-700 shrink-0" />
 
-        {/* Color swatches — dimmed when drawing mode is off */}
-        <div
-          className="flex items-center gap-2 mb-3 transition-opacity"
-          style={{ opacity: drawingMode ? 1 : 0.35 }}
-        >
-          <span className="text-xs text-gray-500 mr-1">Color</span>
-          {COLORS.map(c => (
-            <button
-              key={c.value}
-              title={c.label}
-              onClick={() => setColor(c.value)}
-              className="h-7 w-7 rounded-full transition"
-              style={{
-                backgroundColor: c.value,
-                outline: color === c.value ? "2px solid white" : "2px solid transparent",
-                outlineOffset: "2px",
-                border: c.value === "#ffffff" ? "1px solid #6b7280" : "none",
-              }}
-            />
-          ))}
-        </div>
+          <div
+            className="flex items-center gap-1 transition-opacity"
+            style={{ opacity: drawingMode ? 1 : 0.4 }}
+          >
+            {TOOLS.map(t => (
+              <button
+                key={t.type}
+                title={t.label}
+                onClick={() => { setTool(t.type); if (!drawingMode) toggleDrawingMode(); }}
+                className="h-8 px-2.5 rounded-lg text-xs font-semibold transition"
+                style={{
+                  backgroundColor: tool === t.type && drawingMode ? "#1A6B45" : "#374151",
+                  color: tool === t.type && drawingMode ? "white" : "#9ca3af",
+                }}
+              >
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
 
-        {/* Undo / Clear */}
-        <div className="flex items-center gap-2">
+          <div className="w-px h-5 bg-gray-700 shrink-0" />
+
+          <div
+            className="flex items-center gap-1.5 transition-opacity"
+            style={{ opacity: drawingMode ? 1 : 0.4 }}
+          >
+            {COLORS.map(c => (
+              <button
+                key={c.value}
+                title={c.label}
+                onClick={() => setColor(c.value)}
+                className="h-5 w-5 rounded-full transition shrink-0"
+                style={{
+                  backgroundColor: c.value,
+                  outline: color === c.value ? "2px solid white" : "2px solid transparent",
+                  outlineOffset: "2px",
+                  border: c.value === "#ffffff" ? "1px solid #6b7280" : "none",
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="flex-1" />
+
           <button
             onClick={() => setDrawings(prev => prev.slice(0, -1))}
             disabled={drawings.length === 0}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm text-gray-400 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 transition"
+            className="h-7 px-2 rounded text-xs text-gray-400 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 transition shrink-0"
           >
             ↩ Undo
           </button>
           <button
             onClick={() => { setDrawings([]); setLiveDrawing(null); }}
             disabled={drawings.length === 0}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm text-gray-400 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 transition"
+            className="h-7 px-2 rounded text-xs text-gray-400 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 transition shrink-0"
           >
-            ✕ Clear frame
+            ✕ Clear
           </button>
         </div>
-      </div>
 
-      {/* Save bar */}
-      <div className="bg-gray-800 px-4 py-3 shrink-0">
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer select-none">
+        {/* Row 2: Pause toggle · time · save */}
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={pauseOnPlay}
@@ -828,15 +817,14 @@ export default function AnnotatePage() {
           <button
             onClick={saveAnnotation}
             disabled={drawings.length === 0 || saving}
-            className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition disabled:opacity-40"
+            className="h-7 px-3 rounded text-xs font-semibold text-white transition disabled:opacity-40"
             style={{ backgroundColor: "#1A6B45" }}
           >
             {saving ? "Saving…" : `Save at ${fmt(currentTime)}`}
           </button>
         </div>
-        {error && (
-          <p className="mt-2 text-xs text-red-400">{error}</p>
-        )}
+
+        {error && <p className="text-xs text-red-400">{error}</p>}
       </div>
 
       {/* Voiceover section */}
