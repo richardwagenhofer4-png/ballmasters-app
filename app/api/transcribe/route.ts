@@ -30,7 +30,7 @@ interface TranscriptWord { word: string; start: number; end: number; }
 export async function POST(request: NextRequest) {
   const ts = Date.now();
   const videoPath = join(tmpdir(), `bm-${ts}.mp4`);
-  const audioPath = join(tmpdir(), `bm-${ts}.mp3`);
+  const audioPath = join(tmpdir(), `bm-${ts}.wav`);
 
   try {
     const authHeader = request.headers.get("authorization");
@@ -58,15 +58,15 @@ export async function POST(request: NextRequest) {
     if (!Body) throw new Error("Empty response from R2");
     await pipeline(Body as NodeJS.ReadableStream, createWriteStream(videoPath));
 
-    // Extract mono 64 kbps MP3 — keeps audio well under Whisper's 25 MB limit.
-    // -itsoffset 0 forces the input timestamp offset to zero before reading.
-    // asetpts=PTS-STARTPTS subtracts the first frame's PTS from all frames,
-    // guaranteeing the output starts at 0 regardless of container start_time.
+    // Extract 16-bit PCM WAV — pcm_s16le forces a clean codec-level timestamp
+    // reset and avoids MP3 encoder delay. 16 kHz mono keeps well under Whisper's
+    // 25 MB limit (~2 MB/min). asetpts=PTS-STARTPTS subtracts the first frame's
+    // PTS so the WAV always starts at 0 regardless of container start_time.
     await new Promise<void>((resolve, reject) => {
       ffmpeg(videoPath)
         .inputOptions(["-itsoffset 0"])
         .audioFilters("asetpts=PTS-STARTPTS")
-        .outputOptions(["-vn", "-acodec libmp3lame", "-ar 16000", "-ac 1", "-b:a 64k"])
+        .outputOptions(["-vn", "-acodec pcm_s16le", "-ar 16000", "-ac 1"])
         .output(audioPath)
         .on("end", () => resolve())
         .on("error", (err: Error) => reject(err))
@@ -85,13 +85,20 @@ export async function POST(request: NextRequest) {
       words?: Array<{ word: string; start: number; end: number }>;
     };
 
-    const segments: TranscriptSegment[] = (result.segments ?? []).map(
-      ({ id, start, end, text }) => ({ id, start, end, text: text.trim() })
+    // Normalize timestamps: if the first segment doesn't start at 0, the container
+    // start_time bled through. Subtract it from every timestamp so the transcript
+    // aligns with the video timeline.
+    const rawSegments = result.segments ?? [];
+    const rawWords = result.words ?? [];
+    const offset = rawSegments.length > 0 ? rawSegments[0].start : 0;
+
+    const segments: TranscriptSegment[] = rawSegments.map(
+      ({ id, start, end, text }) => ({ id, start: start - offset, end: end - offset, text: text.trim() })
     );
-    const words: TranscriptWord[] = (result.words ?? []).map(({ word, start, end }) => ({
+    const words: TranscriptWord[] = rawWords.map(({ word, start, end }) => ({
       word,
-      start,
-      end,
+      start: start - offset,
+      end: end - offset,
     }));
 
     const transcript = {
