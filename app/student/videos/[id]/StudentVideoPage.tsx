@@ -116,7 +116,7 @@ export default function VideoPlayerPage() {
         }
         const resData = await res.json();
 
-        if (data.type === "drill_comparison") {
+        if (data.type === "drill_comparison" || (snap.data()?.coachVideoKey && snap.data()?.studentVideoKey)) {
           setDrillUrls({
             coachVideoUrl: resData.coachVideoUrl as string,
             studentVideoUrl: resData.studentVideoUrl as string,

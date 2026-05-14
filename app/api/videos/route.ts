@@ -133,8 +133,8 @@ export async function GET(request: NextRequest) {
     // Attach fresh presigned read URLs (valid 24 h)
     const withUrls = await Promise.all(
       videos.map(async (v) => {
-        if (v.type === "drill_comparison") {
-          return { ...v, videoUrl: null };
+        if (v.type === "drill_comparison" || (v.coachVideoKey && v.studentVideoKey)) {
+          return { ...v, type: "drill_comparison", videoUrl: null };
         }
         const key = v.fileName as string | undefined;
         const videoUrl = key ? await getVideoUrl(key) : null;
