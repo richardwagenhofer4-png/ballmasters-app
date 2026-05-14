@@ -1,5 +1,4 @@
-// Requires ffmpeg installed on the system: brew install ffmpeg
-// Long-running — needs Vercel Pro (maxDuration > 60 s) for production use
+// Long-running — requires Vercel Pro for maxDuration > 60 s
 export const maxDuration = 300;
 
 import type { NextRequest } from "next/server";
@@ -10,7 +9,9 @@ import { createReadStream, createWriteStream, unlink } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { pipeline } from "stream/promises";
+import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const r2 = new S3Client({
   region: "auto",
