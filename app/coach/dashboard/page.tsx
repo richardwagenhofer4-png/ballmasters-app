@@ -144,7 +144,7 @@ export default function CoachDashboard() {
           getDocs(collection(db, "videos")),
         ]);
 
-        setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? "Coach");
+        setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? user.displayName ?? "Coach");
 
         const studentDocs: StudentData[] = studentsSnap.docs.map(d => ({
           id: d.id,
