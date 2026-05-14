@@ -81,6 +81,7 @@ export default function AnnotatePage() {
   const [recordingTimer, setRecordingTimer] = useState(0);
   const [previewing, setPreviewing] = useState(false);
   const [voiceoverError, setVoiceoverError] = useState("");
+  const [previewMode, setPreviewMode] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -98,6 +99,10 @@ export default function AnnotatePage() {
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewBlobUrlRef = useRef<string | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const previewModeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewPausedAtRef = useRef<number | null>(null);
 
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
 
@@ -474,6 +479,116 @@ export default function AnnotatePage() {
     }
   }
 
+  // ── Preview canvas sizing ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (!previewMode) return;
+    const pvid = previewVideoRef.current;
+    const pcanvas = previewCanvasRef.current;
+    if (!pvid || !pcanvas) return;
+    const syncSize = () => {
+      pcanvas.width = pvid.clientWidth;
+      pcanvas.height = pvid.clientHeight;
+    };
+    const obs = new ResizeObserver(syncSize);
+    obs.observe(pvid);
+    syncSize();
+    return () => obs.disconnect();
+  }, [previewMode]);
+
+  // ── Preview mode handlers ───────────────────────────────────────────────────
+  async function openPreview() {
+    if (voiceover && !previewModeAudioRef.current) {
+      try {
+        let src: string;
+        if (previewBlobUrlRef.current) {
+          src = previewBlobUrlRef.current;
+        } else {
+          const token = await auth.currentUser!.getIdToken();
+          const res = await fetch(`/api/voiceover?videoId=${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error("Failed to load voiceover");
+          const { audioUrl } = await res.json();
+          src = audioUrl;
+        }
+        previewModeAudioRef.current = new Audio(src);
+      } catch {
+        // voiceover won't play in preview, but continue
+      }
+    }
+    setPreviewMode(true);
+  }
+
+  function closePreview() {
+    previewVideoRef.current?.pause();
+    if (previewModeAudioRef.current) previewModeAudioRef.current.pause();
+    previewPausedAtRef.current = null;
+    setPreviewMode(false);
+  }
+
+  function handlePreviewTimeUpdate() {
+    const pvid = previewVideoRef.current;
+    const pcanvas = previewCanvasRef.current;
+    if (!pvid || !pcanvas) return;
+    const t = pvid.currentTime;
+    const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
+
+    const ctx = pcanvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+    }
+
+    if (ann?.pauseOnPlay && !pvid.paused && previewPausedAtRef.current !== ann.timestamp) {
+      previewPausedAtRef.current = ann.timestamp;
+      pvid.pause();
+      previewModeAudioRef.current?.pause();
+    }
+
+    if (previewPausedAtRef.current !== null) {
+      const stillNear = Math.abs(t - previewPausedAtRef.current) < 0.5;
+      if (!stillNear) previewPausedAtRef.current = null;
+    }
+  }
+
+  function handlePreviewPlay() {
+    const pvid = previewVideoRef.current;
+    const audio = previewModeAudioRef.current;
+    if (!pvid || !audio || !voiceover) return;
+    const offset = pvid.currentTime - voiceover.startTime;
+    if (offset >= 0 && offset < voiceover.duration) {
+      audio.currentTime = offset;
+      audio.play().catch(() => {});
+    }
+  }
+
+  function handlePreviewPause() {
+    previewModeAudioRef.current?.pause();
+  }
+
+  function handlePreviewSeeked() {
+    const pvid = previewVideoRef.current;
+    const pcanvas = previewCanvasRef.current;
+    if (!pvid || !pcanvas) return;
+    previewPausedAtRef.current = null;
+    const t = pvid.currentTime;
+    const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
+    const ctx = pcanvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+    }
+    if (!pvid.paused && previewModeAudioRef.current && voiceover) {
+      const offset = t - voiceover.startTime;
+      if (offset >= 0 && offset < voiceover.duration) {
+        previewModeAudioRef.current.currentTime = offset;
+        previewModeAudioRef.current.play().catch(() => {});
+      } else {
+        previewModeAudioRef.current.pause();
+      }
+    }
+  }
+
   const atSavedFrame = annotations.some(
     a => Math.abs((videoRef.current?.currentTime ?? currentTime) - a.timestamp) < 0.5
   );
@@ -497,13 +612,22 @@ export default function AnnotatePage() {
           <span className="text-xl">⚽</span>
           <span className="text-sm font-bold text-white">Annotation Editor</span>
         </div>
-        <Link
-          href="/coach/dashboard"
-          className="text-sm font-semibold transition"
-          style={{ color: "#4ade80" }}
-        >
-          Done →
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={openPreview}
+            className="text-sm font-semibold transition"
+            style={{ color: "#60a5fa" }}
+          >
+            Preview
+          </button>
+          <Link
+            href="/coach/dashboard"
+            className="text-sm font-semibold transition"
+            style={{ color: "#4ade80" }}
+          >
+            Done →
+          </Link>
+        </div>
       </div>
 
       {/* Video + Canvas */}
@@ -859,6 +983,99 @@ export default function AnnotatePage() {
           />
         )}
       </div>
+      {/* Full-screen preview overlay */}
+      {previewMode && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "#000",
+            zIndex: 50,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {/* Preview header */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "12px 16px",
+              backgroundColor: "#111827",
+              borderBottom: "1px solid #1f2937",
+              flexShrink: 0,
+            }}
+          >
+            <button
+              onClick={closePreview}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "14px",
+                color: "#9ca3af",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              <svg style={{ height: 16, width: 16 }} viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+              </svg>
+              Back to editing
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "20px" }}>⚽</span>
+              <span style={{ fontSize: "14px", fontWeight: "bold", color: "white" }}>Student Preview</span>
+            </div>
+            <div style={{ width: 120 }} />
+          </div>
+
+          {/* Preview video + canvas */}
+          <div style={{ flex: 1, position: "relative", lineHeight: 0, overflow: "hidden" }}>
+            {videoUrl && (
+              <video
+                ref={previewVideoRef}
+                src={videoUrl}
+                controls
+                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                playsInline
+                onTimeUpdate={handlePreviewTimeUpdate}
+                onPlay={handlePreviewPlay}
+                onPause={handlePreviewPause}
+                onSeeked={handlePreviewSeeked}
+              />
+            )}
+            <canvas
+              ref={previewCanvasRef}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
+            />
+          </div>
+
+          {/* Preview info bar */}
+          <div
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#111827",
+              flexShrink: 0,
+              fontSize: "12px",
+              color: "#6b7280",
+              textAlign: "center",
+            }}
+          >
+            {annotations.length} annotation{annotations.length !== 1 ? "s" : ""}
+            {voiceover ? " · Voiceover included" : " · No voiceover"}
+            {" · "}Annotations with ⏸ will auto-pause
+          </div>
+        </div>
+      )}
     </main>
   );
 }
