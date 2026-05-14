@@ -441,7 +441,7 @@ export default function CoachVideosPage() {
                   {/* Title row */}
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex-1 min-w-0">
-                      <Link href={isDrill ? `/coach/videos/${v.id}/annotate` : `/coach/videos/${v.id}/annotate`}>
+                      <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
                         <h3 className="text-sm font-bold text-gray-900 leading-snug hover:underline truncate cursor-pointer">
                           {v.title}
                         </h3>
@@ -498,7 +498,7 @@ export default function CoachVideosPage() {
                 <div className="flex border-t border-gray-100">
                   {isDrill ? (
                     <>
-                      <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
+                      <Link href={`/coach/videos/${v.id}/drill`} className="flex-1">
                         <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
                           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
