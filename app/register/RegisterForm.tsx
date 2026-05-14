@@ -13,6 +13,7 @@ import { auth } from "@/lib/firebase";
 import { saveUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
 import { validateInviteCode, recordCodeUsage } from "@/lib/inviteCodes";
+import { validateCoachInvite, useCoachInvite } from "@/lib/coachInvites";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -63,6 +64,7 @@ export default function RegisterForm() {
   const searchParams = useSearchParams();
   const codeFromUrl = (searchParams.get("code") ?? "").toUpperCase();
   const codeIsLocked = codeFromUrl.length === 8;
+  const coachInviteToken = searchParams.get("coachInvite") ?? "";
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -70,7 +72,7 @@ export default function RegisterForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [age, setAge] = useState("");
   const [parentEmail, setParentEmail] = useState("");
-  const [role, setRole] = useState<Role>("");
+  const [role, setRole] = useState<Role>(coachInviteToken ? "coach" : "");
   const [inviteCode, setInviteCode] = useState(codeFromUrl);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -112,6 +114,12 @@ export default function RegisterForm() {
       const ageNum = parseInt(age, 10);
       const code = inviteCode.trim().toUpperCase();
 
+      // Validate coach invite token first (before creating account)
+      if (coachInviteToken) {
+        const result = await validateCoachInvite(coachInviteToken);
+        if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
+      }
+
       // Validate invite code BEFORE creating the account to avoid orphan accounts
       if (code) {
         const valid = await checkInviteCode();
@@ -132,6 +140,9 @@ export default function RegisterForm() {
         ...(ageNum < 13 && parentEmail ? { parentEmail } : {}),
       });
 
+      if (coachInviteToken) {
+        await useCoachInvite(coachInviteToken, credential.user.uid);
+      }
       if (code) {
         await recordCodeUsage(code, credential.user.uid);
       }
@@ -157,6 +168,11 @@ export default function RegisterForm() {
     try {
       const code = inviteCode.trim().toUpperCase();
 
+      if (coachInviteToken) {
+        const result = await validateCoachInvite(coachInviteToken);
+        if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
+      }
+
       if (code) {
         const result = await validateInviteCode(code);
         if (!result.valid) { setError(result.error ?? "Invalid invite code."); return; }
@@ -174,6 +190,9 @@ export default function RegisterForm() {
         age: null,
       });
 
+      if (coachInviteToken) {
+        await useCoachInvite(coachInviteToken, credential.user.uid);
+      }
       if (code) {
         await recordCodeUsage(code, credential.user.uid);
       }
@@ -220,6 +239,19 @@ export default function RegisterForm() {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-.75-11.25a.75.75 0 011.5 0v4.5a.75.75 0 01-1.5 0v-4.5zm.75 7.5a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
               </svg>
               {error}
+            </div>
+          )}
+
+          {/* Coach invite banner */}
+          {coachInviteToken && (
+            <div
+              className="mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium"
+              style={{ backgroundColor: "#ede9fe", color: "#6d28d9" }}
+            >
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 2a5 5 0 00-5 5v2H4a2 2 0 00-2 2v5a2 2 0 002 2h12a2 2 0 002-2v-5a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3zm0 8a1 1 0 110 2 1 1 0 010-2z" clipRule="evenodd" />
+              </svg>
+              You&rsquo;re registering as a <strong>Coach</strong> via invite link
             </div>
           )}
 
@@ -295,24 +327,24 @@ export default function RegisterForm() {
               </div>
             )}
 
-            {/* Role selection */}
-            <div>
-              <span className="block text-sm font-medium text-gray-700 mb-2">I am a…</span>
-              <div className="grid grid-cols-2 gap-3">
-                {(["student", "coach"] as Role[]).map((r) => (
-                  <button key={r} type="button" onClick={() => setRole(r)}
-                    className="flex flex-col items-center gap-1.5 rounded-xl border-2 py-4 text-sm font-semibold transition"
+            {/* Role selection — hidden when registering via coach invite */}
+            {!coachInviteToken && (
+              <div>
+                <span className="block text-sm font-medium text-gray-700 mb-2">I am a…</span>
+                <div className="grid grid-cols-1 gap-3">
+                  <button type="button" onClick={() => setRole("student")}
+                    className="flex items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-sm font-semibold transition"
                     style={{
-                      borderColor: role === r ? "#1A6B45" : "#e5e7eb",
-                      backgroundColor: role === r ? "#f0faf5" : "white",
-                      color: role === r ? "#1A6B45" : "#6b7280",
+                      borderColor: role === "student" ? "#1A6B45" : "#e5e7eb",
+                      backgroundColor: role === "student" ? "#f0faf5" : "white",
+                      color: role === "student" ? "#1A6B45" : "#6b7280",
                     }}>
-                    <span className="text-2xl">{r === "student" ? "🎓" : "📋"}</span>
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
+                    <span className="text-2xl">🎓</span>
+                    <span>Student</span>
                   </button>
-                ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Invite code */}
             <div>
