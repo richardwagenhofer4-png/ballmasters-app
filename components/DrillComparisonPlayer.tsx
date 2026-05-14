@@ -54,6 +54,8 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
   const [reactions, setReactions] = useState<Record<string, string>>({});
   const [watched, setWatched] = useState((meta.viewedBy ?? []).includes(uid));
   const [activeTab, setActiveTab] = useState<"coach" | "student">("coach");
+  const [coachVideoError, setCoachVideoError] = useState(false);
+  const [studentVideoError, setStudentVideoError] = useState(false);
 
   const { layout, syncPlayback } = meta;
 
@@ -188,24 +190,31 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
   const coachPanel = (maxH: string, extraStyle?: React.CSSProperties) => (
     <div style={{ position: "relative", lineHeight: 0, flex: 1, ...extraStyle }}>
       <LabelBar text="Coach Demo" side="coach" />
-      <video
-        ref={coachRef}
-        src={coachVideoUrl}
-        controls
-        controlsList={meta.downloadAllowed ? undefined : "nodownload"}
-        className="w-full bg-black"
-        style={{ maxHeight: maxH, display: "block" }}
-        playsInline
-        onPlay={() => { recordView(); syncPlay("coach"); }}
-        onPause={() => syncPause("coach")}
-        onSeeked={() => syncSeek("coach")}
-        onTimeUpdate={handleCoachTimeUpdate}
-      />
+      {coachVideoError ? (
+        <div className="w-full bg-black flex items-center justify-center" style={{ minHeight: 120, maxHeight: maxH }}>
+          <p className="text-red-400 text-xs px-4 text-center">Coach video failed to load. Check R2 keys in Vercel logs.</p>
+        </div>
+      ) : (
+        <video
+          ref={coachRef}
+          src={coachVideoUrl}
+          controls
+          controlsList={meta.downloadAllowed ? undefined : "nodownload"}
+          className="w-full bg-black"
+          style={{ maxHeight: maxH, display: "block" }}
+          playsInline
+          onPlay={() => { recordView(); syncPlay("coach"); }}
+          onPause={() => syncPause("coach")}
+          onSeeked={() => syncSeek("coach")}
+          onTimeUpdate={handleCoachTimeUpdate}
+          onError={() => setCoachVideoError(true)}
+        />
+      )}
       <canvas
         ref={canvasRef}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
       />
-      {activeAnnotation && (
+      {activeAnnotation && !coachVideoError && (
         <div style={{ position: "absolute", top: 24, right: 8, backgroundColor: "rgba(0,0,0,0.68)", color: "white", borderRadius: 9999, padding: "3px 10px", fontSize: 11, fontWeight: 600, pointerEvents: "none" }}>
           ✏ Coach note
         </div>
@@ -216,18 +225,25 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
   const studentPanel = (maxH: string, extraStyle?: React.CSSProperties) => (
     <div style={{ position: "relative", lineHeight: 0, flex: 1, ...extraStyle }}>
       <LabelBar text="Your Attempt" side="student" />
-      <video
-        ref={studentRef}
-        src={studentVideoUrl}
-        controls
-        controlsList={meta.downloadAllowed ? undefined : "nodownload"}
-        className="w-full bg-black"
-        style={{ maxHeight: maxH, display: "block" }}
-        playsInline
-        onPlay={() => syncPlay("student")}
-        onPause={() => syncPause("student")}
-        onSeeked={() => syncSeek("student")}
-      />
+      {studentVideoError ? (
+        <div className="w-full bg-black flex items-center justify-center" style={{ minHeight: 120, maxHeight: maxH }}>
+          <p className="text-red-400 text-xs px-4 text-center">Student video failed to load. Check R2 keys in Vercel logs.</p>
+        </div>
+      ) : (
+        <video
+          ref={studentRef}
+          src={studentVideoUrl}
+          controls
+          controlsList={meta.downloadAllowed ? undefined : "nodownload"}
+          className="w-full bg-black"
+          style={{ maxHeight: maxH, display: "block" }}
+          playsInline
+          onPlay={() => syncPlay("student")}
+          onPause={() => syncPause("student")}
+          onSeeked={() => syncSeek("student")}
+          onError={() => setStudentVideoError(true)}
+        />
+      )}
     </div>
   );
 
