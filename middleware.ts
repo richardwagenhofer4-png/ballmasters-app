@@ -10,7 +10,8 @@ export function middleware(request: NextRequest) {
   const isProtected =
     pathname === "/dashboard" ||
     pathname.startsWith("/coach") ||
-    pathname.startsWith("/student");
+    pathname.startsWith("/student") ||
+    pathname.startsWith("/admin");
   if (isProtected && !isAuthenticated) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
@@ -20,7 +21,7 @@ export function middleware(request: NextRequest) {
   // /dashboard (exact) is a relay — send authenticated users to their role page
   if (pathname === "/dashboard" && isAuthenticated) {
     const url = request.nextUrl.clone();
-    if (role === "coach") {
+    if (role === "coach" || role === "admin") {
       url.pathname = "/coach/dashboard";
     } else if (role === "student") {
       url.pathname = "/student/dashboard";
@@ -30,11 +31,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Authenticated users on /coach/* or /student/* pass through immediately —
+  // Authenticated users on /coach/*, /student/*, /admin/* pass through immediately —
   // no further redirect logic should touch these routes
   if (
     isAuthenticated &&
-    (pathname.startsWith("/coach") || pathname.startsWith("/student"))
+    (pathname.startsWith("/coach") || pathname.startsWith("/student") || pathname.startsWith("/admin"))
   ) {
     return NextResponse.next();
   }
@@ -46,7 +47,7 @@ export function middleware(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone();
     url.pathname =
-      role === "coach"
+      role === "coach" || role === "admin"
         ? "/coach/dashboard"
         : role === "student"
         ? "/student/dashboard"
@@ -58,5 +59,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/coach/:path*", "/student/:path*", "/login", "/register"],
+  matcher: ["/dashboard", "/coach/:path*", "/student/:path*", "/admin/:path*", "/login", "/register"],
 };

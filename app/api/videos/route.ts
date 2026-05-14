@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     const { uid } = await verifyIdToken(idToken);
     const profile = await getFirestoreDoc("users", uid, idToken);
 
-    if (profile?.role !== "coach") {
+    if (profile?.role !== "coach" && profile?.role !== "admin") {
       return Response.json({ error: "Only coaches can save videos" }, { status: 403 });
     }
 
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
     const role = profile?.role as string | undefined;
 
     let videos: Array<Record<string, unknown>>;
-    if (role === "coach") {
+    if (role === "coach" || role === "admin") {
       videos = await queryFirestore("videos", [], idToken);
     } else {
       videos = await queryFirestore(
