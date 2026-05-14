@@ -58,9 +58,14 @@ export async function POST(request: NextRequest) {
     if (!Body) throw new Error("Empty response from R2");
     await pipeline(Body as NodeJS.ReadableStream, createWriteStream(videoPath));
 
-    // Extract mono 64 kbps MP3 — keeps audio well under Whisper's 25 MB limit
+    // Extract mono 64 kbps MP3 — keeps audio well under Whisper's 25 MB limit.
+    // -ss 0 as input flag ensures we start at the true beginning of the stream.
+    // asetpts=NB_CONSUMED_SAMPLES/SR resets PTS from sample count so the MP3
+    // timestamps start at 0 regardless of the container's non-zero start_time.
     await new Promise<void>((resolve, reject) => {
       ffmpeg(videoPath)
+        .inputOptions(["-ss 0"])
+        .audioFilters("asetpts=NB_CONSUMED_SAMPLES/SR")
         .outputOptions(["-vn", "-acodec libmp3lame", "-ar 16000", "-ac 1", "-b:a 64k"])
         .output(audioPath)
         .on("end", () => resolve())
