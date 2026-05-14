@@ -21,6 +21,7 @@ interface StudentData {
 interface VideoData {
   id: string;
   title: string;
+  coachName: string;
   createdAt: string;
   studentIds: string[];
   viewedBy: string[];
@@ -140,7 +141,7 @@ export default function CoachDashboard() {
         const [profileSnap, studentsSnap, videosSnap] = await Promise.all([
           getDoc(doc(db, "users", user.uid)),
           getDocs(query(collection(db, "users"), where("role", "==", "student"))),
-          getDocs(query(collection(db, "videos"), where("coachId", "==", user.uid))),
+          getDocs(collection(db, "videos")),
         ]);
 
         setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? "Coach");
@@ -154,6 +155,7 @@ export default function CoachDashboard() {
         const videoDocs: VideoData[] = videosSnap.docs.map(d => ({
           id: d.id,
           title: (d.data().title as string) ?? "Untitled",
+          coachName: (d.data().coachName as string) ?? "",
           createdAt: (d.data().createdAt as string) ?? "",
           studentIds: (d.data().studentIds as string[]) ?? [],
           viewedBy: (d.data().viewedBy as string[]) ?? [],
@@ -373,6 +375,7 @@ export default function CoachDashboard() {
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold text-gray-900 truncate">{v.title}</h3>
                       <p className="text-xs text-gray-400 mt-0.5">
+                        {v.coachName && <span className="font-medium text-gray-500">{v.coachName} · </span>}
                         {formatDate(v.createdAt)}
                         {v.assignedCount > 0 && <> · {v.assignedCount} student{v.assignedCount !== 1 ? "s" : ""}</>}
                       </p>

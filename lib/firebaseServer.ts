@@ -148,8 +148,10 @@ export async function queryFirestore(
   filters: Filter[],
   idToken: string
 ): Promise<Array<Record<string, unknown>>> {
-  const where =
-    filters.length === 1
+  const whereClause =
+    filters.length === 0
+      ? undefined
+      : filters.length === 1
       ? {
           fieldFilter: {
             field: { fieldPath: filters[0].field },
@@ -170,19 +172,19 @@ export async function queryFirestore(
           },
         };
 
+  const structuredQuery: Record<string, unknown> = {
+    from: [{ collectionId: collection }],
+    orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
+  };
+  if (whereClause) structuredQuery.where = whereClause;
+
   const res = await fetch(`${FIRESTORE}:runQuery`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${idToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      structuredQuery: {
-        from: [{ collectionId: collection }],
-        where,
-        orderBy: [{ field: { fieldPath: "createdAt" }, direction: "DESCENDING" }],
-      },
-    }),
+    body: JSON.stringify({ structuredQuery }),
   });
   if (!res.ok) {
     const err = await res.json();

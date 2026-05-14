@@ -117,11 +117,7 @@ export async function GET(request: NextRequest) {
 
     let videos: Array<Record<string, unknown>>;
     if (role === "coach") {
-      videos = await queryFirestore(
-        "videos",
-        [{ field: "coachId", op: "EQUAL", value: uid }],
-        idToken
-      );
+      videos = await queryFirestore("videos", [], idToken);
     } else {
       videos = await queryFirestore(
         "videos",

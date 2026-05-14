@@ -18,6 +18,7 @@ import { sendVideoNotification } from "@/lib/notifications";
 interface Video {
   id: string;
   title: string;
+  coachName: string;
   type?: string;
   coachVideoKey?: string;
   studentIds: string[];
@@ -158,12 +159,13 @@ export default function CoachVideosPage() {
       setUid(user.uid);
       try {
         const [videosSnap, studentsSnap] = await Promise.all([
-          getDocs(query(collection(db, "videos"), where("coachId", "==", user.uid))),
+          getDocs(collection(db, "videos")),
           getDocs(query(collection(db, "users"), where("role", "==", "student"))),
         ]);
         setVideos(videosSnap.docs.map(d => ({
           id: d.id,
           title: (d.data().title as string) ?? "Untitled",
+          coachName: (d.data().coachName as string) ?? "",
           type: d.data().type as string | undefined,
           coachVideoKey: d.data().coachVideoKey as string | undefined,
           studentIds: (d.data().studentIds as string[]) ?? [],
@@ -446,7 +448,10 @@ export default function CoachVideosPage() {
                           {v.title}
                         </h3>
                       </Link>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatDate(v.createdAt)}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {v.coachName && <span className="font-medium text-gray-500">{v.coachName} · </span>}
+                        {formatDate(v.createdAt)}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {/* Type badge */}
