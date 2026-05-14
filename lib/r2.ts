@@ -1,19 +1,4 @@
 import { createHmac, createHash } from "crypto";
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
-// Used only for getVideoUrl (GET presigned — no CORS issues)
-const r2 = new S3Client({
-  region: "auto",
-  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT,
-  forcePathStyle: false,
-  credentials: {
-    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
-  },
-  requestChecksumCalculation: "WHEN_REQUIRED",
-  responseChecksumValidation: "WHEN_REQUIRED",
-});
 
 const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
@@ -25,36 +10,33 @@ function sha256hex(data: string): string {
   return createHash("sha256").update(data).digest("hex");
 }
 
-// Pure Node.js SigV4 presigned PUT URL — matches curl --aws-sigv4 exactly.
-// Only the host header is signed so the browser's Content-Type doesn't break the signature.
-export function getUploadUrl(key: string): string {
+function presignedUrl(method: "PUT" | "GET", key: string, expiresIn: number): string {
   const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!;
   const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!;
   const { hostname: endpointHostname } = new URL(process.env.CLOUDFLARE_R2_ENDPOINT!);
   const hostname = `${BUCKET}.${endpointHostname}`;
 
   const now = new Date();
-  const datetime = now.toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z"; // YYYYMMDDTHHMMSSZ
-  const date = datetime.slice(0, 8); // YYYYMMDD
+  const datetime = now.toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z";
+  const date = datetime.slice(0, 8);
 
   const credentialScope = `${date}/auto/s3/aws4_request`;
 
-  // Build and sort query params — URLSearchParams encodes / as %2F (required by SigV4)
   const queryParams = new URLSearchParams({
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
     "X-Amz-Credential": `${accessKeyId}/${credentialScope}`,
     "X-Amz-Date": datetime,
-    "X-Amz-Expires": "3600",
+    "X-Amz-Expires": String(expiresIn),
     "X-Amz-SignedHeaders": "host",
   });
   queryParams.sort();
   const canonicalQueryString = queryParams.toString();
 
   const canonicalRequest = [
-    "PUT",
+    method,
     `/${key}`,
     canonicalQueryString,
-    `host:${hostname}\n`, // trailing newline = blank line after headers block
+    `host:${hostname}\n`,
     "host",
     "UNSIGNED-PAYLOAD",
   ].join("\n");
@@ -75,10 +57,10 @@ export function getUploadUrl(key: string): string {
   return `https://${hostname}/${key}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
 }
 
-export async function getVideoUrl(fileName: string): Promise<string> {
-  return getSignedUrl(
-    r2,
-    new GetObjectCommand({ Bucket: BUCKET, Key: fileName }),
-    { expiresIn: 60 * 60 * 24 }
-  );
+export function getUploadUrl(key: string): string {
+  return presignedUrl("PUT", key, 3600);
+}
+
+export function getVideoUrl(fileName: string): string {
+  return presignedUrl("GET", fileName, 60 * 60 * 24);
 }
