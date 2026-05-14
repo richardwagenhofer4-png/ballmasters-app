@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     const { uid } = await verifyIdToken(idToken);
     const profile = await getFirestoreDoc("users", uid, idToken);
-    if (profile?.role !== "coach") {
+    if (profile?.role !== "coach" && profile?.role !== "admin") {
       return Response.json({ error: "Only coaches can upload videos" }, { status: 403 });
     }
 
