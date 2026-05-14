@@ -58,11 +58,13 @@ export async function POST(request: NextRequest) {
     if (!Body) throw new Error("Empty response from R2");
     await pipeline(Body as NodeJS.ReadableStream, createWriteStream(videoPath));
 
-    // Extract mono MP3 at 16 kHz — simple extraction with no timestamp
-    // manipulation. Whisper timestamps are relative to the audio file start,
-    // so clean extraction from position 0 gives correct video-aligned timestamps.
+    // atrim=start=0 discards any audio before t=0, asetpts=PTS-STARTPTS resets
+    // all output timestamps relative to the first frame — together they strip the
+    // container's non-zero start_time so Whisper receives audio anchored at 0.
     await new Promise<void>((resolve, reject) => {
       ffmpeg(videoPath)
+        .inputOptions(["-ss 0"])
+        .audioFilters("atrim=start=0,asetpts=PTS-STARTPTS")
         .outputOptions(["-vn", "-ar 16000", "-ac 1", "-f mp3"])
         .output(audioPath)
         .on("end", () => resolve())
@@ -82,13 +84,21 @@ export async function POST(request: NextRequest) {
       words?: Array<{ word: string; start: number; end: number }>;
     };
 
-    const segments: TranscriptSegment[] = (result.segments ?? []).map(
-      ({ id, start, end, text }) => ({ id, start, end, text: text.trim() })
+    const rawSegments = result.segments ?? [];
+    const rawWords = result.words ?? [];
+
+    // Safety net: if the container offset still bled through (first segment > 5 s),
+    // subtract it. Threshold avoids incorrectly shifting videos with genuine silence.
+    const firstStart = rawSegments[0]?.start ?? 0;
+    const offset = firstStart > 5 ? firstStart : 0;
+
+    const segments: TranscriptSegment[] = rawSegments.map(
+      ({ id, start, end, text }) => ({ id, start: start - offset, end: end - offset, text: text.trim() })
     );
-    const words: TranscriptWord[] = (result.words ?? []).map(({ word, start, end }) => ({
+    const words: TranscriptWord[] = rawWords.map(({ word, start, end }) => ({
       word,
-      start,
-      end,
+      start: start - offset,
+      end: end - offset,
     }));
 
     const transcript = {
