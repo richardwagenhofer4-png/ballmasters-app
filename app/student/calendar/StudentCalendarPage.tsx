@@ -10,8 +10,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   runTransaction,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import type { Session, Booking } from "@/lib/sessionTypes";
@@ -96,7 +98,7 @@ export default function StudentCalendarPage() {
         const [profileSnap, sessionsSnap, bookingsSnap] = await Promise.all([
           getDoc(doc(db, "users", user.uid)),
           getDocs(collection(db, "sessions")),
-          getDocs(collection(db, "bookings")),
+          getDocs(query(collection(db, "bookings"), where("studentId", "==", user.uid))),
         ]);
 
         const profileData = profileSnap.data();
@@ -236,6 +238,7 @@ export default function StudentCalendarPage() {
     try {
       const now = new Date().toISOString();
       const wasBooked = booking.status === "confirmed";
+      let promotedUid: string | null = null;
 
       await runTransaction(db, async (tx) => {
         const sessionRef = doc(db, "sessions", session.id);
@@ -246,14 +249,13 @@ export default function StudentCalendarPage() {
         if (wasBooked) {
           const newBookedBy = data.bookedBy.filter(b => b.uid !== uid);
           let newWaitlist = [...data.waitlist];
-          let promoted: typeof data.waitlist[0] | null = null;
 
           if (newWaitlist.length > 0) {
-            promoted = newWaitlist[0];
+            const promoted = newWaitlist[0];
+            promotedUid = promoted.uid;
             newWaitlist = newWaitlist.slice(1);
             const promotedBookedBy = [...newBookedBy, {
-              uid: promoted.uid, name: promoted.name, email: promoted.email,
-              bookedAt: now,
+              uid: promoted.uid, name: promoted.name, email: promoted.email, bookedAt: now,
             }];
             tx.update(sessionRef, {
               bookedBy: promotedBookedBy,
@@ -263,18 +265,8 @@ export default function StudentCalendarPage() {
           } else {
             tx.update(sessionRef, {
               bookedBy: newBookedBy,
-              status: newBookedBy.length >= data.maxCapacity ? "full" : "available",
+              status: "available",
             });
-          }
-
-          if (promoted) {
-            const promotedBookingQuery = await getDocs(collection(db, "bookings"));
-            const promotedBookingDoc = promotedBookingQuery.docs.find(d =>
-              d.data().sessionId === session.id && d.data().studentId === promoted!.uid && d.data().status === "waitlisted"
-            );
-            if (promotedBookingDoc) {
-              tx.update(doc(db, "bookings", promotedBookingDoc.id), { status: "confirmed" });
-            }
           }
         } else {
           const newWaitlist = data.waitlist.filter(w => w.uid !== uid);
@@ -283,6 +275,20 @@ export default function StudentCalendarPage() {
 
         tx.update(doc(db, "bookings", booking.id), { status: "cancelled" });
       });
+
+      // Update the promoted student's booking doc outside the transaction
+      if (promotedUid) {
+        const promotedQ = query(
+          collection(db, "bookings"),
+          where("sessionId", "==", session.id),
+          where("studentId", "==", promotedUid),
+          where("status", "==", "waitlisted")
+        );
+        const promotedSnap = await getDocs(promotedQ);
+        if (!promotedSnap.empty) {
+          await updateDoc(doc(db, "bookings", promotedSnap.docs[0].id), { status: "confirmed" });
+        }
+      }
 
       setBookings(prev => prev.filter(b => b.id !== booking.id));
       setSessions(prev => prev.map(s => {
@@ -365,23 +371,31 @@ export default function StudentCalendarPage() {
             const hasSession = availableDates.has(dayStr);
             const isToday = dayStr === todayStr;
             const isSelected = dayStr === selectedDate;
+            const isPast = dayStr < todayStr;
 
             return (
               <button
                 key={day}
-                onClick={() => setSelectedDate(isSelected ? null : dayStr)}
+                onClick={() => { if (!isPast) setSelectedDate(isSelected ? null : dayStr); }}
+                disabled={isPast}
                 className="flex flex-col items-center py-1.5 rounded-lg transition"
                 style={{
                   backgroundColor: isSelected ? "#001c48" : isToday ? "rgba(1,255,249,0.1)" : undefined,
+                  cursor: isPast ? "default" : undefined,
                 }}
               >
                 <span
                   className="text-sm font-medium leading-none"
-                  style={{ color: isSelected ? "white" : isToday ? "#001c48" : "#111827" }}
+                  style={{
+                    color: isPast ? "#d1d5db"
+                      : isSelected ? "white"
+                      : isToday ? "#001c48"
+                      : "#111827",
+                  }}
                 >
                   {day}
                 </span>
-                {hasSession && (
+                {hasSession && !isPast && (
                   <span
                     className="mt-1 h-1.5 w-1.5 rounded-full"
                     style={{ backgroundColor: isSelected ? "white" : "#01fff9" }}

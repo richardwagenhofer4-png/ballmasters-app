@@ -131,10 +131,7 @@ service cloud.firestore {
     }
 
     match /bookings/{bookingId} {
-      allow read: if request.auth != null && (
-        resource.data.studentId == request.auth.uid ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coach', 'admin']
-      );
+      allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update, delete: if request.auth != null && (
         resource.data.studentId == request.auth.uid ||
