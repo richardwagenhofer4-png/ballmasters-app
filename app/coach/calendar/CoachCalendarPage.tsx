@@ -73,17 +73,23 @@ function getFirstDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 1).getDay();
 }
 
-function sessionStatusColor(s: Session): string {
+// confirmedBooked excludes pending_approval entries so capacity reflects only approved bookings
+function confirmedBookedCount(session: Session, bookings: Booking[]): number {
+  const pending = bookings.filter(b => b.sessionId === session.id && b.status === "pending_approval").length;
+  return Math.max(0, session.bookedBy.length - pending);
+}
+
+function sessionStatusColor(s: Session, confirmedBooked: number): string {
   if (s.waitlist.length > 0) return "#a855f7";
-  if (s.bookedBy.length >= s.maxCapacity) return "#ef4444";
-  if (s.bookedBy.length / s.maxCapacity >= 0.75) return "#f59e0b";
+  if (confirmedBooked >= s.maxCapacity) return "#ef4444";
+  if (confirmedBooked / s.maxCapacity >= 0.75) return "#f59e0b";
   return "#22c55e";
 }
 
-function sessionStatusLabel(s: Session): string {
+function sessionStatusLabel(s: Session, confirmedBooked: number): string {
   if (s.waitlist.length > 0) return "Waitlist";
-  if (s.bookedBy.length >= s.maxCapacity) return "Full";
-  if (s.bookedBy.length / s.maxCapacity >= 0.75) return "Nearly Full";
+  if (confirmedBooked >= s.maxCapacity) return "Full";
+  if (confirmedBooked / s.maxCapacity >= 0.75) return "Nearly Full";
   return "Available";
 }
 
@@ -406,6 +412,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
   const [decliningId, setDecliningId] = useState<string | null>(null);
 
   const pendingBookings = bookings.filter(b => b.sessionId === session.id && b.status === "pending_approval");
+  const confirmedBooked = Math.max(0, session.bookedBy.length - pendingBookings.length);
 
   async function handleCancelSession() {
     setCancelling(true);
@@ -476,7 +483,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
             <p><span className="font-medium text-gray-500">Date:</span> {formatDisplayDate(session.date)}</p>
             <p><span className="font-medium text-gray-500">Time:</span> {formatTime(session.startTime)} – {formatTime(session.endTime)}</p>
             <p><span className="font-medium text-gray-500">Type:</span> {session.type === "individual" ? "Individual" : "Group"}</p>
-            <p><span className="font-medium text-gray-500">Capacity:</span> {session.bookedBy.length} / {session.maxCapacity}</p>
+            <p><span className="font-medium text-gray-500">Capacity:</span> {confirmedBooked} / {session.maxCapacity}{pendingBookings.length > 0 ? ` (${pendingBookings.length} pending approval)` : ""}</p>
             {session.location && <p><span className="font-medium text-gray-500">Location:</span> {session.location}</p>}
             {session.notes && <p><span className="font-medium text-gray-500">Notes:</span> {session.notes}</p>}
           </div>
@@ -552,7 +559,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
                       <p className="text-sm font-semibold text-gray-900 truncate">{w.name}</p>
                       <p className="text-xs text-gray-400 truncate">{w.email}</p>
                     </div>
-                    {session.bookedBy.length < session.maxCapacity && (
+                    {confirmedBooked < session.maxCapacity && (
                       <button
                         onClick={() => handlePromote(w)}
                         disabled={promoting === w.uid}
@@ -657,9 +664,14 @@ export default function CoachCalendarPage() {
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
+        // Admins see all bookings; coaches only see bookings for their own sessions
+        const bookingsQuery = userIsAdmin
+          ? getDocs(collection(db, "bookings"))
+          : getDocs(query(collection(db, "bookings"), where("coachId", "==", user.uid)));
+
         const [sessionsSnap, bookingsSnap] = await Promise.all([
           getDocs(collection(db, "sessions")),
-          getDocs(query(collection(db, "bookings"), where("coachId", "==", user.uid))),
+          bookingsQuery,
         ]);
 
         const list: Session[] = sessionsSnap.docs
@@ -680,7 +692,8 @@ export default function CoachCalendarPage() {
         const bookingList: Booking[] = bookingsSnap.docs
           .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
           .filter(b => b.status !== "cancelled");
-        console.log("[coach/calendar] bookings loaded:", bookingList.length, "pending:", bookingList.filter(b => b.status === "pending_approval").length, bookingList);
+        console.log("[coach/calendar] bookings loaded:", bookingList.length, "total, pending:", bookingList.filter(b => b.status === "pending_approval").length);
+        bookingList.forEach(b => console.log("  →", b.id, "| status:", b.status, "| coachId:", b.coachId, "| sessionId:", b.sessionId, "| student:", b.studentId));
         setBookings(bookingList);
       } catch (err) {
         console.error("[coach/calendar]", err);
@@ -699,7 +712,9 @@ export default function CoachCalendarPage() {
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
       const [sessionsSnap, bookingsSnap] = await Promise.all([
         getDocs(collection(db, "sessions")),
-        getDocs(query(collection(db, "bookings"), where("coachId", "==", uid))),
+        isAdmin
+          ? getDocs(collection(db, "bookings"))
+          : getDocs(query(collection(db, "bookings"), where("coachId", "==", uid))),
       ]);
       const sessionList: Session[] = sessionsSnap.docs
         .map(d => ({
@@ -970,9 +985,10 @@ export default function CoachCalendarPage() {
           </div>
         ) : (
           tabSessions.map(s => {
-            const color = sessionStatusColor(s);
-            const label = sessionStatusLabel(s);
-            const hasPending = bookings.some(b => b.sessionId === s.id && b.status === "pending_approval");
+            const confirmed = confirmedBookedCount(s, bookings);
+            const color = sessionStatusColor(s, confirmed);
+            const label = sessionStatusLabel(s, confirmed);
+            const pendingCount = bookings.filter(b => b.sessionId === s.id && b.status === "pending_approval").length;
             return (
               <button
                 key={s.id}
@@ -988,12 +1004,12 @@ export default function CoachCalendarPage() {
                     {s.location && <p className="text-xs text-gray-400">{s.location}</p>}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {hasPending && (
+                    {pendingCount > 0 && (
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full"
                         style={{ backgroundColor: "#fef3c7", color: "#92400e" }}
                       >
-                        Pending
+                        {pendingCount} Pending
                       </span>
                     )}
                     <span
@@ -1009,13 +1025,14 @@ export default function CoachCalendarPage() {
                     <div
                       className="h-full rounded-full"
                       style={{
-                        width: `${Math.min(100, (s.bookedBy.length / s.maxCapacity) * 100)}%`,
+                        width: `${Math.min(100, (confirmed / s.maxCapacity) * 100)}%`,
                         backgroundColor: color,
                       }}
                     />
                   </div>
                   <span className="text-xs text-gray-500 shrink-0 tabular-nums">
-                    {s.bookedBy.length}/{s.maxCapacity}
+                    {confirmed}/{s.maxCapacity}
+                    {pendingCount > 0 && ` · ${pendingCount} pending`}
                     {s.waitlist.length > 0 && ` · ${s.waitlist.length} waitlisted`}
                   </span>
                 </div>
