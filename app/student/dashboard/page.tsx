@@ -256,7 +256,7 @@ export default function StudentDashboard() {
             onClick={handleEnableNotifications}
             disabled={notifEnabling}
             className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60 transition"
-            style={{ backgroundColor: "#01fff9", color: "#001c48" }}
+            style={{ backgroundColor: "#001c48", color: "white", border: "1px solid rgba(1,255,249,0.4)" }}
           >
             {notifEnabling ? "…" : "Enable"}
           </button>
@@ -317,12 +317,12 @@ export default function StudentDashboard() {
           <div
             className="rounded-xl text-center py-3 px-1 transition"
             style={{
-              backgroundColor: unwatchedCount > 0 ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.12)",
+              backgroundColor: unwatchedCount > 0 ? "rgba(0,28,72,0.5)" : "rgba(255,255,255,0.12)",
             }}
           >
             <svg
               className="h-4 w-4 mb-1 mx-auto"
-              style={{ color: unwatchedCount > 0 ? "#fbbf24" : "#01fff9" }}
+              style={{ color: unwatchedCount > 0 ? "#01fff9" : "#01fff9" }}
               viewBox="0 0 24 24"
               fill="currentColor"
             >
@@ -330,13 +330,13 @@ export default function StudentDashboard() {
             </svg>
             <div
               className="text-lg font-extrabold leading-none"
-              style={{ color: unwatchedCount > 0 ? "#fbbf24" : "white" }}
+              style={{ color: "white" }}
             >
               {unwatchedCount}
             </div>
             <div
               className="text-xs mt-0.5 leading-tight"
-              style={{ color: unwatchedCount > 0 ? "#fde68a" : "rgba(1,255,249,0.7)" }}
+              style={{ color: "rgba(1,255,249,0.7)" }}
             >
               New
             </div>
