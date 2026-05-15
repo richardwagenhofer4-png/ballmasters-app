@@ -379,17 +379,18 @@ export default function StudentCalendarPage() {
   }
 
   // Tab-filtered session lists
-  // Available tab only shows sessions the student has NOT yet registered for.
-  // Sessions with any active booking, or where the student's uid appears in
-  // bookedBy/waitlist arrays, are excluded — they appear in My Bookings/Pending/Waitlist.
+  // Only hide a session from Available if the student has an active confirmed or
+  // pending_approval booking. Cancelled and declined bookings are ignored so the
+  // student can rebook after cancelling or being declined.
+  // Cross-check session.bookedBy as a safety net (pending_approval entries live there too).
   const availableSessions = (selectedDate
     ? sessions.filter(s => s.date === selectedDate)
     : sessions
-  ).filter(s =>
-    !bookings.some(b => b.sessionId === s.id) &&
-    !s.bookedBy.some(b => b.uid === uid) &&
-    !s.waitlist.some(w => w.uid === uid)
-  );
+  ).filter(s => {
+    if (bookings.some(b => b.sessionId === s.id && (b.status === "confirmed" || b.status === "pending_approval"))) return false;
+    if (s.bookedBy.some(b => b.uid === uid)) return false;
+    return true;
+  });
 
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const waitlistedBookings = bookings.filter(b => b.status === "waitlisted");
