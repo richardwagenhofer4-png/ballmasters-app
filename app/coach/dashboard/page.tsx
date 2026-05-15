@@ -531,9 +531,9 @@ export default function CoachDashboard() {
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
           return (
-            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition">
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}} />
-              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}}>
+            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
+              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>
                 {item.label}
               </span>
             </Link>
