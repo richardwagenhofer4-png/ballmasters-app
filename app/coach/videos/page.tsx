@@ -306,7 +306,7 @@ export default function CoachVideosPage() {
           <Link href="/coach/upload">
             <button
               className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition hover:opacity-90 active:opacity-80"
-              style={{ backgroundColor: "white", color: "#001c48" }}
+              style={{ backgroundColor: "#001c48", color: "white" }}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -454,9 +454,7 @@ export default function CoachVideosPage() {
                       {/* Type badge */}
                       <span
                         className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                        style={isDrill
-                          ? { backgroundColor: "#ede9fe", color: "#6d28d9" }
-                          : { backgroundColor: "#dbeafe", color: "#1d4ed8" }}
+                        style={{ backgroundColor: "#001c48", color: "#01fff9" }}
                       >
                         {isDrill ? "Drill" : "Standard"}
                       </span>
@@ -464,8 +462,8 @@ export default function CoachVideosPage() {
                       <span
                         className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
                         style={v.status === "published"
-                          ? { backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }
-                          : { backgroundColor: "#f3f4f6", color: "#6b7280" }}
+                          ? { backgroundColor: "#001c48", color: "#01fff9" }
+                          : { backgroundColor: "#f3f4f6", color: "#374151" }}
                       >
                         {v.status === "published" ? "Published" : "Draft"}
                       </span>
