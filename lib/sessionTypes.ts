@@ -44,4 +44,5 @@ export interface Booking {
   status: "confirmed" | "cancelled" | "waitlisted" | "pending_approval" | "declined";
   createdAt: string;
   reminderSent: boolean;
+  approvalMessage?: string;
 }

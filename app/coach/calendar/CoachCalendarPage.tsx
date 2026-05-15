@@ -400,7 +400,7 @@ interface SessionDetailModalProps {
   onCancelled: (id: string) => void;
   onUpdated: (s: Session) => void;
   bookings: Booking[];
-  onApproveBooking: (booking: Booking) => Promise<void>;
+  onApproveBooking: (booking: Booking, message: string) => Promise<void>;
   onDeclineBooking: (booking: Booking) => Promise<void>;
 }
 
@@ -410,6 +410,8 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
   const [promoting, setPromoting] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
+  const [approvingWithMessageId, setApprovingWithMessageId] = useState<string | null>(null);
+  const [approvalMessage, setApprovalMessage] = useState("");
 
   const pendingBookings = bookings.filter(b => b.sessionId === session.id && b.status === "pending_approval");
   const confirmedBooked = Math.max(0, session.bookedBy.length - pendingBookings.length);
@@ -493,32 +495,76 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
               <h3 className="text-sm font-semibold text-gray-800 mb-2">Pending Approval ({pendingBookings.length})</h3>
               <div className="space-y-2">
                 {pendingBookings.map(b => (
-                  <div key={b.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ backgroundColor: "#fef3c7" }}>
-                    <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: "#fde68a", color: "#92400e" }}>
-                      {b.studentName.charAt(0).toUpperCase()}
+                  <div key={b.id} className="rounded-lg px-3 py-2.5" style={{ backgroundColor: "#fef3c7" }}>
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: "#fde68a", color: "#92400e" }}>
+                        {b.studentName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{b.studentName}</p>
+                        <p className="text-xs text-gray-500 truncate">{b.studentEmail}</p>
+                        <p className="text-xs text-gray-400">{new Date(b.createdAt).toLocaleString()}</p>
+                      </div>
+                      {approvingWithMessageId !== b.id && (
+                        <div className="flex flex-col gap-1 shrink-0">
+                          <button
+                            onClick={() => { setApprovingWithMessageId(b.id); setApprovalMessage(""); }}
+                            disabled={decliningId === b.id}
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition disabled:opacity-50"
+                            style={{ backgroundColor: "#22c55e" }}
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={async () => { setDecliningId(b.id); await onDeclineBooking(b); setDecliningId(null); }}
+                            disabled={decliningId === b.id}
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition disabled:opacity-50 bg-red-500"
+                          >
+                            {decliningId === b.id ? "…" : "Decline"}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{b.studentName}</p>
-                      <p className="text-xs text-gray-500 truncate">{b.studentEmail}</p>
-                      <p className="text-xs text-gray-400">{new Date(b.createdAt).toLocaleString()}</p>
-                    </div>
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <button
-                        onClick={async () => { setApprovingId(b.id); await onApproveBooking(b); setApprovingId(null); }}
-                        disabled={approvingId === b.id || decliningId === b.id}
-                        className="text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition disabled:opacity-50"
-                        style={{ backgroundColor: "#22c55e" }}
-                      >
-                        {approvingId === b.id ? "…" : "Approve"}
-                      </button>
-                      <button
-                        onClick={async () => { setDecliningId(b.id); await onDeclineBooking(b); setDecliningId(null); }}
-                        disabled={approvingId === b.id || decliningId === b.id}
-                        className="text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition disabled:opacity-50 bg-red-500"
-                      >
-                        {decliningId === b.id ? "…" : "Decline"}
-                      </button>
-                    </div>
+                    {approvingWithMessageId === b.id && (
+                      <div className="mt-3 space-y-2">
+                        <textarea
+                          value={approvalMessage}
+                          onChange={e => setApprovalMessage(e.target.value)}
+                          rows={2}
+                          placeholder="e.g. See you at Pro World! Bring your boots."
+                          className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs text-gray-900 focus:outline-none resize-none"
+                        />
+                        <p className="text-xs text-amber-700 font-medium">Add a message (optional)</p>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={async () => {
+                              setApprovingId(b.id);
+                              await onApproveBooking(b, approvalMessage);
+                              setApprovingId(null);
+                              setApprovingWithMessageId(null);
+                              setApprovalMessage("");
+                            }}
+                            disabled={approvingId === b.id}
+                            className="flex-1 text-xs font-semibold py-2 rounded-lg text-white transition disabled:opacity-50"
+                            style={{ backgroundColor: "#001c48" }}
+                          >
+                            {approvingId === b.id ? "…" : "Send Approval"}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setApprovingId(b.id);
+                              await onApproveBooking(b, "");
+                              setApprovingId(null);
+                              setApprovingWithMessageId(null);
+                            }}
+                            disabled={approvingId === b.id}
+                            className="text-xs font-semibold text-gray-500 hover:text-gray-700 transition disabled:opacity-50"
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -759,14 +805,15 @@ export default function CoachCalendarPage() {
     return `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   }
 
-  async function handleApproveBooking(booking: Booking) {
+  async function handleApproveBooking(booking: Booking, message: string) {
     try {
-      await updateDoc(doc(db, "bookings", booking.id), { status: "confirmed" });
+      const update: Record<string, string> = { status: "confirmed" };
+      if (message.trim()) update.approvalMessage = message.trim();
+      await updateDoc(doc(db, "bookings", booking.id), update);
       console.log("[approve booking] Push notification would be sent to student:", booking.studentId);
-      setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "confirmed" } : b));
-      if (selectedSession) {
-        setSelectedSession(prev => prev ? prev : null);
-      }
+      setBookings(prev => prev.map(b =>
+        b.id === booking.id ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
+      ));
     } catch (err) {
       console.error("[approve booking]", err);
     }

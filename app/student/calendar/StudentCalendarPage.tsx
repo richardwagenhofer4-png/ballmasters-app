@@ -670,6 +670,11 @@ export default function StudentCalendarPage() {
                         Confirmed
                       </span>
                     </div>
+                    {b.approvalMessage && (
+                      <p className="mt-2 text-xs text-gray-700 bg-blue-50 rounded-lg px-3 py-2">
+                        <span className="font-semibold text-gray-500">Coach: </span>{b.approvalMessage}
+                      </p>
+                    )}
                     {session && (
                       <button
                         onClick={() => handleCancel(session, b)}
