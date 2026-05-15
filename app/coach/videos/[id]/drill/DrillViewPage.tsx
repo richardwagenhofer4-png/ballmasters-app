@@ -329,10 +329,7 @@ export default function DrillViewPage() {
           </svg>
           Videos
         </Link>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xl">⚽</span>
-          <span className="text-sm font-bold text-white">Ballmasters</span>
-        </div>
+        <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         <button
           onClick={openEdit}
           className="flex items-center gap-1 text-sm font-semibold transition"
@@ -362,7 +359,7 @@ export default function DrillViewPage() {
             <span
               className="text-xs font-semibold px-2 py-0.5 rounded-full"
               style={drill.status === "published"
-                ? { backgroundColor: "#14532d", color: "#4ade80" }
+                ? { backgroundColor: "#001c48", color: "#01fff9" }
                 : { backgroundColor: "#374151", color: "#9ca3af" }}
             >
               {drill.status === "published" ? "Published" : "Draft"}
@@ -383,7 +380,7 @@ export default function DrillViewPage() {
                 <div key={s.id} className="flex items-center gap-3">
                   <div
                     className="h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold"
-                    style={{ backgroundColor: "#14532d", color: "#4ade80" }}
+                    style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
                   >
                     {s.fullName.charAt(0).toUpperCase()}
                   </div>
@@ -432,7 +429,7 @@ export default function DrillViewPage() {
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
-                  onFocus={e => (e.target.style.borderColor = "#1A6B45")}
+                  onFocus={e => (e.target.style.borderColor = "#001c48")}
                   onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
                 />
               </div>
@@ -442,7 +439,7 @@ export default function DrillViewPage() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700">Assigned Students</label>
                   {editStudentIds.size > 0 && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.1)", color: "#001c48" }}>
                       {editStudentIds.size} selected
                     </span>
                   )}
@@ -499,7 +496,7 @@ export default function DrillViewPage() {
                   <button
                     onClick={() => setEditStatus("published")}
                     className="flex-1 py-2 text-sm font-semibold rounded-lg transition"
-                    style={{ backgroundColor: editStatus === "published" ? "#1A6B45" : "#f3f4f6", color: editStatus === "published" ? "white" : "#374151" }}
+                    style={{ backgroundColor: editStatus === "published" ? "#001c48" : "#f3f4f6", color: editStatus === "published" ? "white" : "#374151" }}
                   >
                     Published
                   </button>
@@ -526,7 +523,7 @@ export default function DrillViewPage() {
                 onClick={saveEdit}
                 disabled={editSaving || !editTitle.trim()}
                 className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "#1A6B45" }}
+                style={{ backgroundColor: "#001c48" }}
               >
                 {editSaving ? "Saving…" : "Save changes"}
               </button>

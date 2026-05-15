@@ -98,14 +98,13 @@ export default function InviteCoachPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-5 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">⚽</span>
-          <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
           <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-white/20 text-white">Admin</span>
         </div>
         <h1 className="text-2xl font-extrabold text-white">Invite Coach</h1>
-        <p className="text-green-300 text-xs mt-1">Generate one-time coach registration links</p>
+        <p className="text-xs mt-1" style={{ color: "#01fff9" }}>Generate one-time coach registration links</p>
       </div>
 
       <div className="px-4 py-6 max-w-lg mx-auto space-y-6">
@@ -128,7 +127,7 @@ export default function InviteCoachPage() {
                 onChange={e => setEmail(e.target.value)}
                 placeholder="coach@example.com"
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none"
-                onFocus={e => (e.target.style.boxShadow = "0 0 0 2px #1A6B45")}
+                onFocus={e => (e.target.style.boxShadow = "0 0 0 2px #001c48")}
                 onBlur={e => (e.target.style.boxShadow = "")}
               />
               <p className="mt-1 text-xs text-gray-400">
@@ -139,7 +138,7 @@ export default function InviteCoachPage() {
               type="submit"
               disabled={generating}
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 transition"
-              style={{ backgroundColor: "#1A6B45" }}
+              style={{ backgroundColor: "#001c48" }}
             >
               {generating ? "Generating…" : "Generate invite link"}
             </button>
@@ -158,7 +157,7 @@ export default function InviteCoachPage() {
                   <span className="text-sm font-semibold text-gray-800 truncate">{inv.email}</span>
                   <span
                     className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ml-2"
-                    style={{ backgroundColor: "#dcfce7", color: "#15803d" }}
+                    style={{ backgroundColor: "#001c48", color: "#01fff9" }}
                   >
                     One-time
                   </span>
@@ -173,7 +172,7 @@ export default function InviteCoachPage() {
                   className="w-full rounded-lg py-2 text-sm font-semibold transition"
                   style={
                     copied === inv.link
-                      ? { backgroundColor: "#f0faf5", color: "#1A6B45", border: "1px solid #86efac" }
+                      ? { backgroundColor: "rgba(1,255,249,0.1)", color: "#001c48", border: "1px solid #01fff9" }
                       : { backgroundColor: "#f3f4f6", color: "#374151", border: "1px solid transparent" }
                   }
                 >

@@ -27,10 +27,9 @@ export default function MessagesPage() {
   const pathname = usePathname();
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col pb-20">
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-5 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">⚽</span>
-          <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         </div>
         <h1 className="text-2xl font-extrabold text-white">Messages</h1>
       </div>
@@ -41,7 +40,7 @@ export default function MessagesPage() {
         </svg>
         <h2 className="text-lg font-bold text-gray-700 mb-1">Messages coming soon</h2>
         <p className="text-sm text-gray-400">Direct messaging between coaches and athletes will be available here. For now, use the comments on each video.</p>
-        <Link href="/student/videos" className="mt-6 inline-block rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#1A6B45" }}>
+        <Link href="/student/videos" className="mt-6 inline-block rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
           Go to My Videos
         </Link>
       </div>

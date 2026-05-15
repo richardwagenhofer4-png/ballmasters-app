@@ -609,7 +609,7 @@ export default function AnnotatePage() {
           Dashboard
         </Link>
         <div className="flex items-center gap-2">
-          <span className="text-xl">⚽</span>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
           <span className="text-sm font-bold text-white">Annotation Editor</span>
         </div>
         <div className="flex items-center gap-3">
@@ -733,7 +733,7 @@ export default function AnnotatePage() {
           <button
             onClick={toggleDrawingMode}
             className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition shrink-0"
-            style={{ backgroundColor: drawingMode ? "#16a34a" : "#374151", color: "white" }}
+            style={{ backgroundColor: drawingMode ? "#001c48" : "#374151", color: "white" }}
           >
             <span>{drawingMode ? "✏" : "▶"}</span>
             {drawingMode ? "Drawing ON" : "Drawing OFF"}
@@ -752,7 +752,7 @@ export default function AnnotatePage() {
                 onClick={() => { setTool(t.type); if (!drawingMode) toggleDrawingMode(); }}
                 className="h-8 px-2.5 rounded-lg text-xs font-semibold transition"
                 style={{
-                  backgroundColor: tool === t.type && drawingMode ? "#1A6B45" : "#374151",
+                  backgroundColor: tool === t.type && drawingMode ? "#001c48" : "#374151",
                   color: tool === t.type && drawingMode ? "white" : "#9ca3af",
                 }}
               >
@@ -818,7 +818,7 @@ export default function AnnotatePage() {
             onClick={saveAnnotation}
             disabled={drawings.length === 0 || saving}
             className="h-7 px-3 rounded text-xs font-semibold text-white transition disabled:opacity-40"
-            style={{ backgroundColor: "#1A6B45" }}
+            style={{ backgroundColor: "#001c48" }}
           >
             {saving ? "Saving…" : `Save at ${fmt(currentTime)}`}
           </button>
@@ -856,7 +856,7 @@ export default function AnnotatePage() {
                 <button
                   onClick={togglePreview}
                   className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold text-white transition"
-                  style={{ backgroundColor: previewing ? "#1A6B45" : "#374151" }}
+                  style={{ backgroundColor: previewing ? "#001c48" : "#374151" }}
                 >
                   {previewing ? "⏸ Stop" : "▶ Preview"}
                 </button>
@@ -926,7 +926,7 @@ export default function AnnotatePage() {
                 <button
                   onClick={() => seekTo(a.timestamp)}
                   className="text-sm font-mono font-semibold hover:underline shrink-0"
-                  style={{ color: "#1A6B45" }}
+                  style={{ color: "#01fff9" }}
                 >
                   {fmt(a.timestamp)}
                 </button>
@@ -1014,7 +1014,7 @@ export default function AnnotatePage() {
               Back to editing
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "20px" }}>⚽</span>
+              <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
               <span style={{ fontSize: "14px", fontWeight: "bold", color: "white" }}>Student Preview</span>
             </div>
             <div style={{ width: 120 }} />

@@ -52,12 +52,9 @@ export default function StudentProfilePage() {
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col pb-20">
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-6 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-6 px-4">
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚽</span>
-            <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
-          </div>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         </div>
 
         {/* Avatar + name */}

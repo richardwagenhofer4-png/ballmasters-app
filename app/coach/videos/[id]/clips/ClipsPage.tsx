@@ -195,9 +195,9 @@ export default function ClipsPage() {
         <div className="text-center max-w-sm">
           <div
             className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full"
-            style={{ backgroundColor: "#f0faf5" }}
+            style={{ backgroundColor: "rgba(1,255,249,0.1)" }}
           >
-            <svg className="h-8 w-8" style={{ color: "#1A6B45" }} viewBox="0 0 20 20" fill="currentColor">
+            <svg className="h-8 w-8" style={{ color: "#001c48" }} viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
             </svg>
           </div>
@@ -217,7 +217,7 @@ export default function ClipsPage() {
             <Link
               href="/coach/dashboard"
               className="text-sm font-semibold hover:underline"
-              style={{ color: "#1A6B45" }}
+              style={{ color: "#001c48" }}
             >
               Back to Dashboard →
             </Link>
@@ -243,7 +243,7 @@ export default function ClipsPage() {
           Dashboard
         </Link>
         <div className="flex items-center gap-2">
-          <span className="text-xl">⚽</span>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
           <span className="text-sm font-bold text-white">Clip Editor</span>
         </div>
         <div className="w-20" />
@@ -379,7 +379,7 @@ export default function ClipsPage() {
             disabled={cutPoints.length === 0 || splitting}
             className="shrink-0 px-4 py-1.5 rounded-lg text-sm font-semibold text-white transition"
             style={{
-              backgroundColor: cutPoints.length === 0 ? "#374151" : "#1A6B45",
+              backgroundColor: cutPoints.length === 0 ? "#374151" : "#001c48",
               opacity: splitting ? 0.6 : 1,
             }}
           >
@@ -405,7 +405,7 @@ export default function ClipsPage() {
               <button
                 onClick={handleTranscribe}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition"
-                style={{ backgroundColor: "#1A6B45" }}
+                style={{ backgroundColor: "#001c48" }}
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
@@ -415,7 +415,7 @@ export default function ClipsPage() {
             )}
             {transcribing && (
               <div className="flex items-center gap-2 text-sm text-gray-500">
-                <svg className="h-4 w-4 animate-spin" style={{ color: "#1A6B45" }} viewBox="0 0 24 24" fill="none">
+                <svg className="h-4 w-4 animate-spin" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>

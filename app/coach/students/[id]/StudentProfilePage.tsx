@@ -19,17 +19,14 @@ export default function StudentProfilePage() {
           </svg>
           Dashboard
         </Link>
-        <div className="flex items-center gap-1.5">
-          <span className="text-lg">⚽</span>
-          <span className="text-sm font-bold text-gray-900">Ballmasters</span>
-        </div>
+        <img src="/logo-dark.png" alt="Ball Masters Florida" style={{ height: "28px", width: "auto" }} />
         <div className="w-20" />
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <div
           className="h-16 w-16 rounded-full flex items-center justify-center mb-4 text-2xl font-bold"
-          style={{ backgroundColor: "#dcfce7", color: "#14532d" }}
+          style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
         >
           ?
         </div>

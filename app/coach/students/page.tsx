@@ -85,10 +85,9 @@ export default function StudentsListPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-5 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center gap-2 mb-4">
-          <span className="text-lg">⚽</span>
-          <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         </div>
         <div className="flex items-center justify-between">
           <div>
@@ -98,7 +97,7 @@ export default function StudentsListPage() {
           <Link href="/coach/invite">
             <button
               className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition hover:opacity-90"
-              style={{ backgroundColor: "white", color: "#1A6B45" }}
+              style={{ backgroundColor: "white", color: "#001c48" }}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -115,7 +114,7 @@ export default function StudentsListPage() {
             <StudentsIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
             <p className="text-sm font-medium text-gray-500 mb-4">No students have joined yet</p>
             <Link href="/coach/invite">
-              <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#1A6B45" }}>
+              <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
                 Invite students
               </button>
             </Link>
@@ -132,7 +131,7 @@ export default function StudentsListPage() {
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search students…"
                 className="w-full pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-200 rounded-xl focus:outline-none"
-                onFocus={e => (e.target.style.borderColor = "#1A6B45")}
+                onFocus={e => (e.target.style.borderColor = "#001c48")}
                 onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
               />
             </div>
@@ -149,7 +148,7 @@ export default function StudentsListPage() {
                     >
                       <div
                         className="h-10 w-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
-                        style={{ backgroundColor: "#dcfce7", color: "#14532d" }}
+                        style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
                       >
                         {s.fullName.charAt(0).toUpperCase()}
                       </div>
