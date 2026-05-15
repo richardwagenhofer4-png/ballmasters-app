@@ -91,6 +91,45 @@ function sessionStatusLabel(s: Session): string {
 // Create Session Modal
 // ---------------------------------------------------------------------------
 
+const TIME_OPTIONS: { value: string; label: string }[] = (() => {
+  const opts: { value: string; label: string }[] = [];
+  for (let h = 6; h <= 22; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      if (h === 22 && m > 0) break;
+      const value = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+      const hour12 = h % 12 || 12;
+      const ampm = h >= 12 ? "PM" : "AM";
+      const label = `${hour12}:${String(m).padStart(2, "0")} ${ampm}`;
+      opts.push({ value, label });
+    }
+  }
+  return opts;
+})();
+
+function nextQuarterHour(): string {
+  const now = new Date();
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const next = Math.ceil((mins + 1) / 15) * 15;
+  const h = Math.floor(next / 60);
+  const m = next % 60;
+  if (h < 6) return "06:00";
+  if (h >= 22) return "06:00";
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function addOneHour(timeStr: string): string {
+  const [h, m] = timeStr.split(":").map(Number);
+  const total = h * 60 + m + 60;
+  const endH = Math.min(Math.floor(total / 60), 22);
+  const endM = endH === 22 ? 0 : total % 60;
+  return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
+}
+
+function todayDateStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 interface CreateSessionModalProps {
   onClose: () => void;
   onCreated: (s: Session) => void;
@@ -103,8 +142,8 @@ interface CreateSessionModalProps {
 function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, coaches }: CreateSessionModalProps) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [startTime, setStartTime] = useState(() => nextQuarterHour());
+  const [endTime, setEndTime] = useState(() => addOneHour(nextQuarterHour()));
   const [type, setType] = useState<"individual" | "group">("individual");
   const [capacity, setCapacity] = useState(5);
   const [location, setLocation] = useState("");
@@ -116,7 +155,11 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
 
   async function handleSubmit() {
     if (!title.trim() || !date || !startTime || !endTime) {
-      setError("Title, date, start time and end time are required.");
+      setError("Session name, date, start time and end time are required.");
+      return;
+    }
+    if (date < todayDateStr()) {
+      setError("Please select a future date.");
       return;
     }
     setSaving(true);
@@ -169,12 +212,12 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Session Name *</label>
             <input
               type="text"
               value={title}
               onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Morning Training Session"
+              placeholder="e.g. Morning Training, 1-on-1 with Coach Lukas, Group Beginners"
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
               onFocus={e => (e.target.style.borderColor = "#001c48")}
               onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
@@ -208,6 +251,7 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
             <input
               type="date"
               value={date}
+              min={todayDateStr()}
               onChange={e => setDate(e.target.value)}
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
               onFocus={e => (e.target.style.borderColor = "#001c48")}
@@ -218,25 +262,34 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Start Time *</label>
-              <input
-                type="time"
+              <select
                 value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
+                onChange={e => {
+                  setStartTime(e.target.value);
+                  setEndTime(addOneHour(e.target.value));
+                }}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none bg-white"
                 onFocus={e => (e.target.style.borderColor = "#001c48")}
                 onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
-              />
+              >
+                {TIME_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">End Time *</label>
-              <input
-                type="time"
+              <select
                 value={endTime}
                 onChange={e => setEndTime(e.target.value)}
-                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none bg-white"
                 onFocus={e => (e.target.style.borderColor = "#001c48")}
                 onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
-              />
+              >
+                {TIME_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 
