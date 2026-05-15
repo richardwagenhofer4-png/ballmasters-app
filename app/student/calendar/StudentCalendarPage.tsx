@@ -94,35 +94,52 @@ export default function StudentCalendarPage() {
       setUid(user.uid);
       setStudentEmail(user.email ?? "");
 
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+      // Load sessions independently so a bookings error can't blank the session list
       try {
-        const [profileSnap, sessionsSnap, bookingsSnap] = await Promise.all([
+        const [profileSnap, sessionsSnap] = await Promise.all([
           getDoc(doc(db, "users", user.uid)),
           getDocs(collection(db, "sessions")),
-          getDocs(query(collection(db, "bookings"), where("studentId", "==", user.uid))),
         ]);
 
         const profileData = profileSnap.data();
         setStudentName(profileData?.fullName ?? profileData?.name ?? user.displayName ?? "Athlete");
 
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-
+        // Normalize missing arrays so session cards never throw on .length
         const sessionList: Session[] = sessionsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Session, "id">) }))
+          .map(d => {
+            const data = d.data();
+            return {
+              id: d.id,
+              ...(data as Omit<Session, "id">),
+              bookedBy: data.bookedBy ?? [],
+              waitlist: data.waitlist ?? [],
+            };
+          })
           .filter(s => s.status !== "cancelled" && s.date >= todayStr)
           .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
 
+        setSessions(sessionList);
+      } catch (err) {
+        console.error("[student/calendar] sessions load failed:", err);
+      }
+
+      // Load the student's own bookings separately
+      try {
+        const bookingsSnap = await getDocs(
+          query(collection(db, "bookings"), where("studentId", "==", user.uid))
+        );
         const bookingList: Booking[] = bookingsSnap.docs
           .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
-          .filter(b => b.studentId === user.uid && b.status !== "cancelled");
-
-        setSessions(sessionList);
+          .filter(b => b.status !== "cancelled");
         setBookings(bookingList);
       } catch (err) {
-        console.error("[student/calendar]", err);
-      } finally {
-        setLoading(false);
+        console.error("[student/calendar] bookings load failed:", err);
       }
+
+      setLoading(false);
     });
     return unsub;
   }, [router]);
@@ -134,9 +151,8 @@ export default function StudentCalendarPage() {
   const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
   const monthName = new Date(viewYear, viewMonth, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
-  const availableDates = new Set(
-    sessions.filter(s => s.bookedBy.length < s.maxCapacity || s.waitlist.length >= 0).map(s => s.date)
-  );
+  // Every upcoming non-cancelled session gets a dot; sessions are already filtered to non-cancelled + future
+  const availableDates = new Set(sessions.map(s => s.date));
 
   function prevMonth() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
