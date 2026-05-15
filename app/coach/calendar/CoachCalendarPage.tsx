@@ -798,7 +798,9 @@ export default function CoachCalendarPage() {
   const baseSessions = selectedDate ? sessions.filter(s => s.date === selectedDate) : sessions;
 
   const allTabSessions = baseSessions;
-  const bookedTabSessions = baseSessions.filter(s => s.bookedBy.length > 0);
+  const bookedTabSessions = baseSessions.filter(s =>
+    bookings.some(b => b.sessionId === s.id && b.status === "confirmed")
+  );
   const pendingTabSessions = baseSessions.filter(s =>
     bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")
   );
@@ -937,7 +939,9 @@ export default function CoachCalendarPage() {
       <div className="flex border-b border-gray-200 bg-white">
         {(["all", "booked", "pending"] as const).map(tab => {
           const allCount = sessions.length;
-          const bookedCount = sessions.filter(s => s.bookedBy.length > 0).length;
+          const bookedCount = sessions.filter(s =>
+            bookings.some(b => b.sessionId === s.id && b.status === "confirmed")
+          ).length;
           const pendingCount = sessions.filter(s => bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")).length;
           const count = tab === "all" ? allCount : tab === "booked" ? bookedCount : pendingCount;
           const baseLabel = tab === "all" ? "All Sessions" : tab === "booked" ? "Booked" : "Pending Approval";
