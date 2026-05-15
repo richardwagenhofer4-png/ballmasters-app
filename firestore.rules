@@ -117,5 +117,30 @@ service cloud.firestore {
       }
     }
 
+    match /sessions/{sessionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coach', 'admin']
+      );
+      allow update, delete: if request.auth != null && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        resource.data.coachId == request.auth.uid
+      );
+      // Students can update sessions (booking/waitlist operations via transactions)
+      allow update: if request.auth != null;
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null && (
+        resource.data.studentId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coach', 'admin']
+      );
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && (
+        resource.data.studentId == request.auth.uid ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coach', 'admin']
+      );
+    }
+
   }
 }
