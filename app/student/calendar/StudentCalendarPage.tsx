@@ -179,7 +179,9 @@ export default function StudentCalendarPage() {
     setActionLoading(session.id);
     try {
       const now = new Date().toISOString();
-      let bookingStatus: "confirmed" | "waitlisted" = "confirmed";
+      const sessionStart = new Date(`${session.date}T${session.startTime}:00`);
+      const isLastMinute = (sessionStart.getTime() - Date.now()) < 24 * 60 * 60 * 1000;
+      let bookingStatus: "confirmed" | "waitlisted" | "pending_approval" = "confirmed";
 
       await runTransaction(db, async (tx) => {
         const sessionRef = doc(db, "sessions", session.id);
@@ -190,7 +192,14 @@ export default function StudentCalendarPage() {
         if (data.bookedBy.some(b => b.uid === uid)) throw new Error("Already booked");
         if (data.waitlist.some(w => w.uid === uid)) throw new Error("Already on waitlist");
 
-        if (data.bookedBy.length < data.maxCapacity) {
+        if (isLastMinute) {
+          if (data.bookedBy.length >= data.maxCapacity) throw new Error("Session full");
+          // Last-minute: hold the spot but mark as pending_approval
+          const newBookedBy = [...data.bookedBy, { uid, name: studentName, email: studentEmail, bookedAt: now }];
+          const newStatus = newBookedBy.length >= data.maxCapacity ? "full" : "available";
+          tx.update(sessionRef, { bookedBy: newBookedBy, status: newStatus });
+          bookingStatus = "pending_approval";
+        } else if (data.bookedBy.length < data.maxCapacity) {
           const newBookedBy = [...data.bookedBy, { uid, name: studentName, email: studentEmail, bookedAt: now }];
           const newStatus = newBookedBy.length >= data.maxCapacity ? "full" : "available";
           tx.update(sessionRef, { bookedBy: newBookedBy, status: newStatus });
@@ -235,7 +244,7 @@ export default function StudentCalendarPage() {
 
       setSessions(prev => prev.map(s => {
         if (s.id !== session.id) return s;
-        if (bookingStatus === "confirmed") {
+        if (bookingStatus === "confirmed" || bookingStatus === "pending_approval") {
           const newBookedBy = [...s.bookedBy, { uid, name: studentName, email: studentEmail, bookedAt: now }];
           return { ...s, bookedBy: newBookedBy, status: newBookedBy.length >= s.maxCapacity ? "full" : "available" };
         } else {
@@ -338,6 +347,7 @@ export default function StudentCalendarPage() {
 
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const waitlistedBookings = bookings.filter(b => b.status === "waitlisted");
+  const pendingBookings = bookings.filter(b => b.status === "pending_approval");
 
   if (loading) {
     return (
@@ -451,6 +461,7 @@ export default function StudentCalendarPage() {
             const isFull = spotsLeft <= 0;
             const isBooked = booking?.status === "confirmed";
             const isWaitlisted = booking?.status === "waitlisted";
+            const isPendingApproval = booking?.status === "pending_approval";
             const waitlistPos = isWaitlisted ? getWaitlistPosition(session) : 0;
             const busy = actionLoading === session.id;
 
@@ -474,7 +485,11 @@ export default function StudentCalendarPage() {
                 </div>
 
                 <div className="mb-3">
-                  {isBooked ? (
+                  {isPendingApproval ? (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                      Pending Approval
+                    </span>
+                  ) : isBooked ? (
                     <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
                       Booked
                     </span>
@@ -493,7 +508,11 @@ export default function StudentCalendarPage() {
                   )}
                 </div>
 
-                {(isBooked || isWaitlisted) && booking ? (
+                {isPendingApproval ? (
+                  <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                    Awaiting coach approval
+                  </p>
+                ) : (isBooked || isWaitlisted) && booking ? (
                   <button
                     onClick={() => handleCancel(session, booking)}
                     disabled={busy}
@@ -557,6 +576,29 @@ export default function StudentCalendarPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pending Approvals */}
+      {pendingBookings.length > 0 && (
+        <div className="px-4 pb-4 space-y-3">
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Approval</h2>
+          {pendingBookings.map(b => (
+            <div key={b.id} className="bg-white rounded-xl border border-amber-200 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                  Pending
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Awaiting coach approval</p>
+            </div>
+          ))}
         </div>
       )}
 

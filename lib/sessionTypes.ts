@@ -41,7 +41,7 @@ export interface Booking {
   date: string;
   startTime: string;
   title: string;
-  status: "confirmed" | "cancelled" | "waitlisted";
+  status: "confirmed" | "cancelled" | "waitlisted" | "pending_approval" | "declined";
   createdAt: string;
   reminderSent: boolean;
 }

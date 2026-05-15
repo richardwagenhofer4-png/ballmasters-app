@@ -10,11 +10,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
   runTransaction,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import type { Session, BookedEntry, WaitlistEntry } from "@/lib/sessionTypes";
+import type { Session, Booking, BookedEntry, WaitlistEntry } from "@/lib/sessionTypes";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -94,9 +96,11 @@ interface CreateSessionModalProps {
   onCreated: (s: Session) => void;
   coachId: string;
   coachName: string;
+  isAdmin: boolean;
+  coaches: { uid: string; name: string }[];
 }
 
-function CreateSessionModal({ onClose, onCreated, coachId, coachName }: CreateSessionModalProps) {
+function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, coaches }: CreateSessionModalProps) {
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -107,6 +111,8 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName }: CreateSe
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [selectedCoachId, setSelectedCoachId] = useState("");
+  const [selectedCoachName, setSelectedCoachName] = useState("");
 
   async function handleSubmit() {
     if (!title.trim() || !date || !startTime || !endTime) {
@@ -118,10 +124,12 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName }: CreateSe
     try {
       const maxCap = type === "individual" ? 1 : capacity;
       const now = new Date().toISOString();
+      const effectiveCoachId = (isAdmin && selectedCoachId) ? selectedCoachId : coachId;
+      const effectiveCoachName = (isAdmin && selectedCoachName) ? selectedCoachName : coachName;
       const data = {
         title: title.trim(),
-        coachId,
-        coachName,
+        coachId: effectiveCoachId,
+        coachName: effectiveCoachName,
         type,
         maxCapacity: maxCap,
         date,
@@ -172,6 +180,28 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName }: CreateSe
               onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
             />
           </div>
+
+          {isAdmin && coaches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Coach</label>
+              <select
+                value={selectedCoachId}
+                onChange={e => {
+                  const coach = coaches.find(c => c.uid === e.target.value);
+                  setSelectedCoachId(e.target.value);
+                  setSelectedCoachName(coach?.name ?? "");
+                }}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
+                onFocus={e => (e.target.style.borderColor = "#001c48")}
+                onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
+              >
+                <option value="">Select a coach…</option>
+                {coaches.map(c => (
+                  <option key={c.uid} value={c.uid}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
@@ -310,12 +340,19 @@ interface SessionDetailModalProps {
   onClose: () => void;
   onCancelled: (id: string) => void;
   onUpdated: (s: Session) => void;
+  bookings: Booking[];
+  onApproveBooking: (booking: Booking) => Promise<void>;
+  onDeclineBooking: (booking: Booking) => Promise<void>;
 }
 
-function SessionDetailModal({ session, onClose, onCancelled, onUpdated }: SessionDetailModalProps) {
+function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings, onApproveBooking, onDeclineBooking }: SessionDetailModalProps) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [promoting, setPromoting] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
+
+  const pendingBookings = bookings.filter(b => b.sessionId === session.id && b.status === "pending_approval");
 
   async function handleCancelSession() {
     setCancelling(true);
@@ -390,6 +427,43 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated }: Sessio
             {session.location && <p><span className="font-medium text-gray-500">Location:</span> {session.location}</p>}
             {session.notes && <p><span className="font-medium text-gray-500">Notes:</span> {session.notes}</p>}
           </div>
+
+          {pendingBookings.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">Pending Approval ({pendingBookings.length})</h3>
+              <div className="space-y-2">
+                {pendingBookings.map(b => (
+                  <div key={b.id} className="flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ backgroundColor: "#fef3c7" }}>
+                    <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: "#fde68a", color: "#92400e" }}>
+                      {b.studentName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{b.studentName}</p>
+                      <p className="text-xs text-gray-500 truncate">{b.studentEmail}</p>
+                      <p className="text-xs text-gray-400">{new Date(b.createdAt).toLocaleString()}</p>
+                    </div>
+                    <div className="flex flex-col gap-1 shrink-0">
+                      <button
+                        onClick={async () => { setApprovingId(b.id); await onApproveBooking(b); setApprovingId(null); }}
+                        disabled={approvingId === b.id || decliningId === b.id}
+                        className="text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition disabled:opacity-50"
+                        style={{ backgroundColor: "#22c55e" }}
+                      >
+                        {approvingId === b.id ? "…" : "Approve"}
+                      </button>
+                      <button
+                        onClick={async () => { setDecliningId(b.id); await onDeclineBooking(b); setDecliningId(null); }}
+                        disabled={approvingId === b.id || decliningId === b.id}
+                        className="text-xs font-semibold px-2.5 py-1.5 rounded-lg text-white transition disabled:opacity-50 bg-red-500"
+                      >
+                        {decliningId === b.id ? "…" : "Decline"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <h3 className="text-sm font-semibold text-gray-800 mb-2">Booked ({session.bookedBy.length})</h3>
@@ -489,6 +563,9 @@ export default function CoachCalendarPage() {
   const [coachId, setCoachId] = useState("");
   const [coachName, setCoachName] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [coaches, setCoaches] = useState<{ uid: string; name: string }[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
@@ -506,11 +583,26 @@ export default function CoachCalendarPage() {
           router.push("/student/dashboard");
           return;
         }
+        const userIsAdmin = role === "admin";
+        setIsAdmin(userIsAdmin);
         setCoachId(user.uid);
         setCoachName(data?.fullName ?? data?.name ?? user.displayName ?? "Coach");
 
-        const snap = await getDocs(collection(db, "sessions"));
-        const list: Session[] = snap.docs
+        if (userIsAdmin) {
+          const coachSnap = await getDocs(query(collection(db, "users"), where("role", "==", "coach")));
+          const coachList = coachSnap.docs.map(d => ({
+            uid: d.id,
+            name: (d.data().fullName as string) ?? (d.data().name as string) ?? "Coach",
+          }));
+          setCoaches(coachList);
+        }
+
+        const [sessionsSnap, bookingsSnap] = await Promise.all([
+          getDocs(collection(db, "sessions")),
+          getDocs(query(collection(db, "bookings"), where("coachId", "==", user.uid))),
+        ]);
+
+        const list: Session[] = sessionsSnap.docs
           .map(d => ({ id: d.id, ...(d.data() as Omit<Session, "id">) }))
           .filter(s => s.status !== "cancelled")
           .sort((a, b) => {
@@ -519,6 +611,10 @@ export default function CoachCalendarPage() {
             return da.localeCompare(db2);
           });
         setSessions(list);
+
+        const bookingList: Booking[] = bookingsSnap.docs
+          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }));
+        setBookings(bookingList);
       } catch (err) {
         console.error("[coach/calendar]", err);
       } finally {
@@ -548,6 +644,43 @@ export default function CoachCalendarPage() {
 
   function makeDayStr(day: number): string {
     return `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  async function handleApproveBooking(booking: Booking) {
+    try {
+      await updateDoc(doc(db, "bookings", booking.id), { status: "confirmed" });
+      // TODO: send push notification to student about approval
+      console.log("[approve booking] Push notification would be sent to student:", booking.studentId);
+      setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "confirmed" } : b));
+      if (selectedSession) {
+        setSelectedSession(prev => prev ? prev : null);
+      }
+    } catch (err) {
+      console.error("[approve booking]", err);
+    }
+  }
+
+  async function handleDeclineBooking(booking: Booking) {
+    try {
+      await updateDoc(doc(db, "bookings", booking.id), { status: "declined" });
+      const sessionRef = doc(db, "sessions", booking.sessionId);
+      const sessionToUpdate = sessions.find(s => s.id === booking.sessionId);
+      if (sessionToUpdate) {
+        const newBookedBy = sessionToUpdate.bookedBy.filter(b => b.uid !== booking.studentId);
+        const newStatus = newBookedBy.length >= sessionToUpdate.maxCapacity ? "full" : "available";
+        await updateDoc(sessionRef, { bookedBy: newBookedBy, status: newStatus });
+        const updatedSession: Session = { ...sessionToUpdate, bookedBy: newBookedBy, status: newStatus };
+        setSessions(prev => prev.map(s => s.id === booking.sessionId ? updatedSession : s));
+        if (selectedSession?.id === booking.sessionId) {
+          setSelectedSession(updatedSession);
+        }
+      }
+      // TODO: send push notification to student about decline
+      console.log("[decline booking] Push notification would be sent to student:", booking.studentId);
+      setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "declined" } : b));
+    } catch (err) {
+      console.error("[decline booking]", err);
+    }
   }
 
   const displayedSessions = selectedDate
@@ -683,6 +816,7 @@ export default function CoachCalendarPage() {
           displayedSessions.map(s => {
             const color = sessionStatusColor(s);
             const label = sessionStatusLabel(s);
+            const hasPending = bookings.some(b => b.sessionId === s.id && b.status === "pending_approval");
             return (
               <button
                 key={s.id}
@@ -697,12 +831,22 @@ export default function CoachCalendarPage() {
                     </p>
                     {s.location && <p className="text-xs text-gray-400">{s.location}</p>}
                   </div>
-                  <span
-                    className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${color}20`, color }}
-                  >
-                    {label}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {hasPending && (
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: "#fef3c7", color: "#92400e" }}
+                      >
+                        Pending
+                      </span>
+                    )}
+                    <span
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: `${color}20`, color }}
+                    >
+                      {label}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -745,6 +889,8 @@ export default function CoachCalendarPage() {
           onCreated={s => setSessions(prev => [...prev, s].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)))}
           coachId={coachId}
           coachName={coachName}
+          isAdmin={isAdmin}
+          coaches={coaches}
         />
       )}
 
@@ -760,6 +906,9 @@ export default function CoachCalendarPage() {
             setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
             setSelectedSession(updated);
           }}
+          bookings={bookings}
+          onApproveBooking={handleApproveBooking}
+          onDeclineBooking={handleDeclineBooking}
         />
       )}
     </main>
