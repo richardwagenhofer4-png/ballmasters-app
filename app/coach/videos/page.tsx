@@ -54,7 +54,7 @@ function watchRate(v: Video): number | null {
 }
 
 function rateColor(rate: number): string {
-  if (rate >= 75) return "#16a34a";
+  if (rate >= 75) return "#01fff9";
   if (rate >= 50) return "#d97706";
   return "#dc2626";
 }
@@ -102,7 +102,7 @@ function StudentAvatars({ ids, students }: { ids: string[]; students: Student[] 
           <div
             key={s.id}
             className="h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold border border-white"
-            style={{ backgroundColor: "#dcfce7", color: "#14532d", marginLeft: i > 0 ? -6 : 0, zIndex: 3 - i, position: "relative" }}
+            style={{ backgroundColor: "#dbeafe", color: "#001c48", marginLeft: i > 0 ? -6 : 0, zIndex: 3 - i, position: "relative" }}
           >
             {s.fullName.charAt(0).toUpperCase()}
           </div>
@@ -288,13 +288,10 @@ export default function CoachVideosPage() {
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-4 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-4 px-4">
         <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚽</span>
-            <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
-          </div>
-          <button onClick={handleSignOut} className="text-green-200 hover:text-white transition text-xs font-medium flex items-center gap-1">
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
+          <button onClick={handleSignOut} className="hover:text-white transition text-xs font-medium flex items-center gap-1" style={{ color: "rgba(1,255,249,0.7)" }}>
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
@@ -304,12 +301,12 @@ export default function CoachVideosPage() {
         <div className="flex items-center justify-between mt-3">
           <div>
             <h1 className="text-2xl font-extrabold text-white leading-tight">My Videos</h1>
-            <p className="text-green-300 text-xs mt-0.5">{videos.length} video{videos.length !== 1 ? "s" : ""} total</p>
+            <p className="text-xs mt-0.5" style={{ color: "#01fff9" }}>{videos.length} video{videos.length !== 1 ? "s" : ""} total</p>
           </div>
           <Link href="/coach/upload">
             <button
               className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition hover:opacity-90 active:opacity-80"
-              style={{ backgroundColor: "white", color: "#1A6B45" }}
+              style={{ backgroundColor: "white", color: "#001c48" }}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -335,7 +332,7 @@ export default function CoachVideosPage() {
             onChange={e => setSearch(e.target.value)}
             placeholder="Search videos…"
             className="w-full pl-9 pr-4 py-2 text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-lg focus:outline-none"
-            onFocus={e => (e.target.style.borderColor = "#1A6B45")}
+            onFocus={e => (e.target.style.borderColor = "#001c48")}
             onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
           />
         </div>
@@ -379,7 +376,7 @@ export default function CoachVideosPage() {
             <button
               onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setSortBy("newest"); }}
               className="text-xs font-semibold"
-              style={{ color: "#1A6B45" }}
+              style={{ color: "#001c48" }}
             >
               Clear filters
             </button>
@@ -400,7 +397,7 @@ export default function CoachVideosPage() {
             </svg>
             <p className="text-sm font-medium text-gray-500 mb-4">No videos uploaded yet</p>
             <Link href="/coach/upload">
-              <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#1A6B45" }}>
+              <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
                 Upload your first video
               </button>
             </Link>
@@ -411,7 +408,7 @@ export default function CoachVideosPage() {
             <button
               onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); }}
               className="mt-2 text-sm font-semibold"
-              style={{ color: "#1A6B45" }}
+              style={{ color: "#001c48" }}
             >
               Clear filters
             </button>
@@ -425,7 +422,7 @@ export default function CoachVideosPage() {
                 {/* Drill comparison thumbnail placeholder */}
                 {isDrill && (
                   <div className="flex h-20 shrink-0" style={{ gap: 2, backgroundColor: "#111" }}>
-                    <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#1A6B45" }}>
+                    <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
                       <svg className="h-6 w-6 opacity-60" style={{ color: "white" }} viewBox="0 0 24 24" fill="currentColor">
                         <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
                       </svg>
@@ -467,7 +464,7 @@ export default function CoachVideosPage() {
                       <span
                         className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
                         style={v.status === "published"
-                          ? { backgroundColor: "#dcfce7", color: "#15803d" }
+                          ? { backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }
                           : { backgroundColor: "#f3f4f6", color: "#6b7280" }}
                       >
                         {v.status === "published" ? "Published" : "Draft"}
@@ -588,7 +585,7 @@ export default function CoachVideosPage() {
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
-                  onFocus={e => (e.target.style.borderColor = "#1A6B45")}
+                  onFocus={e => (e.target.style.borderColor = "#001c48")}
                   onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
                 />
               </div>
@@ -598,7 +595,7 @@ export default function CoachVideosPage() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700">Assigned Students</label>
                   {editStudentIds.size > 0 && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.1)", color: "#001c48" }}>
                       {editStudentIds.size} selected
                     </span>
                   )}
@@ -657,7 +654,7 @@ export default function CoachVideosPage() {
                 <button
                   onClick={() => setEditDownloadAllowed(!editDownloadAllowed)}
                   className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition"
-                  style={{ backgroundColor: editDownloadAllowed ? "#1A6B45" : "#d1d5db" }}
+                  style={{ backgroundColor: editDownloadAllowed ? "#001c48" : "#d1d5db" }}
                 >
                   <span
                     className="inline-block h-5 w-5 rounded-full bg-white shadow transform transition mt-0.5"
@@ -674,7 +671,7 @@ export default function CoachVideosPage() {
                     onClick={() => setEditStatus("published")}
                     className="flex-1 py-2 text-sm font-semibold rounded-lg transition"
                     style={{
-                      backgroundColor: editStatus === "published" ? "#1A6B45" : "#f3f4f6",
+                      backgroundColor: editStatus === "published" ? "#001c48" : "#f3f4f6",
                       color: editStatus === "published" ? "white" : "#374151",
                     }}
                   >
@@ -707,7 +704,7 @@ export default function CoachVideosPage() {
                 onClick={saveEdit}
                 disabled={editSaving || !editTitle.trim()}
                 className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "#1A6B45" }}
+                style={{ backgroundColor: "#001c48" }}
               >
                 {editSaving ? "Saving…" : "Save changes"}
               </button>
@@ -760,8 +757,8 @@ export default function CoachVideosPage() {
           const isActive = pathname === item.href;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition">
-              <item.Icon className={`h-5 w-5 ${isActive ? "text-green-400" : "text-gray-500"}`} />
-              <span className={`text-xs ${isActive ? "text-green-400 font-semibold" : "text-gray-500"}`}>{item.label}</span>
+              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}} />
+              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}}>{item.label}</span>
             </Link>
           );
         })}

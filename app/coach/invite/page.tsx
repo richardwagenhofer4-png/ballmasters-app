@@ -79,18 +79,11 @@ export default function CoachInvitePage() {
       <div className="mx-auto max-w-lg">
         {/* Header */}
         <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-            style={{ backgroundColor: "#1A6B45" }}
-          >
-            <span className="text-3xl">⚽</span>
-          </div>
-          <h1
-            className="text-3xl font-extrabold tracking-tight"
-            style={{ color: "#1A6B45" }}
-          >
-            Ballmasters
-          </h1>
+          <img
+            src="/logo-dark.png"
+            alt="Ball Masters Florida"
+            style={{ width: 120, height: "auto", margin: "0 auto 12px" }}
+          />
           <p className="mt-1 text-gray-500 text-sm">Invite students to your team</p>
         </div>
 
@@ -107,7 +100,7 @@ export default function CoachInvitePage() {
 
           {status === "loading" ? (
             <div className="flex justify-center py-8">
-              <svg className="h-8 w-8 animate-spin" style={{ color: "#1A6B45" }} viewBox="0 0 24 24" fill="none">
+              <svg className="h-8 w-8 animate-spin" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
@@ -121,11 +114,11 @@ export default function CoachInvitePage() {
                 </p>
                 <div
                   className="flex items-center justify-center rounded-xl py-5 px-4"
-                  style={{ backgroundColor: "#f0faf5" }}
+                  style={{ backgroundColor: "rgba(1,255,249,0.08)" }}
                 >
                   <span
                     className="text-4xl font-extrabold tracking-[0.2em] font-mono"
-                    style={{ color: "#1A6B45" }}
+                    style={{ color: "#001c48" }}
                   >
                     {inviteCode.code}
                   </span>
@@ -147,7 +140,7 @@ export default function CoachInvitePage() {
                   <button
                     onClick={handleCopy}
                     className="shrink-0 flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80"
-                    style={{ backgroundColor: "#1A6B45" }}
+                    style={{ backgroundColor: "#001c48" }}
                   >
                     {copied ? (
                       <>
@@ -181,7 +174,7 @@ export default function CoachInvitePage() {
                   onClick={handleGenerate}
                   disabled={status === "generating"}
                   className="w-full rounded-lg border-2 py-2.5 text-sm font-semibold transition hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ borderColor: "#1A6B45", color: "#1A6B45" }}
+                  style={{ borderColor: "#001c48", color: "#001c48" }}
                 >
                   {status === "generating" ? "Generating…" : "Generate new code"}
                 </button>
@@ -197,7 +190,7 @@ export default function CoachInvitePage() {
                 onClick={handleGenerate}
                 disabled={status === "generating"}
                 className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ backgroundColor: "#1A6B45" }}
+                style={{ backgroundColor: "#001c48" }}
               >
                 {status === "generating" ? (
                   <span className="flex items-center gap-2">

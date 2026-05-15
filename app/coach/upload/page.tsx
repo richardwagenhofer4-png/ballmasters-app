@@ -66,10 +66,10 @@ function DropZone({ label, file, fileError, isDragging, isWorking, onPickFile, o
       {file ? (
         <div
           className="flex items-center justify-between rounded-xl border-2 px-4 py-3"
-          style={{ borderColor: "#1A6B45", backgroundColor: "#f0faf5" }}
+          style={{ borderColor: "#001c48", backgroundColor: "rgba(1,255,249,0.06)" }}
         >
           <div className="flex items-center gap-3 min-w-0">
-            <svg className="h-7 w-7 shrink-0" style={{ color: "#1A6B45" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg className="h-7 w-7 shrink-0" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
             </svg>
             <div className="min-w-0">
@@ -93,15 +93,15 @@ function DropZone({ label, file, fileError, isDragging, isWorking, onPickFile, o
           onClick={onBrowse}
           className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed py-8 cursor-pointer transition"
           style={{
-            borderColor: isDragging ? "#1A6B45" : "#d1d5db",
-            backgroundColor: isDragging ? "#f0faf5" : "white",
+            borderColor: isDragging ? "#001c48" : "#d1d5db",
+            backgroundColor: isDragging ? "rgba(1,255,249,0.06)" : "white",
           }}
         >
           <svg className="h-9 w-9 text-gray-300 mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
           </svg>
           <p className="text-sm font-medium text-gray-600">
-            Drag & drop or <span style={{ color: "#1A6B45" }} className="font-semibold">browse</span>
+            Drag & drop or <span style={{ color: "#001c48" }} className="font-semibold">browse</span>
           </p>
           <p className="mt-1 text-xs text-gray-400">MP4, MOV · max 500 MB</p>
         </div>
@@ -362,8 +362,8 @@ export default function UploadPage() {
     return (
       <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="bg-white rounded-2xl shadow-lg p-10 max-w-md w-full text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ backgroundColor: "#f0faf5" }}>
-            <svg className="h-8 w-8" style={{ color: "#1A6B45" }} viewBox="0 0 20 20" fill="currentColor">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ backgroundColor: "rgba(1,255,249,0.1)" }}>
+            <svg className="h-8 w-8" style={{ color: "#001c48" }} viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
             </svg>
           </div>
@@ -386,7 +386,7 @@ export default function UploadPage() {
             <button
               onClick={() => router.push("/coach/dashboard")}
               className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
-              style={{ backgroundColor: "#1A6B45" }}
+              style={{ backgroundColor: "#001c48" }}
             >
               Dashboard
             </button>
@@ -402,10 +402,12 @@ export default function UploadPage() {
       <div className="mx-auto max-w-xl">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ backgroundColor: "#1A6B45" }}>
-            <span className="text-3xl">⚽</span>
-          </div>
-          <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: "#1A6B45" }}>
+          <img
+            src="/logo-dark.png"
+            alt="Ball Masters Florida"
+            style={{ width: 120, height: "auto", margin: "0 auto 12px" }}
+          />
+          <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: "#001c48" }}>
             Upload Video
           </h1>
           <p className="mt-1 text-gray-500 text-sm">Share coaching footage with your students</p>
@@ -421,7 +423,7 @@ export default function UploadPage() {
                 disabled={isWorking}
                 className="flex-1 py-2.5 text-sm font-semibold transition disabled:opacity-60"
                 style={{
-                  backgroundColor: mode === m ? "#1A6B45" : "white",
+                  backgroundColor: mode === m ? "#001c48" : "white",
                   color: mode === m ? "white" : "#6b7280",
                 }}
               >
@@ -517,7 +519,7 @@ export default function UploadPage() {
                       disabled={isWorking}
                       className="flex-1 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-60"
                       style={{
-                        backgroundColor: layout === l ? "#1A6B45" : "#f3f4f6",
+                        backgroundColor: layout === l ? "#001c48" : "#f3f4f6",
                         color: layout === l ? "white" : "#374151",
                       }}
                     >
@@ -535,7 +537,7 @@ export default function UploadPage() {
                     onClick={() => setSyncPlayback(true)}
                     disabled={isWorking}
                     className="flex-1 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-60"
-                    style={{ backgroundColor: syncPlayback ? "#1A6B45" : "#f3f4f6", color: syncPlayback ? "white" : "#374151" }}
+                    style={{ backgroundColor: syncPlayback ? "#001c48" : "#f3f4f6", color: syncPlayback ? "white" : "#374151" }}
                   >
                     Synced
                   </button>
@@ -543,7 +545,7 @@ export default function UploadPage() {
                     onClick={() => setSyncPlayback(false)}
                     disabled={isWorking}
                     className="flex-1 py-2 text-xs font-semibold rounded-lg transition disabled:opacity-60"
-                    style={{ backgroundColor: !syncPlayback ? "#1A6B45" : "#f3f4f6", color: !syncPlayback ? "white" : "#374151" }}
+                    style={{ backgroundColor: !syncPlayback ? "#001c48" : "#f3f4f6", color: !syncPlayback ? "white" : "#374151" }}
                   >
                     Independent
                   </button>
@@ -565,7 +567,7 @@ export default function UploadPage() {
               placeholder="e.g. Dribbling drills — Week 4"
               disabled={isWorking}
               className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none transition disabled:opacity-60"
-              onFocus={(e) => (e.target.style.boxShadow = "0 0 0 2px #1A6B45")}
+              onFocus={(e) => (e.target.style.boxShadow = "0 0 0 2px #001c48")}
               onBlur={(e) => (e.target.style.boxShadow = "")}
             />
           </div>
@@ -578,7 +580,7 @@ export default function UploadPage() {
                 <span className="text-gray-400 font-normal">(optional)</span>
               </span>
               {selectedIds.size > 0 && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.1)", color: "#001c48" }}>
                   {selectedIds.size} selected
                 </span>
               )}
@@ -645,7 +647,7 @@ export default function UploadPage() {
                 <span>{progress}%</span>
               </div>
               <div className="h-2.5 w-full rounded-full bg-gray-200 overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: "#1A6B45" }} />
+                <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, backgroundColor: "#001c48" }} />
               </div>
             </div>
           )}
@@ -658,7 +660,7 @@ export default function UploadPage() {
                     <span>{pct}%</span>
                   </div>
                   <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: "#1A6B45" }} />
+                    <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: "#001c48" }} />
                   </div>
                 </div>
               ))}
@@ -681,7 +683,7 @@ export default function UploadPage() {
             onClick={handleUpload}
             disabled={!canSubmit}
             className="w-full rounded-lg py-3 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80 disabled:cursor-not-allowed"
-            style={{ backgroundColor: canSubmit ? "#1A6B45" : "#86c9a8" }}
+            style={{ backgroundColor: canSubmit ? "#001c48" : "rgba(0,28,72,0.35)" }}
           >
             {isWorking ? "Uploading…" : mode === "drill_comparison" ? "Upload drill comparison" : "Upload video"}
           </button>

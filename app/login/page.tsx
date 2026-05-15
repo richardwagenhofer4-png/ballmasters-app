@@ -82,12 +82,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4" style={{ backgroundColor: "#1A6B45" }}>
-            <span className="text-3xl">⚽</span>
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight" style={{ color: "#1A6B45" }}>
-            Ballmasters
-          </h1>
+          <img
+            src="/logo-dark.png"
+            alt="Ball Masters Florida"
+            style={{ width: 120, height: "auto", margin: "0 auto 8px" }}
+          />
           <p className="mt-2 text-gray-500 text-sm">Sign in to your account</p>
         </div>
 
@@ -95,7 +94,10 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-lg p-8">
           {/* Account deleted banner */}
           {accountDeleted && (
-            <div className="mb-5 flex items-start gap-2 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+            <div
+              className="mb-5 flex items-start gap-2 rounded-lg px-4 py-3 text-sm"
+              style={{ backgroundColor: "rgba(1,255,249,0.08)", border: "1px solid rgba(1,255,249,0.3)", color: "#001c48" }}
+            >
               <svg className="mt-0.5 h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
               </svg>
@@ -127,9 +129,8 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition"
-                style={{ "--tw-ring-color": "#1A6B45" } as React.CSSProperties}
-                onFocus={(e) => (e.target.style.boxShadow = "0 0 0 2px #1A6B45")}
+                className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none transition"
+                onFocus={(e) => (e.target.style.boxShadow = "0 0 0 2px #001c48")}
                 onBlur={(e) => (e.target.style.boxShadow = "")}
               />
             </div>
@@ -142,7 +143,7 @@ export default function LoginPage() {
                 <Link
                   href="/forgot-password"
                   className="text-xs font-medium hover:underline"
-                  style={{ color: "#1A6B45" }}
+                  style={{ color: "#001c48" }}
                 >
                   Forgot password?
                 </Link>
@@ -156,7 +157,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full rounded-lg border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none transition"
-                onFocus={(e) => (e.target.style.boxShadow = "0 0 0 2px #1A6B45")}
+                onFocus={(e) => (e.target.style.boxShadow = "0 0 0 2px #001c48")}
                 onBlur={(e) => (e.target.style.boxShadow = "")}
               />
             </div>
@@ -165,7 +166,7 @@ export default function LoginPage() {
               type="submit"
               disabled={loading}
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ backgroundColor: "#1A6B45" }}
+              style={{ backgroundColor: "#001c48" }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -217,7 +218,7 @@ export default function LoginPage() {
             <Link
               href="/register"
               className="font-semibold hover:underline"
-              style={{ color: "#1A6B45" }}
+              style={{ color: "#001c48" }}
             >
               Create one
             </Link>

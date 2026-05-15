@@ -57,7 +57,7 @@ function formatDate(iso: string): string {
 
 function StatusBadge({ status }: { status: StudentStat["status"] }) {
   if (status === "all_watched")
-    return <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ backgroundColor: "#dcfce7", color: "#15803d" }}>All watched</span>;
+    return <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}>All watched</span>;
   if (status === "pending")
     return <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full shrink-0" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>Pending</span>;
   if (status === "not_started")
@@ -260,22 +260,22 @@ export default function CoachDashboard() {
     {
       label: "Students",
       value: students.length,
-      icon: <svg className="h-4 w-4 text-green-300 mb-1 mx-auto" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" /></svg>,
+      icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" /></svg>,
     },
     {
       label: "Videos",
       value: videos.length,
-      icon: <svg className="h-4 w-4 text-green-300 mb-1 mx-auto" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>,
+      icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>,
     },
     {
       label: "Watch Rate",
       value: `${overallWatchRate}%`,
-      icon: <svg className="h-4 w-4 text-green-300 mb-1 mx-auto" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" /></svg>,
+      icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" /></svg>,
     },
     {
       label: "Unread",
       value: unreadCount,
-      icon: <svg className="h-4 w-4 text-green-300 mb-1 mx-auto" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>,
+      icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>,
     },
   ];
 
@@ -285,16 +285,14 @@ export default function CoachDashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-5 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚽</span>
-            <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
-          </div>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-green-200 hover:text-white transition text-xs font-medium"
+            className="flex items-center gap-1.5 hover:text-white transition text-xs font-medium"
+            style={{ color: "rgba(1,255,249,0.7)" }}
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -305,7 +303,7 @@ export default function CoachDashboard() {
 
         {/* Greeting */}
         <div className="mb-5">
-          <p className="text-green-300 text-sm font-medium">{greeting},</p>
+          <p className="text-sm font-medium" style={{ color: "#01fff9" }}>{greeting},</p>
           <h1 className="text-2xl font-extrabold text-white leading-tight mt-0.5">{coachName}</h1>
         </div>
 
@@ -319,7 +317,7 @@ export default function CoachDashboard() {
             >
               {s.icon}
               <div className="text-lg font-extrabold text-white leading-none">{s.value}</div>
-              <div className="text-xs text-green-200 mt-0.5 leading-tight">{s.label}</div>
+              <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>{s.label}</div>
             </div>
           ))}
         </div>
@@ -336,15 +334,15 @@ export default function CoachDashboard() {
           <div className="grid grid-cols-3 gap-3">
             {[
               {
-                label: "Upload Video", href: "/coach/upload", bg: "#1A6B45",
+                label: "Upload Video", href: "/coach/upload", bg: "#001c48",
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>,
               },
               {
-                label: "Invite Students", href: "/coach/invite", bg: "#14532d",
+                label: "Invite Students", href: "/coach/invite", bg: "#001c48",
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" /></svg>,
               },
               {
-                label: "All Videos", href: "/coach/videos", bg: "#065f46",
+                label: "All Videos", href: "/coach/videos", bg: "#001c48",
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-3.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0118 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-3.75 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C6.504 8.25 7 7.746 7 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5m0-5.25v5.25m0-5.25C6 5.004 6.504 4.5 7.125 4.5h9.75c.621 0 1.125.504 1.125 1.125m1.125 2.625h1.5m-1.5 0A1.125 1.125 0 0118 7.125v-1.5m1.125 2.625c-.621 0-1.125.504-1.125 1.125v1.5m2.625-2.625c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M18 5.625v5.25M7.125 12h9.75m-9.75 0A1.125 1.125 0 016 10.875M7.125 12C6.504 12 6 12.504 6 13.125m0-2.25C6 11.496 5.496 12 4.875 12M18 10.875c0 .621-.504 1.125-1.125 1.125M18 10.875c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-7.5 0h7.5" /></svg>,
               },
             ].map(action => (
@@ -366,7 +364,7 @@ export default function CoachDashboard() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Recent Videos</h2>
-              <Link href="/coach/videos" className="text-xs font-semibold" style={{ color: "#1A6B45" }}>View all →</Link>
+              <Link href="/coach/videos" className="text-xs font-semibold" style={{ color: "#001c48" }}>View all →</Link>
             </div>
             <div className="space-y-3">
               {recentVideos.map(v => (
@@ -383,7 +381,7 @@ export default function CoachDashboard() {
                     {v.assignedCount > 0 && (
                       <span
                         className="text-sm font-bold shrink-0"
-                        style={{ color: v.rate === 100 ? "#15803d" : v.rate === 0 ? "#dc2626" : "#d97706" }}
+                        style={{ color: v.rate === 100 ? "#01fff9" : v.rate === 0 ? "#dc2626" : "#d97706" }}
                       >
                         {v.rate}%
                       </span>
@@ -394,7 +392,7 @@ export default function CoachDashboard() {
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
                       <div
                         className="h-full rounded-full transition-all"
-                        style={{ width: `${v.rate}%`, backgroundColor: v.rate === 100 ? "#16a34a" : "#1A6B45" }}
+                        style={{ width: `${v.rate}%`, backgroundColor: v.rate === 100 ? "#01fff9" : "#001c48" }}
                       />
                     </div>
                   )}
@@ -414,9 +412,9 @@ export default function CoachDashboard() {
                       onClick={() => handleShare(v.id)}
                       className="flex-1 py-1.5 text-xs font-semibold rounded-lg transition"
                       style={{
-                        backgroundColor: copiedId === v.id ? "#f0faf5" : "#f3f4f6",
-                        color: copiedId === v.id ? "#1A6B45" : "#374151",
-                        border: copiedId === v.id ? "1px solid #86efac" : "1px solid transparent",
+                        backgroundColor: copiedId === v.id ? "rgba(1,255,249,0.08)" : "#f3f4f6",
+                        color: copiedId === v.id ? "#001c48" : "#374151",
+                        border: copiedId === v.id ? "1px solid rgba(1,255,249,0.4)" : "1px solid transparent",
                       }}
                     >
                       {copiedId === v.id ? "Copied!" : "Share"}
@@ -433,7 +431,7 @@ export default function CoachDashboard() {
             </svg>
             <p className="text-sm font-medium text-gray-500 mb-4">No videos uploaded yet</p>
             <Link href="/coach/upload">
-              <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#1A6B45" }}>
+              <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
                 Upload your first video
               </button>
             </Link>
@@ -451,7 +449,7 @@ export default function CoachDashboard() {
             <div className="bg-white rounded-xl border border-gray-200 py-8 text-center px-4">
               <p className="text-sm text-gray-400 mb-4">No students have joined yet</p>
               <Link href="/coach/invite">
-                <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#1A6B45" }}>
+                <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
                   Invite students
                 </button>
               </Link>
@@ -468,7 +466,7 @@ export default function CoachDashboard() {
                   onChange={e => setStudentSearch(e.target.value)}
                   placeholder="Search students…"
                   className="w-full pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-200 rounded-xl focus:outline-none"
-                  onFocus={e => (e.target.style.borderColor = "#1A6B45")}
+                  onFocus={e => (e.target.style.borderColor = "#001c48")}
                   onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
                 />
               </div>
@@ -485,7 +483,7 @@ export default function CoachDashboard() {
                       >
                         <div
                           className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
-                          style={{ backgroundColor: "#dcfce7", color: "#14532d" }}
+                          style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
                         >
                           {s.fullName.charAt(0).toUpperCase()}
                         </div>
@@ -500,7 +498,7 @@ export default function CoachDashboard() {
                               <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full"
-                                  style={{ width: `${s.rate}%`, backgroundColor: s.rate === 100 ? "#16a34a" : "#1A6B45" }}
+                                  style={{ width: `${s.rate}%`, backgroundColor: s.rate === 100 ? "#01fff9" : "#001c48" }}
                                 />
                               </div>
                               <span className="text-xs text-gray-400 shrink-0 tabular-nums">{s.watched}/{s.assigned}</span>
@@ -534,8 +532,8 @@ export default function CoachDashboard() {
           const isActive = pathname === item.href;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition">
-              <item.Icon className={`h-5 w-5 ${isActive ? "text-green-400" : "text-gray-500"}`} />
-              <span className={`text-xs ${isActive ? "text-green-400 font-semibold" : "text-gray-500"}`}>
+              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}} />
+              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}}>
                 {item.label}
               </span>
             </Link>

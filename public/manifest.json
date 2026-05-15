@@ -1,11 +1,11 @@
 {
-  "name": "Ballmasters",
-  "short_name": "Ballmasters",
+  "name": "Ball Masters Florida",
+  "short_name": "Ball Masters",
   "description": "Private video coaching platform",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#0D2B1F",
-  "theme_color": "#1A6B45",
+  "background_color": "#001c48",
+  "theme_color": "#001c48",
   "orientation": "portrait",
   "icons": [
     { "src": "/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any maskable" },

@@ -53,7 +53,7 @@ function GoogleIcon() {
 }
 
 function inputFocus(e: React.FocusEvent<HTMLInputElement>) {
-  e.target.style.boxShadow = "0 0 0 2px #1A6B45";
+  e.target.style.boxShadow = "0 0 0 2px #001c48";
 }
 function inputBlur(e: React.FocusEvent<HTMLInputElement>) {
   e.target.style.boxShadow = "";
@@ -219,15 +219,11 @@ export default function RegisterForm() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div
-            className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4"
-            style={{ backgroundColor: "#1A6B45" }}
-          >
-            <span className="text-3xl">⚽</span>
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight" style={{ color: "#1A6B45" }}>
-            Ballmasters
-          </h1>
+          <img
+            src="/logo-dark.png"
+            alt="Ball Masters Florida"
+            style={{ width: 120, height: "auto", margin: "0 auto 8px" }}
+          />
           <p className="mt-2 text-gray-500 text-sm">Create your account</p>
         </div>
 
@@ -259,7 +255,7 @@ export default function RegisterForm() {
           {codeIsLocked && (
             <div
               className="mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium"
-              style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}
+              style={{ backgroundColor: "rgba(1,255,249,0.08)", color: "#001c48" }}
             >
               <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 2a5 5 0 00-5 5v2H4a2 2 0 00-2 2v5a2 2 0 002 2h12a2 2 0 002-2v-5a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm0 2a3 3 0 013 3v2H7V7a3 3 0 013-3zm0 8a1 1 0 110 2 1 1 0 010-2z" clipRule="evenodd" />
@@ -335,9 +331,9 @@ export default function RegisterForm() {
                   <button type="button" onClick={() => setRole("student")}
                     className="flex items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-sm font-semibold transition"
                     style={{
-                      borderColor: role === "student" ? "#1A6B45" : "#e5e7eb",
-                      backgroundColor: role === "student" ? "#f0faf5" : "white",
-                      color: role === "student" ? "#1A6B45" : "#6b7280",
+                      borderColor: role === "student" ? "#001c48" : "#e5e7eb",
+                      backgroundColor: role === "student" ? "rgba(1,255,249,0.08)" : "white",
+                      color: role === "student" ? "#001c48" : "#6b7280",
                     }}>
                     <span className="text-2xl">🎓</span>
                     <span>Student</span>
@@ -372,7 +368,7 @@ export default function RegisterForm() {
             {/* Submit */}
             <button type="submit" disabled={loading}
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
-              style={{ backgroundColor: "#1A6B45" }}>
+              style={{ backgroundColor: "#001c48" }}>
               {loading ? <span className="flex items-center justify-center gap-2"><Spinner />Creating account…</span> : "Create account"}
             </button>
           </form>
@@ -394,7 +390,7 @@ export default function RegisterForm() {
           {/* Login link */}
           <p className="mt-6 text-center text-sm text-gray-500">
             Already have an account?{" "}
-            <Link href="/login" className="font-semibold hover:underline" style={{ color: "#1A6B45" }}>
+            <Link href="/login" className="font-semibold hover:underline" style={{ color: "#001c48" }}>
               Sign in
             </Link>
           </p>

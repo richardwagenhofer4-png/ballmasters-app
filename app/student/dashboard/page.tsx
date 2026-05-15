@@ -246,20 +246,21 @@ export default function StudentDashboard() {
       {/* Notification permission banner                                       */}
       {/* ------------------------------------------------------------------ */}
       {showNotifBanner && (
-        <div className="fixed top-0 inset-x-0 z-50 flex items-center gap-3 px-4 py-3 text-sm text-white shadow-lg" style={{ backgroundColor: "#14532d", paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
-          <svg className="h-5 w-5 shrink-0 text-green-300" viewBox="0 0 24 24" fill="currentColor">
+        <div className="fixed top-0 inset-x-0 z-50 flex items-center gap-3 px-4 py-3 text-sm text-white shadow-lg" style={{ backgroundColor: "#001c48", paddingTop: "calc(env(safe-area-inset-top) + 12px)" }}>
+          <svg className="h-5 w-5 shrink-0" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor">
             <path d="M5.85 3.5a.75.75 0 00-1.117-1 9.719 9.719 0 00-2.348 4.876.75.75 0 001.479.248A8.219 8.219 0 015.85 3.5zM19.267 2.5a.75.75 0 10-1.118 1 8.22 8.22 0 011.987 4.124.75.75 0 001.48-.248A9.72 9.72 0 0019.266 2.5z" />
             <path fillRule="evenodd" d="M12 2.25A6.75 6.75 0 005.25 9v.75a8.217 8.217 0 01-2.119 5.52.75.75 0 00.298 1.206c1.544.57 3.16.99 4.831 1.243a3.75 3.75 0 107.48 0 24.583 24.583 0 004.83-1.244.75.75 0 00.298-1.205 8.217 8.217 0 01-2.118-5.52V9A6.75 6.75 0 0012 2.25zM9.75 18c0-.034 0-.067.002-.1a25.05 25.05 0 004.496 0l.002.1a2.25 2.25 0 11-4.5 0z" clipRule="evenodd" />
           </svg>
-          <p className="flex-1 leading-snug text-green-100">Enable notifications to know when your coach posts new videos</p>
+          <p className="flex-1 leading-snug" style={{ color: "rgba(1,255,249,0.85)" }}>Enable notifications to know when your coach posts new videos</p>
           <button
             onClick={handleEnableNotifications}
             disabled={notifEnabling}
-            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold bg-green-500 hover:bg-green-400 text-white disabled:opacity-60 transition"
+            className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60 transition"
+            style={{ backgroundColor: "#01fff9", color: "#001c48" }}
           >
             {notifEnabling ? "…" : "Enable"}
           </button>
-          <button onClick={dismissNotifBanner} className="shrink-0 text-green-400 hover:text-white transition">
+          <button onClick={dismissNotifBanner} className="shrink-0 hover:text-white transition" style={{ color: "rgba(1,255,249,0.7)" }}>
             <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
               <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
             </svg>
@@ -270,16 +271,14 @@ export default function StudentDashboard() {
       {/* ------------------------------------------------------------------ */}
       {/* Header                                                               */}
       {/* ------------------------------------------------------------------ */}
-      <div style={{ backgroundColor: "#1A6B45" }} className="pt-12 pb-5 px-4">
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         {/* Top bar */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">⚽</span>
-            <span className="text-sm font-bold text-white tracking-wide">Ballmasters</span>
-          </div>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
           <button
             onClick={handleSignOut}
-            className="flex items-center gap-1.5 text-green-200 hover:text-white transition text-xs font-medium"
+            className="flex items-center gap-1.5 hover:text-white transition text-xs font-medium"
+            style={{ color: "rgba(1,255,249,0.7)" }}
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -290,7 +289,7 @@ export default function StudentDashboard() {
 
         {/* Greeting */}
         <div className="mb-5">
-          <p className="text-green-300 text-sm font-medium">{greeting},</p>
+          <p className="text-sm font-medium" style={{ color: "#01fff9" }}>{greeting},</p>
           <h1 className="text-2xl font-extrabold text-white leading-tight mt-0.5">{studentName}</h1>
         </div>
 
@@ -298,20 +297,20 @@ export default function StudentDashboard() {
         <div className="grid grid-cols-3 gap-2">
           {/* Assigned */}
           <div className="rounded-xl text-center py-3 px-1" style={{ backgroundColor: "rgba(255,255,255,0.12)" }}>
-            <svg className="h-4 w-4 text-green-300 mb-1 mx-auto" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor">
               <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
             </svg>
             <div className="text-lg font-extrabold text-white leading-none">{videos.length}</div>
-            <div className="text-xs text-green-200 mt-0.5 leading-tight">Assigned</div>
+            <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>Assigned</div>
           </div>
 
           {/* Watched */}
           <div className="rounded-xl text-center py-3 px-1" style={{ backgroundColor: "rgba(255,255,255,0.12)" }}>
-            <svg className="h-4 w-4 text-green-300 mb-1 mx-auto" viewBox="0 0 20 20" fill="currentColor">
+            <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
             </svg>
             <div className="text-lg font-extrabold text-white leading-none">{watchedCount}</div>
-            <div className="text-xs text-green-200 mt-0.5 leading-tight">Watched</div>
+            <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>Watched</div>
           </div>
 
           {/* New / Unread — amber if > 0 */}
@@ -323,7 +322,7 @@ export default function StudentDashboard() {
           >
             <svg
               className="h-4 w-4 mb-1 mx-auto"
-              style={{ color: unwatchedCount > 0 ? "#fbbf24" : "#86efac" }}
+              style={{ color: unwatchedCount > 0 ? "#fbbf24" : "#01fff9" }}
               viewBox="0 0 24 24"
               fill="currentColor"
             >
@@ -337,7 +336,7 @@ export default function StudentDashboard() {
             </div>
             <div
               className="text-xs mt-0.5 leading-tight"
-              style={{ color: unwatchedCount > 0 ? "#fde68a" : "#86efac" }}
+              style={{ color: unwatchedCount > 0 ? "#fde68a" : "rgba(1,255,249,0.7)" }}
             >
               New
             </div>
@@ -355,7 +354,7 @@ export default function StudentDashboard() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Continue Watching</h2>
             {videos.length > 6 && (
-              <Link href="/student/videos" className="text-xs font-semibold" style={{ color: "#1A6B45" }}>
+              <Link href="/student/videos" className="text-xs font-semibold" style={{ color: "#001c48" }}>
                 See all →
               </Link>
             )}
@@ -382,17 +381,17 @@ export default function StudentDashboard() {
                       {/* Left accent bar */}
                       <div
                         className="w-1 shrink-0"
-                        style={{ backgroundColor: isWatched ? "#e5e7eb" : "#1A6B45" }}
+                        style={{ backgroundColor: isWatched ? "#e5e7eb" : "#001c48" }}
                       />
 
                       {/* Play icon */}
                       <div
                         className="flex items-center justify-center w-12 shrink-0"
-                        style={{ backgroundColor: isWatched ? "#f9fafb" : "#f0faf5" }}
+                        style={{ backgroundColor: isWatched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}
                       >
                         <svg
                           className="h-5 w-5"
-                          style={{ color: isWatched ? "#d1d5db" : "#1A6B45" }}
+                          style={{ color: isWatched ? "#d1d5db" : "#001c48" }}
                           viewBox="0 0 24 24"
                           fill="currentColor"
                         >
@@ -417,7 +416,7 @@ export default function StudentDashboard() {
                                 Watched
                               </span>
                             ) : (
-                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#dcfce7", color: "#15803d" }}>
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}>
                                 New
                               </span>
                             )}
@@ -438,7 +437,7 @@ export default function StudentDashboard() {
 
               {videos.length > 6 && (
                 <Link href="/student/videos">
-                  <div className="text-center py-3 text-sm font-semibold" style={{ color: "#1A6B45" }}>
+                  <div className="text-center py-3 text-sm font-semibold" style={{ color: "#001c48" }}>
                     View all {videos.length} videos →
                   </div>
                 </Link>
@@ -467,7 +466,7 @@ export default function StudentDashboard() {
                     {/* Coach avatar */}
                     <div
                       className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
-                      style={{ backgroundColor: "#dcfce7", color: "#14532d" }}
+                      style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
                     >
                       {item.authorName.charAt(0).toUpperCase()}
                     </div>
@@ -478,7 +477,7 @@ export default function StudentDashboard() {
                         <span className="text-xs font-semibold text-gray-800">{item.authorName}</span>
                         <span
                           className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                          style={{ backgroundColor: "#dcfce7", color: "#15803d" }}
+                          style={{ backgroundColor: "#001c48", color: "#01fff9" }}
                         >
                           Coach
                         </span>
@@ -508,8 +507,8 @@ export default function StudentDashboard() {
           const isActive = pathname === item.href;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition">
-              <item.Icon className={`h-5 w-5 ${isActive ? "text-green-400" : "text-gray-500"}`} />
-              <span className={`text-xs ${isActive ? "text-green-400 font-semibold" : "text-gray-500"}`}>
+              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}} />
+              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`} style={isActive ? { color: "#01fff9" } : {}}>
                 {item.label}
               </span>
             </Link>

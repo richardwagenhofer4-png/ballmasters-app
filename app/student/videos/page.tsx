@@ -68,17 +68,11 @@ export default function StudentVideosPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-full text-xl"
-              style={{ backgroundColor: "#1A6B45" }}
-            >
-              ⚽
-            </div>
             <div>
-              <h1 className="text-2xl font-extrabold leading-tight" style={{ color: "#1A6B45" }}>
+              <h1 className="text-2xl font-extrabold leading-tight" style={{ color: "#001c48" }}>
                 My Videos
               </h1>
-              <p className="text-xs text-gray-400">Ballmasters coaching library</p>
+              <p className="text-xs text-gray-400">Ball Masters Florida</p>
             </div>
           </div>
           <Link
@@ -99,7 +93,7 @@ export default function StudentVideosPage() {
         {/* Loading */}
         {loading ? (
           <div className="flex justify-center py-20">
-            <svg className="h-8 w-8 animate-spin" style={{ color: "#1A6B45" }} viewBox="0 0 24 24" fill="none">
+            <svg className="h-8 w-8 animate-spin" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
             </svg>
@@ -131,14 +125,14 @@ export default function StudentVideosPage() {
                   <div
                     className="flex items-stretch"
                     style={{
-                      borderLeft: `4px solid ${watched ? "#d1d5db" : "#1A6B45"}`,
+                      borderLeft: `4px solid ${watched ? "#d1d5db" : "#001c48"}`,
                     }}
                   >
                     {/* Play icon column */}
                     <div className="flex items-center justify-center w-14 shrink-0 bg-gray-50 group-hover:bg-gray-100 transition-colors">
                       <svg
                         className="h-6 w-6 transition-colors"
-                        style={{ color: watched ? "#9ca3af" : "#1A6B45" }}
+                        style={{ color: watched ? "#9ca3af" : "#001c48" }}
                         viewBox="0 0 24 24"
                         fill="currentColor"
                       >
@@ -155,7 +149,7 @@ export default function StudentVideosPage() {
                         {!watched ? (
                           <span
                             className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{ backgroundColor: "#f0faf5", color: "#1A6B45" }}
+                            style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}
                           >
                             New
                           </span>

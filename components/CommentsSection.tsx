@@ -122,7 +122,7 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
                     {c.role === "coach" && (
                       <span
                         className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: "#dcfce7", color: "#15803d" }}
+                        style={{ backgroundColor: "#001c48", color: "#01fff9" }}
                       >
                         Coach
                       </span>
@@ -151,13 +151,15 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
                           }
                         }}
                         placeholder="Write a reply…"
-                        className="flex-1 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-green-700"
+                        className="flex-1 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none"
+                        onFocus={e => (e.target.style.borderColor = "#001c48")}
+                        onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
                       />
                       <button
                         onClick={() => submitComment(c.id, replyText)}
                         disabled={!replyText.trim() || submitting}
                         className="text-sm font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition"
-                        style={{ backgroundColor: "#1A6B45" }}
+                        style={{ backgroundColor: "#001c48" }}
                       >
                         Reply
                       </button>
@@ -179,7 +181,7 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
                         {r.role === "coach" && (
                           <span
                             className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                            style={{ backgroundColor: "#dcfce7", color: "#15803d" }}
+                            style={{ backgroundColor: "#001c48", color: "#01fff9" }}
                           >
                             Coach
                           </span>
@@ -208,13 +210,15 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
             }
           }}
           placeholder={isCoach ? "Add a coaching note…" : "Add a comment…"}
-          className="flex-1 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:border-green-700"
+          className="flex-1 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:outline-none"
+          onFocus={e => (e.target.style.borderColor = "#001c48")}
+          onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
         />
         <button
           onClick={() => submitComment(null, text)}
           disabled={!text.trim() || submitting}
           className="text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-40 transition"
-          style={{ backgroundColor: "#1A6B45" }}
+          style={{ backgroundColor: "#001c48" }}
         >
           Post
         </button>

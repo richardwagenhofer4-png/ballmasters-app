@@ -290,7 +290,7 @@ export default function VideoPlayerPage() {
       <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="text-center">
           <p className="text-red-600 font-medium mb-4">{error}</p>
-          <Link href="/student/videos" className="text-sm font-semibold hover:underline" style={{ color: "#1A6B45" }}>
+          <Link href="/student/videos" className="text-sm font-semibold hover:underline" style={{ color: "#001c48" }}>
             ← Back to videos
           </Link>
         </div>
@@ -335,13 +335,10 @@ export default function VideoPlayerPage() {
           All videos
         </Link>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-xl">⚽</span>
-          <span className="text-sm font-bold text-white">Ballmasters</span>
-        </div>
+        <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
 
         {watched && (
-          <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#4ade80" }}>
+          <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#01fff9" }}>
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
             </svg>
@@ -470,7 +467,7 @@ export default function VideoPlayerPage() {
               <span>·</span>
               <span
                 className="font-semibold text-xs px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: "#14532d", color: "#4ade80" }}
+                style={{ backgroundColor: "#001c48", color: "#01fff9" }}
               >
                 New
               </span>
@@ -492,9 +489,9 @@ export default function VideoPlayerPage() {
                 title={r.label}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition"
                 style={{
-                  backgroundColor: selected ? "#14532d" : "#1f2937",
-                  color: selected ? "#4ade80" : "#9ca3af",
-                  border: `1px solid ${selected ? "#16a34a" : "transparent"}`,
+                  backgroundColor: selected ? "#001c48" : "#1f2937",
+                  color: selected ? "#01fff9" : "#9ca3af",
+                  border: `1px solid ${selected ? "#01fff9" : "transparent"}`,
                 }}
               >
                 <span>{r.emoji}</span>
