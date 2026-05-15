@@ -680,6 +680,7 @@ export default function CoachCalendarPage() {
         const bookingList: Booking[] = bookingsSnap.docs
           .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
           .filter(b => b.status !== "cancelled");
+        console.log("[coach/calendar] bookings loaded:", bookingList.length, "pending:", bookingList.filter(b => b.status === "pending_approval").length, bookingList);
         setBookings(bookingList);
       } catch (err) {
         console.error("[coach/calendar]", err);
@@ -920,7 +921,12 @@ export default function CoachCalendarPage() {
       {/* Tab bar */}
       <div className="flex border-b border-gray-200 bg-white">
         {(["all", "booked", "pending"] as const).map(tab => {
-          const label = tab === "all" ? "All Sessions" : tab === "booked" ? "Booked" : "Pending";
+          const allCount = sessions.length;
+          const bookedCount = sessions.filter(s => s.bookedBy.length > 0).length;
+          const pendingCount = sessions.filter(s => bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")).length;
+          const count = tab === "all" ? allCount : tab === "booked" ? bookedCount : pendingCount;
+          const baseLabel = tab === "all" ? "All Sessions" : tab === "booked" ? "Booked" : "Pending Approval";
+          const label = `${baseLabel} (${count})`;
           const isActive = activeTab === tab;
           return (
             <button

@@ -88,6 +88,8 @@ export default function StudentCalendarPage() {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"available" | "bookings" | "pending">("available");
+  const [refreshing, setRefreshing] = useState(false);
+  const [cancelPendingConfirmId, setCancelPendingConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -144,6 +146,34 @@ export default function StudentCalendarPage() {
     });
     return unsub;
   }, [router]);
+
+  async function handleRefresh() {
+    if (refreshing || !uid) return;
+    setRefreshing(true);
+    try {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const sessionsSnap = await getDocs(collection(db, "sessions"));
+      const sessionList: Session[] = sessionsSnap.docs
+        .map(d => {
+          const data = d.data();
+          return { id: d.id, ...(data as Omit<Session, "id">), bookedBy: data.bookedBy ?? [], waitlist: data.waitlist ?? [] };
+        })
+        .filter(s => s.status !== "cancelled" && s.date >= todayStr)
+        .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+      setSessions(sessionList);
+
+      const bookingsSnap = await getDocs(query(collection(db, "bookings"), where("studentId", "==", uid)));
+      const bookingList: Booking[] = bookingsSnap.docs
+        .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
+        .filter(b => b.status !== "cancelled");
+      setBookings(bookingList);
+    } catch (err) {
+      console.error("[student/calendar] refresh failed:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -263,7 +293,7 @@ export default function StudentCalendarPage() {
     setActionLoading(session.id);
     try {
       const now = new Date().toISOString();
-      const wasBooked = booking.status === "confirmed";
+      const wasBooked = booking.status === "confirmed" || booking.status === "pending_approval";
       let promotedUid: string | null = null;
 
       await runTransaction(db, async (tx) => {
@@ -368,6 +398,20 @@ export default function StudentCalendarPage() {
       <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center justify-between mb-3">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 rounded-lg transition hover:opacity-80 disabled:opacity-50"
+            style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+            title="Refresh"
+          >
+            <svg
+              className={`h-4 w-4 text-white ${refreshing ? "animate-spin" : ""}`}
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
         </div>
         <h1 className="text-2xl font-extrabold text-white leading-tight">Calendar</h1>
         <p className="text-xs mt-0.5" style={{ color: "#01fff9" }}>Book your training sessions</p>
@@ -446,7 +490,9 @@ export default function StudentCalendarPage() {
       {/* Tab bar */}
       <div className="flex border-b border-gray-200 bg-white">
         {(["available", "bookings", "pending"] as const).map(tab => {
-          const label = tab === "available" ? "Available" : tab === "bookings" ? "My Bookings" : "Pending";
+          const count = tab === "available" ? sessions.length : tab === "bookings" ? confirmedBookings.length : pendingBookings.length;
+          const baseLabel = tab === "available" ? "Available" : tab === "bookings" ? "My Bookings" : "Pending";
+          const label = `${baseLabel} (${count})`;
           const isActive = activeTab === tab;
           return (
             <button
@@ -623,22 +669,61 @@ export default function StudentCalendarPage() {
                 <p className="text-sm text-gray-400">No pending requests.</p>
               </div>
             ) : (
-              pendingBookings.map(b => (
-                <div key={b.id} className="bg-white rounded-xl border border-amber-200 p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
-                      </p>
+              pendingBookings.map(b => {
+                const session = sessions.find(s => s.id === b.sessionId);
+                const isConfirming = cancelPendingConfirmId === b.id;
+                const busy = actionLoading === b.sessionId;
+                return (
+                  <div key={b.id} className="bg-white rounded-xl border border-amber-200 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                        Pending Approval
+                      </span>
                     </div>
-                    <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
-                      Pending Approval
-                    </span>
+                    <p className="text-xs text-gray-400 mt-2">Awaiting coach approval</p>
+                    {session && (
+                      isConfirming ? (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs font-medium text-red-700 text-center">Cancel this booking request?</p>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setCancelPendingConfirmId(null)}
+                              disabled={busy}
+                              className="flex-1 py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600"
+                            >
+                              Keep
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setCancelPendingConfirmId(null);
+                                await handleCancel(session, b);
+                              }}
+                              disabled={busy}
+                              className="flex-1 py-2 text-xs font-semibold rounded-lg text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50"
+                            >
+                              {busy ? "…" : "Yes, Cancel"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setCancelPendingConfirmId(b.id)}
+                          disabled={busy}
+                          className="mt-3 w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                        >
+                          Cancel Request
+                        </button>
+                      )
+                    )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">Awaiting coach approval</p>
-                </div>
-              ))
+                );
+              })
             )}
           </>
         )}
