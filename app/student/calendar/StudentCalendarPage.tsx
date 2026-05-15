@@ -536,7 +536,13 @@ export default function StudentCalendarPage() {
                 const isBooked = booking?.status === "confirmed";
                 const isWaitlisted = booking?.status === "waitlisted";
                 const isPendingApproval = booking?.status === "pending_approval";
-                const waitlistPos = isWaitlisted ? getWaitlistPosition(session) : 0;
+                // Also check session arrays directly — prevents showing Book/Join Waitlist
+                // if session state and bookings state diverge
+                const isInBookedBy = session.bookedBy.some(b => b.uid === uid);
+                const isInWaitlist = session.waitlist.some(w => w.uid === uid);
+                const alreadyBooked = isBooked || isPendingApproval || isInBookedBy;
+                const alreadyWaitlisted = !alreadyBooked && (isWaitlisted || isInWaitlist);
+                const waitlistPos = alreadyWaitlisted ? getWaitlistPosition(session) : 0;
                 const busy = actionLoading === session.id;
 
                 return (
@@ -559,15 +565,15 @@ export default function StudentCalendarPage() {
                     </div>
 
                     <div className="mb-3">
-                      {isPendingApproval ? (
+                      {isPendingApproval || (isInBookedBy && !isBooked) ? (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
                           Pending Approval
                         </span>
-                      ) : isBooked ? (
+                      ) : alreadyBooked ? (
                         <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
                           Booked
                         </span>
-                      ) : isWaitlisted ? (
+                      ) : alreadyWaitlisted ? (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
                           Waitlist #{waitlistPos}
                         </span>
@@ -582,18 +588,38 @@ export default function StudentCalendarPage() {
                       )}
                     </div>
 
-                    {isPendingApproval ? (
-                      <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
-                        Awaiting coach approval
-                      </p>
-                    ) : (isBooked || isWaitlisted) && booking ? (
-                      <button
-                        onClick={() => handleCancel(session, booking)}
-                        disabled={busy}
-                        className="w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-                      >
-                        {busy ? "…" : isWaitlisted ? "Leave Waitlist" : "Cancel Booking"}
-                      </button>
+                    {alreadyBooked ? (
+                      isPendingApproval || (isInBookedBy && !isBooked) ? (
+                        <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                          Awaiting coach approval
+                        </p>
+                      ) : booking ? (
+                        <button
+                          onClick={() => handleCancel(session, booking)}
+                          disabled={busy}
+                          className="w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                        >
+                          {busy ? "…" : "Cancel Booking"}
+                        </button>
+                      ) : (
+                        <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#dbeafe", color: "#001c48" }}>
+                          Already registered
+                        </p>
+                      )
+                    ) : alreadyWaitlisted ? (
+                      booking ? (
+                        <button
+                          onClick={() => handleCancel(session, booking)}
+                          disabled={busy}
+                          className="w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                        >
+                          {busy ? "…" : "Leave Waitlist"}
+                        </button>
+                      ) : (
+                        <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                          You&apos;re on the waitlist
+                        </p>
+                      )
                     ) : !isFull ? (
                       <button
                         onClick={() => handleBook(session)}
