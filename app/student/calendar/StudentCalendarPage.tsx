@@ -87,6 +87,7 @@ export default function StudentCalendarPage() {
   const [viewYear, setViewYear] = useState(() => new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"available" | "bookings" | "pending">("available");
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -341,7 +342,8 @@ export default function StudentCalendarPage() {
     }
   }
 
-  const displayedSessions = selectedDate
+  // Tab-filtered session lists
+  const availableSessions = selectedDate
     ? sessions.filter(s => s.date === selectedDate)
     : sessions;
 
@@ -441,168 +443,209 @@ export default function StudentCalendarPage() {
         )}
       </div>
 
-      {/* Session list */}
-      <div className="px-4 py-4 space-y-3">
-        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          {selectedDate ? formatDisplayDate(selectedDate) : "Available Sessions"}
-        </h2>
-
-        {displayedSessions.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 py-10 text-center px-4">
-            <CalendarIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm text-gray-400">
-              {selectedDate ? "No sessions on this date." : "No upcoming sessions available."}
-            </p>
-          </div>
-        ) : (
-          displayedSessions.map(session => {
-            const booking = getStudentBooking(session.id);
-            const spotsLeft = session.maxCapacity - session.bookedBy.length;
-            const isFull = spotsLeft <= 0;
-            const isBooked = booking?.status === "confirmed";
-            const isWaitlisted = booking?.status === "waitlisted";
-            const isPendingApproval = booking?.status === "pending_approval";
-            const waitlistPos = isWaitlisted ? getWaitlistPosition(session) : 0;
-            const busy = actionLoading === session.id;
-
-            return (
-              <div key={session.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-gray-900 truncate">{session.title}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{session.coachName}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {formatDisplayDate(session.date)} · {formatTime(session.startTime)} – {formatTime(session.endTime)}
-                    </p>
-                    {session.location && <p className="text-xs text-gray-400">{session.location}</p>}
-                  </div>
-                  <span
-                    className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: "#001c48", color: "#01fff9" }}
-                  >
-                    {session.type === "individual" ? "1-on-1" : "Group"}
-                  </span>
-                </div>
-
-                <div className="mb-3">
-                  {isPendingApproval ? (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
-                      Pending Approval
-                    </span>
-                  ) : isBooked ? (
-                    <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
-                      Booked
-                    </span>
-                  ) : isWaitlisted ? (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
-                      Waitlist #{waitlistPos}
-                    </span>
-                  ) : isFull ? (
-                    <span className="text-xs text-gray-500">
-                      Full — {session.waitlist.length} on waitlist
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-500">
-                      {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} remaining
-                    </span>
-                  )}
-                </div>
-
-                {isPendingApproval ? (
-                  <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
-                    Awaiting coach approval
-                  </p>
-                ) : (isBooked || isWaitlisted) && booking ? (
-                  <button
-                    onClick={() => handleCancel(session, booking)}
-                    disabled={busy}
-                    className="w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-                  >
-                    {busy ? "…" : isWaitlisted ? "Leave Waitlist" : "Cancel Booking"}
-                  </button>
-                ) : !isFull ? (
-                  <button
-                    onClick={() => handleBook(session)}
-                    disabled={busy}
-                    className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
-                    style={{ backgroundColor: "#001c48" }}
-                  >
-                    {busy ? "…" : "Book"}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => handleBook(session)}
-                    disabled={busy}
-                    className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
-                    style={{ backgroundColor: "#f59e0b" }}
-                  >
-                    {busy ? "…" : "Join Waitlist"}
-                  </button>
-                )}
-              </div>
-            );
-          })
-        )}
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200 bg-white">
+        {(["available", "bookings", "pending"] as const).map(tab => {
+          const label = tab === "available" ? "Available" : tab === "bookings" ? "My Bookings" : "Pending";
+          const isActive = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className="flex-1 py-3 text-xs font-semibold transition border-b-2"
+              style={{
+                borderBottomColor: isActive ? "#001c48" : "transparent",
+                color: isActive ? "#001c48" : "#9ca3af",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* My Bookings */}
-      {confirmedBookings.length > 0 && (
-        <div className="px-4 pb-4 space-y-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">My Bookings</h2>
-          {confirmedBookings.map(b => {
-            const session = sessions.find(s => s.id === b.sessionId);
-            return (
-              <div key={b.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
-                    </p>
+      {/* Tab content */}
+      <div className="px-4 py-4 space-y-3">
+
+        {/* Available tab */}
+        {activeTab === "available" && (
+          <>
+            {selectedDate && (
+              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {formatDisplayDate(selectedDate)}
+              </h2>
+            )}
+            {availableSessions.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 py-10 text-center px-4">
+                <CalendarIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">
+                  {selectedDate ? `No sessions on ${formatDisplayDate(selectedDate)}.` : "No sessions available."}
+                </p>
+              </div>
+            ) : (
+              availableSessions.map(session => {
+                const booking = getStudentBooking(session.id);
+                const spotsLeft = session.maxCapacity - session.bookedBy.length;
+                const isFull = spotsLeft <= 0;
+                const isBooked = booking?.status === "confirmed";
+                const isWaitlisted = booking?.status === "waitlisted";
+                const isPendingApproval = booking?.status === "pending_approval";
+                const waitlistPos = isWaitlisted ? getWaitlistPosition(session) : 0;
+                const busy = actionLoading === session.id;
+
+                return (
+                  <div key={session.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-bold text-gray-900 truncate">{session.title}</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">{session.coachName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {formatDisplayDate(session.date)} · {formatTime(session.startTime)} – {formatTime(session.endTime)}
+                        </p>
+                        {session.location && <p className="text-xs text-gray-400">{session.location}</p>}
+                      </div>
+                      <span
+                        className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: "#001c48", color: "#01fff9" }}
+                      >
+                        {session.type === "individual" ? "1-on-1" : "Group"}
+                      </span>
+                    </div>
+
+                    <div className="mb-3">
+                      {isPendingApproval ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                          Pending Approval
+                        </span>
+                      ) : isBooked ? (
+                        <span className="text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                          Booked
+                        </span>
+                      ) : isWaitlisted ? (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                          Waitlist #{waitlistPos}
+                        </span>
+                      ) : isFull ? (
+                        <span className="text-xs text-gray-500">
+                          Full — {session.waitlist.length} on waitlist
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-500">
+                          {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} remaining
+                        </span>
+                      )}
+                    </div>
+
+                    {isPendingApproval ? (
+                      <p className="w-full py-2 text-xs font-semibold text-center rounded-lg" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                        Awaiting coach approval
+                      </p>
+                    ) : (isBooked || isWaitlisted) && booking ? (
+                      <button
+                        onClick={() => handleCancel(session, booking)}
+                        disabled={busy}
+                        className="w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                      >
+                        {busy ? "…" : isWaitlisted ? "Leave Waitlist" : "Cancel Booking"}
+                      </button>
+                    ) : !isFull ? (
+                      <button
+                        onClick={() => handleBook(session)}
+                        disabled={busy}
+                        className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
+                        style={{ backgroundColor: "#001c48" }}
+                      >
+                        {busy ? "…" : "Book"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleBook(session)}
+                        disabled={busy}
+                        className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
+                        style={{ backgroundColor: "#f59e0b" }}
+                      >
+                        {busy ? "…" : "Join Waitlist"}
+                      </button>
+                    )}
                   </div>
-                  <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
-                    Confirmed
-                  </span>
-                </div>
-                {session && (
-                  <button
-                    onClick={() => handleCancel(session, b)}
-                    disabled={actionLoading === session.id}
-                    className="mt-3 w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-                  >
-                    {actionLoading === session.id ? "…" : "Cancel"}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                );
+              })
+            )}
+          </>
+        )}
 
-      {/* Pending Approvals */}
-      {pendingBookings.length > 0 && (
-        <div className="px-4 pb-4 space-y-3">
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Pending Approval</h2>
-          {pendingBookings.map(b => (
-            <div key={b.id} className="bg-white rounded-xl border border-amber-200 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
-                  </p>
-                </div>
-                <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
-                  Pending
-                </span>
+        {/* My Bookings tab */}
+        {activeTab === "bookings" && (
+          <>
+            {confirmedBookings.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 py-10 text-center px-4">
+                <CalendarIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">No confirmed bookings yet.</p>
               </div>
-              <p className="text-xs text-gray-400 mt-2">Awaiting coach approval</p>
-            </div>
-          ))}
-        </div>
-      )}
+            ) : (
+              confirmedBookings.map(b => {
+                const session = sessions.find(s => s.id === b.sessionId);
+                return (
+                  <div key={b.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                        Confirmed
+                      </span>
+                    </div>
+                    {session && (
+                      <button
+                        onClick={() => handleCancel(session, b)}
+                        disabled={actionLoading === session.id}
+                        className="mt-3 w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                      >
+                        {actionLoading === session.id ? "…" : "Cancel"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
 
-      {/* My Waitlist */}
+        {/* Pending tab */}
+        {activeTab === "pending" && (
+          <>
+            {pendingBookings.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 py-10 text-center px-4">
+                <CalendarIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">No pending requests.</p>
+              </div>
+            ) : (
+              pendingBookings.map(b => (
+                <div key={b.id} className="bg-white rounded-xl border border-amber-200 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#92400e" }}>
+                      Pending Approval
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Awaiting coach approval</p>
+                </div>
+              ))
+            )}
+          </>
+        )}
+
+      </div>
+
+      {/* My Waitlist — shown outside tabs, always visible */}
       {waitlistedBookings.length > 0 && (
         <div className="px-4 pb-4 space-y-3">
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">My Waitlist</h2>

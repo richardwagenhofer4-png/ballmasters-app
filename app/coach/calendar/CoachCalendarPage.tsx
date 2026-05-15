@@ -613,6 +613,7 @@ export default function CoachCalendarPage() {
   const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
+  const [uid, setUid] = useState("");
   const [coachId, setCoachId] = useState("");
   const [coachName, setCoachName] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -624,10 +625,13 @@ export default function CoachCalendarPage() {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [showCreate, setShowCreate] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
+  const [activeTab, setActiveTab] = useState<"all" | "booked" | "pending">("all");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
+      setUid(user.uid);
       try {
         const profileSnap = await getDoc(doc(db, "users", user.uid));
         const data = profileSnap.data();
@@ -650,14 +654,22 @@ export default function CoachCalendarPage() {
           setCoaches(coachList);
         }
 
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
         const [sessionsSnap, bookingsSnap] = await Promise.all([
           getDocs(collection(db, "sessions")),
           getDocs(query(collection(db, "bookings"), where("coachId", "==", user.uid))),
         ]);
 
         const list: Session[] = sessionsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Session, "id">) }))
-          .filter(s => s.status !== "cancelled")
+          .map(d => ({
+            id: d.id,
+            ...(d.data() as Omit<Session, "id">),
+            bookedBy: d.data().bookedBy ?? [],
+            waitlist: d.data().waitlist ?? [],
+          }))
+          .filter(s => s.status !== "cancelled" && s.date >= todayStr)
           .sort((a, b) => {
             const da = a.date + "T" + a.startTime;
             const db2 = b.date + "T" + b.startTime;
@@ -666,7 +678,8 @@ export default function CoachCalendarPage() {
         setSessions(list);
 
         const bookingList: Booking[] = bookingsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }));
+          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
+          .filter(b => b.status !== "cancelled");
         setBookings(bookingList);
       } catch (err) {
         console.error("[coach/calendar]", err);
@@ -676,6 +689,37 @@ export default function CoachCalendarPage() {
     });
     return unsub;
   }, [router]);
+
+  async function handleRefresh() {
+    if (refreshing || !uid) return;
+    setRefreshing(true);
+    try {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const [sessionsSnap, bookingsSnap] = await Promise.all([
+        getDocs(collection(db, "sessions")),
+        getDocs(query(collection(db, "bookings"), where("coachId", "==", uid))),
+      ]);
+      const sessionList: Session[] = sessionsSnap.docs
+        .map(d => ({
+          id: d.id,
+          ...(d.data() as Omit<Session, "id">),
+          bookedBy: d.data().bookedBy ?? [],
+          waitlist: d.data().waitlist ?? [],
+        }))
+        .filter(s => s.status !== "cancelled" && s.date >= todayStr)
+        .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+      const bookingList: Booking[] = bookingsSnap.docs
+        .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
+        .filter(b => b.status !== "cancelled");
+      setSessions(sessionList);
+      setBookings(bookingList);
+    } catch (err) {
+      console.error("[refresh]", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -702,7 +746,6 @@ export default function CoachCalendarPage() {
   async function handleApproveBooking(booking: Booking) {
     try {
       await updateDoc(doc(db, "bookings", booking.id), { status: "confirmed" });
-      // TODO: send push notification to student about approval
       console.log("[approve booking] Push notification would be sent to student:", booking.studentId);
       setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "confirmed" } : b));
       if (selectedSession) {
@@ -728,7 +771,6 @@ export default function CoachCalendarPage() {
           setSelectedSession(updatedSession);
         }
       }
-      // TODO: send push notification to student about decline
       console.log("[decline booking] Push notification would be sent to student:", booking.studentId);
       setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "declined" } : b));
     } catch (err) {
@@ -736,9 +778,25 @@ export default function CoachCalendarPage() {
     }
   }
 
-  const displayedSessions = selectedDate
-    ? sessions.filter(s => s.date === selectedDate)
-    : sessions;
+  // Tab-filtered session lists (selectedDate applies on top)
+  const baseSessions = selectedDate ? sessions.filter(s => s.date === selectedDate) : sessions;
+
+  const allTabSessions = baseSessions;
+  const bookedTabSessions = baseSessions.filter(s => s.bookedBy.length > 0);
+  const pendingTabSessions = baseSessions.filter(s =>
+    bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")
+  );
+
+  const tabSessions =
+    activeTab === "all" ? allTabSessions :
+    activeTab === "booked" ? bookedTabSessions :
+    pendingTabSessions;
+
+  const emptyMessages: Record<"all" | "booked" | "pending", string> = {
+    all: "No upcoming sessions",
+    booked: "No sessions with bookings",
+    pending: "No pending approvals",
+  };
 
   if (loading) {
     return (
@@ -757,16 +815,32 @@ export default function CoachCalendarPage() {
       <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center justify-between mb-3">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-            style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Create Session
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="p-2 rounded-lg transition hover:opacity-80 disabled:opacity-50"
+              style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+              title="Refresh"
+            >
+              <svg
+                className={`h-4 w-4 text-white ${refreshing ? "animate-spin" : ""}`}
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              Create Session
+            </button>
+          </div>
         </div>
         <h1 className="text-2xl font-extrabold text-white leading-tight">Calendar</h1>
         <p className="text-xs mt-0.5" style={{ color: "#01fff9" }}>{sessions.length} upcoming session{sessions.length !== 1 ? "s" : ""}</p>
@@ -843,6 +917,27 @@ export default function CoachCalendarPage() {
         )}
       </div>
 
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200 bg-white">
+        {(["all", "booked", "pending"] as const).map(tab => {
+          const label = tab === "all" ? "All Sessions" : tab === "booked" ? "Booked" : "Pending";
+          const isActive = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className="flex-1 py-3 text-xs font-semibold transition border-b-2"
+              style={{
+                borderBottomColor: isActive ? "#001c48" : "transparent",
+                color: isActive ? "#001c48" : "#9ca3af",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Session list */}
       <div className="px-4 py-4 space-y-3">
         {selectedDate && (
@@ -851,22 +946,24 @@ export default function CoachCalendarPage() {
           </p>
         )}
 
-        {displayedSessions.length === 0 ? (
+        {tabSessions.length === 0 ? (
           <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 py-12 text-center px-4">
             <CalendarIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
             <p className="text-sm font-medium text-gray-500 mb-4">
-              {selectedDate ? "No sessions on this date" : "No upcoming sessions"}
+              {selectedDate ? `No sessions on this date` : emptyMessages[activeTab]}
             </p>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition"
-              style={{ backgroundColor: "#001c48" }}
-            >
-              Create a session
-            </button>
+            {activeTab === "all" && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition"
+                style={{ backgroundColor: "#001c48" }}
+              >
+                Create a session
+              </button>
+            )}
           </div>
         ) : (
-          displayedSessions.map(s => {
+          tabSessions.map(s => {
             const color = sessionStatusColor(s);
             const label = sessionStatusLabel(s);
             const hasPending = bookings.some(b => b.sessionId === s.id && b.status === "pending_approval");
