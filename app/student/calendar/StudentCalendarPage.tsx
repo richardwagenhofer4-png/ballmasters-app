@@ -10,6 +10,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   query,
   runTransaction,
   updateDoc,
@@ -92,7 +93,12 @@ export default function StudentCalendarPage() {
   const [cancelPendingConfirmId, setCancelPendingConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    let unsubBookings: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      // Cancel the previous bookings listener whenever auth state changes
+      if (unsubBookings) { unsubBookings(); unsubBookings = null; }
+
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
       setStudentEmail(user.email ?? "");
@@ -100,7 +106,7 @@ export default function StudentCalendarPage() {
       const today = new Date();
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-      // Load sessions independently so a bookings error can't blank the session list
+      // Load profile + sessions once (sessions are infrequently updated; use refresh button for those)
       try {
         const [profileSnap, sessionsSnap] = await Promise.all([
           getDoc(doc(db, "users", user.uid)),
@@ -110,7 +116,6 @@ export default function StudentCalendarPage() {
         const profileData = profileSnap.data();
         setStudentName(profileData?.fullName ?? profileData?.name ?? user.displayName ?? "Athlete");
 
-        // Normalize missing arrays so session cards never throw on .length
         const sessionList: Session[] = sessionsSnap.docs
           .map(d => {
             const data = d.data();
@@ -129,22 +134,28 @@ export default function StudentCalendarPage() {
         console.error("[student/calendar] sessions load failed:", err);
       }
 
-      // Load the student's own bookings separately
-      try {
-        const bookingsSnap = await getDocs(
-          query(collection(db, "bookings"), where("studentId", "==", user.uid))
-        );
-        const bookingList: Booking[] = bookingsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
-          .filter(b => b.status !== "cancelled");
-        setBookings(bookingList);
-      } catch (err) {
-        console.error("[student/calendar] bookings load failed:", err);
-      }
-
-      setLoading(false);
+      // Real-time listener for this student's bookings — fires immediately on load
+      // and again whenever the coach approves/declines, no manual refresh needed
+      unsubBookings = onSnapshot(
+        query(collection(db, "bookings"), where("studentId", "==", user.uid)),
+        (snap) => {
+          const bookingList: Booking[] = snap.docs
+            .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
+            .filter(b => b.status !== "cancelled");
+          setBookings(bookingList);
+          setLoading(false);
+        },
+        (err) => {
+          console.error("[student/calendar] bookings listener error:", err);
+          setLoading(false);
+        }
+      );
     });
-    return unsub;
+
+    return () => {
+      unsubAuth();
+      if (unsubBookings) unsubBookings();
+    };
   }, [router]);
 
   async function handleRefresh() {
@@ -162,12 +173,7 @@ export default function StudentCalendarPage() {
         .filter(s => s.status !== "cancelled" && s.date >= todayStr)
         .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
       setSessions(sessionList);
-
-      const bookingsSnap = await getDocs(query(collection(db, "bookings"), where("studentId", "==", uid)));
-      const bookingList: Booking[] = bookingsSnap.docs
-        .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
-        .filter(b => b.status !== "cancelled");
-      setBookings(bookingList);
+      // Bookings update automatically via onSnapshot — no manual fetch needed
     } catch (err) {
       console.error("[student/calendar] refresh failed:", err);
     } finally {
@@ -373,9 +379,17 @@ export default function StudentCalendarPage() {
   }
 
   // Tab-filtered session lists
-  const availableSessions = selectedDate
+  // Available tab only shows sessions the student has NOT yet registered for.
+  // Sessions with any active booking, or where the student's uid appears in
+  // bookedBy/waitlist arrays, are excluded — they appear in My Bookings/Pending/Waitlist.
+  const availableSessions = (selectedDate
     ? sessions.filter(s => s.date === selectedDate)
-    : sessions;
+    : sessions
+  ).filter(s =>
+    !bookings.some(b => b.sessionId === s.id) &&
+    !s.bookedBy.some(b => b.uid === uid) &&
+    !s.waitlist.some(w => w.uid === uid)
+  );
 
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const waitlistedBookings = bookings.filter(b => b.status === "waitlisted");
