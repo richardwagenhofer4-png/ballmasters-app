@@ -806,16 +806,46 @@ export default function CoachCalendarPage() {
   }
 
   async function handleApproveBooking(booking: Booking, message: string) {
+    console.log("[approve] ▶ called with:", {
+      bookingId: booking.id,
+      sessionId: booking.sessionId,
+      studentId: booking.studentId,
+      currentStatus: booking.status,
+      message: message || "(none)",
+    });
+
     try {
-      const update: Record<string, string> = { status: "confirmed" };
-      if (message.trim()) update.approvalMessage = message.trim();
-      await updateDoc(doc(db, "bookings", booking.id), update);
-      console.log("[approve booking] Push notification would be sent to student:", booking.studentId);
-      setBookings(prev => prev.map(b =>
-        b.id === booking.id ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
-      ));
+      // Verify the booking doc exists before updating
+      const verifyQuery = query(
+        collection(db, "bookings"),
+        where("sessionId", "==", booking.sessionId),
+        where("studentId", "==", booking.studentId),
+        where("status", "==", "pending_approval")
+      );
+      console.log("[approve] querying bookings where sessionId ==", booking.sessionId, "AND studentId ==", booking.studentId, "AND status == pending_approval");
+      const verifySnap = await getDocs(verifyQuery);
+      console.log("[approve] query found", verifySnap.size, "doc(s):");
+      verifySnap.forEach(d => console.log("  doc id:", d.id, "| status:", d.data().status, "| matches booking.id:", d.id === booking.id));
+
+      if (booking.id === verifySnap.docs[0]?.id || verifySnap.size > 0) {
+        // Use the ID from the query result as a safeguard if they differ
+        const docId = verifySnap.size > 0 ? verifySnap.docs[0].id : booking.id;
+        if (docId !== booking.id) {
+          console.warn("[approve] ⚠ booking.id mismatch — state has", booking.id, "but query found", docId, "— using query result");
+        }
+        const update: Record<string, string> = { status: "confirmed" };
+        if (message.trim()) update.approvalMessage = message.trim();
+        console.log("[approve] updateDoc path: bookings/", docId, "| payload:", update);
+        await updateDoc(doc(db, "bookings", docId), update);
+        console.log("[approve] ✓ updateDoc succeeded");
+        setBookings(prev => prev.map(b =>
+          b.id === docId ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
+        ));
+      } else {
+        console.error("[approve] ✗ no matching pending_approval booking found in Firestore — cannot update");
+      }
     } catch (err) {
-      console.error("[approve booking]", err);
+      console.error("[approve] ✗ error:", err);
     }
   }
 
