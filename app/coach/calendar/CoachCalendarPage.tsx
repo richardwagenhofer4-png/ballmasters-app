@@ -723,7 +723,15 @@ export default function CoachCalendarPage() {
             .filter(b => b.status !== "cancelled");
           console.log("[coach/calendar] bookings snapshot:", bookingList.length, "total, pending:", bookingList.filter(b => b.status === "pending_approval").length);
           bookingList.forEach(b => console.log("  →", b.id, "| status:", b.status, "| coachId:", b.coachId, "| sessionId:", b.sessionId, "| student:", b.studentId));
-          setBookings(bookingList);
+          setBookings(prev => {
+            // For any booking already confirmed locally, don't downgrade it back to pending_approval
+            // from a snapshot that may be slightly behind the Firestore write
+            return bookingList.map(b => {
+              const existing = prev.find(p => p.id === b.id);
+              if (existing?.status === "confirmed" && b.status === "pending_approval") return existing;
+              return b;
+            });
+          });
           setLoading(false);
         }, (err) => {
           console.error("[coach/calendar] bookings listener error:", err);
