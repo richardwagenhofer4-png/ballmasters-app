@@ -80,19 +80,6 @@ function confirmedBookedCount(session: Session, bookings: Booking[]): number {
   return Math.max(0, session.bookedBy.length - pending);
 }
 
-function sessionStatusColor(s: Session, confirmedBooked: number): string {
-  if (s.waitlist.length > 0) return "#a855f7";
-  if (confirmedBooked >= s.maxCapacity) return "#ef4444";
-  if (confirmedBooked / s.maxCapacity >= 0.75) return "#f59e0b";
-  return "#22c55e";
-}
-
-function sessionStatusLabel(s: Session, confirmedBooked: number): string {
-  if (s.waitlist.length > 0) return "Waitlist";
-  if (confirmedBooked >= s.maxCapacity) return "Full";
-  if (confirmedBooked / s.maxCapacity >= 0.75) return "Nearly Full";
-  return "Available";
-}
 
 // ---------------------------------------------------------------------------
 // Create Session Modal
@@ -1065,9 +1052,9 @@ export default function CoachCalendarPage() {
         ) : (
           tabSessions.map(s => {
             const confirmed = confirmedBookedCount(s, bookings);
-            const color = sessionStatusColor(s, confirmed);
-            const label = sessionStatusLabel(s, confirmed);
             const pendingCount = bookings.filter(b => b.sessionId === s.id && b.status === "pending_approval").length;
+            const isFull = s.status === "full" || confirmed >= s.maxCapacity;
+            const barColor = isFull ? "#ef4444" : confirmed > 0 ? "#001c48" : pendingCount > 0 ? "#f59e0b" : "#22c55e";
             return (
               <button
                 key={s.id}
@@ -1091,12 +1078,19 @@ export default function CoachCalendarPage() {
                         {pendingCount} Pending
                       </span>
                     )}
-                    <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: `${color}20`, color }}
-                    >
-                      {label}
-                    </span>
+                    {isFull ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#fee2e2", color: "#ef4444" }}>
+                        Full
+                      </span>
+                    ) : confirmed > 0 ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#001c4815", color: "#001c48" }}>
+                        {confirmed}/{s.maxCapacity} Booked
+                      </span>
+                    ) : pendingCount === 0 ? (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#dcfce7", color: "#16a34a" }}>
+                        Available
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1105,7 +1099,7 @@ export default function CoachCalendarPage() {
                       className="h-full rounded-full"
                       style={{
                         width: `${Math.min(100, (confirmed / s.maxCapacity) * 100)}%`,
-                        backgroundColor: color,
+                        backgroundColor: barColor,
                       }}
                     />
                   </div>
