@@ -46,13 +46,16 @@ export default function LoginPage() {
     setGoogleLoading(true);
     getRedirectResult(auth)
       .then(async (credential) => {
+        console.log("[Google redirect result]", credential ? "got credential" : "null - no redirect result");
         if (credential) {
           await afterLogin(credential.user.uid);
         }
       })
       .catch((err: unknown) => {
         const code = (err as { code?: string }).code ?? "";
-        setError(getErrorMessage(code));
+        const message = (err as { message?: string }).message ?? "";
+        console.error("[Google redirect error] code:", code, "message:", message);
+        setError(`${code}: ${message}`);
       })
       .finally(() => setGoogleLoading(false));
   }, []);
