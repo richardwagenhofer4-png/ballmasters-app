@@ -666,7 +666,7 @@ export default function CoachCalendarPage() {
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth());
   const [showCreate, setShowCreate] = useState(false);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [activeTab, setActiveTab] = useState<"all" | "booked" | "pending">("all");
+  const [activeTab, setActiveTab] = useState<"all" | "available" | "booked" | "pending">("all");
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -860,8 +860,13 @@ export default function CoachCalendarPage() {
   const baseSessions = selectedDate ? sessions.filter(s => s.date === selectedDate) : sessions;
 
   const allTabSessions = baseSessions;
+  const availableTabSessions = baseSessions.filter(s => {
+    const confirmed = confirmedBookedCount(s, bookings);
+    const pending = bookings.filter(b => b.sessionId === s.id && b.status === "pending_approval").length;
+    return confirmed === 0 && pending === 0;
+  });
   const bookedTabSessions = baseSessions.filter(s =>
-    bookings.some(b => b.sessionId === s.id && b.status === "confirmed")
+    confirmedBookedCount(s, bookings) > 0
   );
   const pendingTabSessions = baseSessions.filter(s =>
     bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")
@@ -869,11 +874,13 @@ export default function CoachCalendarPage() {
 
   const tabSessions =
     activeTab === "all" ? allTabSessions :
+    activeTab === "available" ? availableTabSessions :
     activeTab === "booked" ? bookedTabSessions :
     pendingTabSessions;
 
-  const emptyMessages: Record<"all" | "booked" | "pending", string> = {
+  const emptyMessages: Record<"all" | "available" | "booked" | "pending", string> = {
     all: "No upcoming sessions",
+    available: "No empty sessions",
     booked: "No sessions with bookings",
     pending: "No pending approvals",
   };
@@ -999,14 +1006,13 @@ export default function CoachCalendarPage() {
 
       {/* Tab bar */}
       <div className="flex border-b border-gray-200 bg-white">
-        {(["all", "booked", "pending"] as const).map(tab => {
+        {(["all", "available", "booked", "pending"] as const).map(tab => {
           const allCount = sessions.length;
-          const bookedCount = sessions.filter(s =>
-            bookings.some(b => b.sessionId === s.id && b.status === "confirmed")
-          ).length;
-          const pendingCount = sessions.filter(s => bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")).length;
-          const count = tab === "all" ? allCount : tab === "booked" ? bookedCount : pendingCount;
-          const baseLabel = tab === "all" ? "All Sessions" : tab === "booked" ? "Booked" : "Pending Approval";
+          const availableCount = availableTabSessions.length;
+          const bookedCount = bookedTabSessions.length;
+          const pendingCount = pendingTabSessions.length;
+          const count = tab === "all" ? allCount : tab === "available" ? availableCount : tab === "booked" ? bookedCount : pendingCount;
+          const baseLabel = tab === "all" ? "All Sessions" : tab === "available" ? "Available" : tab === "booked" ? "Booked" : "Pending Approval";
           const label = `${baseLabel} (${count})`;
           const isActive = activeTab === tab;
           return (
