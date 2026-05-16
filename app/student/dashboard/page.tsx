@@ -416,7 +416,7 @@ export default function StudentDashboard() {
                                 Watched
                               </span>
                             ) : (
-                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}>
+                              <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#01fff9", color: "#001c48" }}>
                                 New
                               </span>
                             )}

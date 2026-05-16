@@ -149,7 +149,7 @@ export default function StudentVideosPage() {
                         {!watched ? (
                           <span
                             className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}
+                            style={{ backgroundColor: "#01fff9", color: "#001c48" }}
                           >
                             New
                           </span>
