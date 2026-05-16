@@ -826,6 +826,16 @@ export default function CoachCalendarPage() {
         setBookings(prev => prev.map(b =>
           b.id === docId ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
         ));
+
+        // Update session status based on bookedBy length now that this entry is confirmed
+        const sessionToUpdate = sessions.find(s => s.id === booking.sessionId);
+        if (sessionToUpdate) {
+          const newStatus = sessionToUpdate.bookedBy.length >= sessionToUpdate.maxCapacity ? "full" : "available";
+          await updateDoc(doc(db, "sessions", booking.sessionId), { status: newStatus });
+          const updatedSession: Session = { ...sessionToUpdate, status: newStatus };
+          setSessions(prev => prev.map(s => s.id === booking.sessionId ? updatedSession : s));
+          if (selectedSession?.id === booking.sessionId) setSelectedSession(updatedSession);
+        }
       } else {
         console.error("[approve] ✗ no matching pending_approval booking found in Firestore — cannot update");
       }
