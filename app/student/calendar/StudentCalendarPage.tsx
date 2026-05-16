@@ -213,6 +213,7 @@ export default function StudentCalendarPage() {
   }
 
   async function handleBook(session: Session) {
+    if (actionLoading === session.id) return;
     setActionLoading(session.id);
     try {
       const now = new Date().toISOString();
@@ -260,6 +261,16 @@ export default function StudentCalendarPage() {
           bookingStatus = "waitlisted";
         }
       });
+
+      const dupeSnap = await getDocs(query(
+        collection(db, "bookings"),
+        where("sessionId", "==", session.id),
+        where("studentId", "==", uid)
+      ));
+      if (dupeSnap.docs.some(d => {
+        const s = d.data().status;
+        return s === "confirmed" || s === "pending_approval" || s === "waitlisted";
+      })) throw new Error("Duplicate booking prevented");
 
       const bookingRef = await addDoc(collection(db, "bookings"), {
         sessionId: session.id,
@@ -405,7 +416,6 @@ export default function StudentCalendarPage() {
     return true;
   });
 
-  console.log("[debug] sessions:", sessions.map(s => ({ id: s.id, bookedBy: s.bookedBy })), "bookings:", bookings, "uid:", uid, "availableSessions:", availableSessions.map(s => s.id));
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const waitlistedBookings = bookings.filter(b => b.status === "waitlisted");
   const pendingBookings = bookings.filter(b => b.status === "pending_approval");
@@ -652,7 +662,7 @@ export default function StudentCalendarPage() {
                     ) : !isFull ? (
                       <button
                         onClick={() => handleBook(session)}
-                        disabled={busy}
+                        disabled={actionLoading !== null}
                         className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
                         style={{ backgroundColor: "#001c48" }}
                       >
@@ -661,7 +671,7 @@ export default function StudentCalendarPage() {
                     ) : (
                       <button
                         onClick={() => handleBook(session)}
-                        disabled={busy}
+                        disabled={actionLoading !== null}
                         className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
                         style={{ backgroundColor: "#f59e0b" }}
                       >
