@@ -220,6 +220,19 @@ export default function StudentCalendarPage() {
       const isLastMinute = (sessionStart.getTime() - Date.now()) < 24 * 60 * 60 * 1000;
       let bookingStatus: "confirmed" | "waitlisted" | "pending_approval" = "confirmed";
 
+      // Guard: check for existing active booking doc before transacting
+      const existingQ = query(
+        collection(db, "bookings"),
+        where("sessionId", "==", session.id),
+        where("studentId", "==", uid)
+      );
+      const existingSnap = await getDocs(existingQ);
+      const hasActive = existingSnap.docs.some(d => {
+        const s = d.data().status;
+        return s === "confirmed" || s === "pending_approval" || s === "waitlisted";
+      });
+      if (hasActive) throw new Error("Already booked");
+
       await runTransaction(db, async (tx) => {
         const sessionRef = doc(db, "sessions", session.id);
         const snap = await tx.get(sessionRef);
