@@ -75,6 +75,18 @@ function getFirstDayOfMonth(year: number, month: number): number {
   return new Date(year, month, 1).getDay();
 }
 
+function generateSessionTitle(startTime: string, coachName: string): string {
+  const [hourStr] = startTime.split(":");
+  const hour = parseInt(hourStr, 10);
+  const timeOfDay =
+    hour < 12 ? "Morning" :
+    hour < 17 ? "Afternoon" :
+    hour < 20 ? "Evening" :
+    "Night";
+  const firstName = coachName.split(" ")[0];
+  return `${timeOfDay} Session with Coach ${firstName}`;
+}
+
 // confirmedBooked excludes pending_approval entries so capacity reflects only approved bookings
 function confirmedBookedCount(session: Session, bookings: Booking[]): number {
   const pending = bookings.filter(b => b.sessionId === session.id && b.status === "pending_approval").length;
@@ -135,7 +147,6 @@ interface CreateSessionModalProps {
 }
 
 function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, coaches }: CreateSessionModalProps) {
-  const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState(() => nextQuarterHour());
   const [endTime, setEndTime] = useState(() => addOneHour(nextQuarterHour()));
@@ -149,8 +160,8 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
   const [selectedCoachName, setSelectedCoachName] = useState("");
 
   async function handleSubmit() {
-    if (!title.trim() || !date || !startTime || !endTime) {
-      setError("Session name, date, start time and end time are required.");
+    if (!date || !startTime || !endTime) {
+      setError("Date, start time and end time are required.");
       return;
     }
     if (date < todayDateStr()) {
@@ -165,7 +176,7 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
       const effectiveCoachId = (isAdmin && selectedCoachId) ? selectedCoachId : coachId;
       const effectiveCoachName = (isAdmin && selectedCoachName) ? selectedCoachName : coachName;
       const data = {
-        title: title.trim(),
+        title: generateSessionTitle(startTime, effectiveCoachName),
         coachId: effectiveCoachId,
         coachName: effectiveCoachName,
         type,
@@ -205,19 +216,6 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
 
         <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Session Name *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Morning Training, 1-on-1 with Coach Lukas, Group Beginners"
-              className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none"
-              onFocus={e => (e.target.style.borderColor = "#001c48")}
-              onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
-            />
-          </div>
 
           {isAdmin && coaches.length > 0 && (
             <div>
