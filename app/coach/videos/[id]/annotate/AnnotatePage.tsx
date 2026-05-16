@@ -74,6 +74,8 @@ export default function AnnotatePage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<string | null>(null);
+  const [showDoneModal, setShowDoneModal] = useState(false);
   const [textInput, setTextInput] = useState({ x: 0, y: 0, visible: false });
   const [textValue, setTextValue] = useState("");
   const [voiceover, setVoiceover] = useState<VoiceoverMeta | null>(null);
@@ -316,6 +318,8 @@ export default function AnnotatePage() {
           ? prev.map((a, i) => (i === idx ? updated : a))
           : [...prev, updated].sort((a, b) => a.timestamp - b.timestamp);
       });
+      setToast(`Annotation saved at ${fmt(t)}`);
+      setTimeout(() => setToast(null), 2000);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -620,13 +624,13 @@ export default function AnnotatePage() {
           >
             Preview
           </button>
-          <Link
-            href="/coach/dashboard"
+          <button
+            onClick={() => setShowDoneModal(true)}
             className="text-sm font-semibold transition"
             style={{ color: "#4ade80" }}
           >
             Done →
-          </Link>
+          </button>
         </div>
       </div>
 
@@ -971,6 +975,116 @@ export default function AnnotatePage() {
           />
         )}
       </div>
+      {/* Save toast */}
+      {toast && (
+        <div
+          style={{
+            position: "fixed",
+            top: 16,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 60,
+            backgroundColor: "#001c48",
+            color: "#01fff9",
+            borderRadius: "9999px",
+            padding: "8px 20px",
+            fontSize: "13px",
+            fontWeight: 600,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+          }}
+        >
+          ✓ {toast}
+        </div>
+      )}
+
+      {/* Done confirmation modal */}
+      {showDoneModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.75)",
+            zIndex: 55,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: "white",
+              borderRadius: "20px",
+              padding: "32px 24px",
+              width: "100%",
+              maxWidth: "360px",
+              textAlign: "center",
+            }}
+          >
+            {/* Checkmark */}
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: "50%",
+                backgroundColor: "rgba(1,255,249,0.12)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                margin: "0 auto 16px",
+              }}
+            >
+              <svg style={{ width: 32, height: 32, color: "#001c48" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h2 style={{ fontSize: "20px", fontWeight: 800, color: "#001c48", marginBottom: "8px" }}>
+              Annotations saved!
+            </h2>
+            <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "24px" }}>
+              Your annotations are live on this video.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                onClick={() => window.open(`/student/videos/${id}`, "_blank")}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  backgroundColor: "#001c48",
+                  color: "white",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+              >
+                Preview as Student
+              </button>
+              <Link
+                href="/coach/videos"
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "10px",
+                  border: "1.5px solid #d1d5db",
+                  color: "#374151",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  textDecoration: "none",
+                  boxSizing: "border-box",
+                }}
+              >
+                Back to Videos
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Full-screen preview overlay */}
       {previewMode && (
         <div
