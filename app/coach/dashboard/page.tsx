@@ -260,21 +260,25 @@ export default function CoachDashboard() {
     {
       label: "Students",
       value: students.length,
+      href: "/coach/students",
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" /></svg>,
     },
     {
       label: "Videos",
       value: videos.length,
+      href: "/coach/videos",
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>,
     },
     {
       label: "Watch Rate",
       value: `${overallWatchRate}%`,
+      href: "/coach/videos",
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" /></svg>,
     },
     {
       label: "Unread",
       value: unreadCount,
+      href: "/coach/videos",
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>,
     },
   ];
@@ -317,15 +321,21 @@ export default function CoachDashboard() {
         {/* Stats */}
         <div className="grid grid-cols-4 gap-2">
           {statCards.map(s => (
-            <div
+            <Link
               key={s.label}
-              className="rounded-xl text-center py-3 px-1"
-              style={{ backgroundColor: "rgba(255,255,255,0.12)" }}
+              href={s.href}
+              className="rounded-xl text-center py-3 px-1 transition-all hover:brightness-125 active:brightness-110"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.12)",
+                border: "1px solid transparent",
+              }}
+              onMouseEnter={e => ((e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(1,255,249,0.4)")}
+              onMouseLeave={e => ((e.currentTarget as HTMLAnchorElement).style.borderColor = "transparent")}
             >
               {s.icon}
               <div className="text-lg font-extrabold text-white leading-none">{s.value}</div>
               <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>{s.label}</div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
