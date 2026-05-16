@@ -73,6 +73,7 @@ export default function VideoPlayerPage() {
   const [voiceoverActive, setVoiceoverActive] = useState(false);
   const [userName, setUserName] = useState("");
   const [reactions, setReactions] = useState<Record<string, string>>({});
+  const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const hasRecordedView = useRef(false);
   const voiceoverAudioRef = useRef<HTMLAudioElement | null>(null);
   const reactionsUnsubRef = useRef<(() => void) | null>(null);
@@ -158,18 +159,39 @@ export default function VideoPlayerPage() {
     return unsub;
   }, [id, router]);
 
-  // Keep canvas sized to video element
+  // Keep canvas sized to the actual video content area (excludes letterbox bars)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const obs = new ResizeObserver(() => {
-      if (canvasRef.current) {
-        canvasRef.current.width = video.clientWidth;
-        canvasRef.current.height = video.clientHeight;
+    const updateCanvas = () => {
+      if (!canvasRef.current || !video.videoWidth) return;
+      const rect = video.getBoundingClientRect();
+      const videoAspect = video.videoWidth / video.videoHeight;
+      const containerAspect = rect.width / rect.height;
+      let drawW: number, drawH: number;
+      if (videoAspect < containerAspect) {
+        drawH = rect.height;
+        drawW = drawH * videoAspect;
+      } else {
+        drawW = rect.width;
+        drawH = drawW / videoAspect;
       }
-    });
+      canvasRef.current.width = drawW;
+      canvasRef.current.height = drawH;
+      canvasRef.current.style.width = drawW + "px";
+      canvasRef.current.style.height = drawH + "px";
+      canvasRef.current.style.position = "absolute";
+      canvasRef.current.style.left = ((rect.width - drawW) / 2) + "px";
+      canvasRef.current.style.top = ((rect.height - drawH) / 2) + "px";
+      setCanvasSize({ w: drawW, h: drawH });
+    };
+    const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
-    return () => obs.disconnect();
+    video.addEventListener("loadedmetadata", updateCanvas);
+    return () => {
+      obs.disconnect();
+      video.removeEventListener("loadedmetadata", updateCanvas);
+    };
   }, [videoUrl]);
 
   // Voiceover + reactions cleanup
@@ -181,7 +203,7 @@ export default function VideoPlayerPage() {
     };
   }, []);
 
-  // Render active annotation on canvas
+  // Render active annotation on canvas — reruns on resize so annotations track the video content area
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -191,7 +213,7 @@ export default function VideoPlayerPage() {
     if (activeAnnotation) {
       renderAnnotations(ctx, activeAnnotation.drawings, canvas.width, canvas.height);
     }
-  }, [activeAnnotation]);
+  }, [activeAnnotation, canvasSize]);
 
   async function toggleReaction(emoji: string) {
     if (!uid) return;
