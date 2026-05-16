@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
@@ -835,12 +836,16 @@ export default function CoachCalendarPage() {
           ? { ...sessionToUpdate, status: newSessionStatus as Session["status"] }
           : null;
 
-        setBookings(prev => prev.map(b =>
-          b.id === docId ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
-        ));
+        flushSync(() => {
+          setBookings(prev => prev.map(b =>
+            b.id === docId ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
+          ));
+          if (updatedSession) {
+            setSessions(prev => prev.map(s => s.id === booking.sessionId ? updatedSession : s));
+            if (selectedSession?.id === booking.sessionId) setSelectedSession(updatedSession);
+          }
+        });
         if (updatedSession) {
-          setSessions(prev => prev.map(s => s.id === booking.sessionId ? updatedSession : s));
-          if (selectedSession?.id === booking.sessionId) setSelectedSession(updatedSession);
           await updateDoc(doc(db, "sessions", booking.sessionId), { status: newSessionStatus });
         }
       } else {
