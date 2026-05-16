@@ -392,6 +392,7 @@ export default function StudentCalendarPage() {
     return true;
   });
 
+  console.log("[debug] sessions:", sessions.map(s => ({ id: s.id, bookedBy: s.bookedBy })), "bookings:", bookings, "uid:", uid, "availableSessions:", availableSessions.map(s => s.id));
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const waitlistedBookings = bookings.filter(b => b.status === "waitlisted");
   const pendingBookings = bookings.filter(b => b.status === "pending_approval");
