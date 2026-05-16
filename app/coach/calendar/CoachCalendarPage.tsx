@@ -790,6 +790,12 @@ export default function CoachCalendarPage() {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
     else setViewMonth(m => m - 1);
   }
+  useEffect(() => {
+    if (!selectedSession) return;
+    const updated = sessions.find(s => s.id === selectedSession.id);
+    if (updated) setSelectedSession(updated);
+  }, [sessions]);
+
   function nextMonth() {
     if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
     else setViewMonth(m => m + 1);
