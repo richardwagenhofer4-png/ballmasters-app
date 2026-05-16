@@ -670,9 +670,11 @@ export default function CoachCalendarPage() {
 
   useEffect(() => {
     let unsubBookings: (() => void) | null = null;
+    let unsubSessions: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (unsubBookings) { unsubBookings(); unsubBookings = null; }
+      if (unsubSessions) { unsubSessions(); unsubSessions = null; }
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
       try {
@@ -700,17 +702,21 @@ export default function CoachCalendarPage() {
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-        const sessionsSnap = await getDocs(collection(db, "sessions"));
-        const list: Session[] = sessionsSnap.docs
-          .map(d => ({
-            id: d.id,
-            ...(d.data() as Omit<Session, "id">),
-            bookedBy: d.data().bookedBy ?? [],
-            waitlist: d.data().waitlist ?? [],
-          }))
-          .filter(s => s.status !== "cancelled" && s.date >= todayStr)
-          .sort((a, b) => (a.date + "T" + a.startTime).localeCompare(b.date + "T" + b.startTime));
-        setSessions(list);
+        // Real-time listener for sessions — picks up status changes (e.g. full after approval)
+        unsubSessions = onSnapshot(collection(db, "sessions"), (snap) => {
+          const list: Session[] = snap.docs
+            .map(d => ({
+              id: d.id,
+              ...(d.data() as Omit<Session, "id">),
+              bookedBy: d.data().bookedBy ?? [],
+              waitlist: d.data().waitlist ?? [],
+            }))
+            .filter(s => s.status !== "cancelled" && s.date >= todayStr)
+            .sort((a, b) => (a.date + "T" + a.startTime).localeCompare(b.date + "T" + b.startTime));
+          setSessions(list);
+        }, (err) => {
+          console.error("[coach/calendar] sessions listener error:", err);
+        });
 
         // Real-time listener: admins see all bookings, coaches see their own
         const bookingsQ = userIsAdmin
@@ -747,6 +753,7 @@ export default function CoachCalendarPage() {
     return () => {
       unsubAuth();
       if (unsubBookings) unsubBookings();
+      if (unsubSessions) unsubSessions();
     };
   }, [router]);
 
@@ -754,20 +761,15 @@ export default function CoachCalendarPage() {
     if (refreshing || !uid) return;
     setRefreshing(true);
     try {
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const sessionsSnap = await getDocs(collection(db, "sessions"));
-      const sessionList: Session[] = sessionsSnap.docs
-        .map(d => ({
-          id: d.id,
-          ...(d.data() as Omit<Session, "id">),
-          bookedBy: d.data().bookedBy ?? [],
-          waitlist: d.data().waitlist ?? [],
-        }))
-        .filter(s => s.status !== "cancelled" && s.date >= todayStr)
-        .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-      setSessions(sessionList);
-      // Bookings update automatically via onSnapshot — no manual fetch needed
+      // Sessions and bookings update automatically via onSnapshot listeners.
+      // Only re-fetch the coaches list here (admin only, infrequently changes).
+      if (isAdmin) {
+        const coachSnap = await getDocs(query(collection(db, "users"), where("role", "==", "coach")));
+        setCoaches(coachSnap.docs.map(d => ({
+          uid: d.id,
+          name: (d.data().fullName as string) ?? (d.data().name as string) ?? "Coach",
+        })));
+      }
     } catch (err) {
       console.error("[refresh]", err);
     } finally {
