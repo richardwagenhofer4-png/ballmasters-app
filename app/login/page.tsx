@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -40,6 +41,20 @@ export default function LoginPage() {
 
   useEffect(() => {
     setAccountDeleted(new URLSearchParams(window.location.search).has("deleted"));
+
+    // Handle return from Google redirect sign-in
+    setGoogleLoading(true);
+    getRedirectResult(auth)
+      .then(async (credential) => {
+        if (credential) {
+          await afterLogin(credential.user.uid);
+        }
+      })
+      .catch((err: unknown) => {
+        const code = (err as { code?: string }).code ?? "";
+        setError(getErrorMessage(code));
+      })
+      .finally(() => setGoogleLoading(false));
   }, []);
 
   async function afterLogin(uid: string) {
@@ -71,12 +86,11 @@ export default function LoginPage() {
     setError("");
     setGoogleLoading(true);
     try {
-      const credential = await signInWithPopup(auth, googleProvider);
-      await afterLogin(credential.user.uid);
+      await signInWithRedirect(auth, googleProvider);
+      // Page navigates away; getRedirectResult in useEffect handles the result on return
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
       setError(getErrorMessage(code));
-    } finally {
       setGoogleLoading(false);
     }
   }
