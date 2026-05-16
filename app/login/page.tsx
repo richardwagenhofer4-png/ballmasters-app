@@ -5,15 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   GoogleAuthProvider,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
-
-const googleProvider = new GoogleAuthProvider();
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/invalid-credential": "Invalid email or password.",
@@ -41,23 +38,6 @@ export default function LoginPage() {
 
   useEffect(() => {
     setAccountDeleted(new URLSearchParams(window.location.search).has("deleted"));
-
-    // Handle return from Google redirect sign-in
-    setGoogleLoading(true);
-    getRedirectResult(auth)
-      .then(async (credential) => {
-        console.log("[Google redirect result]", credential ? "got credential" : "null - no redirect result");
-        if (credential) {
-          await afterLogin(credential.user.uid);
-        }
-      })
-      .catch((err: unknown) => {
-        const code = (err as { code?: string }).code ?? "";
-        const message = (err as { message?: string }).message ?? "";
-        console.error("[Google redirect error] code:", code, "message:", message);
-        setError(`${code}: ${message}`);
-      })
-      .finally(() => setGoogleLoading(false));
   }, []);
 
   async function afterLogin(uid: string) {
@@ -89,11 +69,18 @@ export default function LoginPage() {
     setError("");
     setGoogleLoading(true);
     try {
-      await signInWithRedirect(auth, googleProvider);
-      // Page navigates away; getRedirectResult in useEffect handles the result on return
+      const provider = new GoogleAuthProvider();
+      const credential = await signInWithPopup(auth, provider);
+      console.log("[Google popup] got credential for uid:", credential.user.uid);
+      await afterLogin(credential.user.uid);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
-      setError(getErrorMessage(code));
+      const message = (err as { message?: string }).message ?? "";
+      console.error("[Google popup error] code:", code, "message:", message);
+      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
+        setError(getErrorMessage(code));
+      }
+    } finally {
       setGoogleLoading(false);
     }
   }
