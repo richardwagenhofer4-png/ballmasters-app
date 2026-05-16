@@ -278,7 +278,7 @@ export default function StudentCalendarPage() {
         return s === "confirmed" || s === "pending_approval" || s === "waitlisted";
       })) throw new Error("Duplicate booking prevented");
 
-      const bookingRef = await addDoc(collection(db, "bookings"), {
+      await addDoc(collection(db, "bookings"), {
         sessionId: session.id,
         studentId: uid,
         studentName,
@@ -291,21 +291,6 @@ export default function StudentCalendarPage() {
         createdAt: now,
         reminderSent: false,
       });
-
-      const newBooking: Booking = {
-        id: bookingRef.id,
-        sessionId: session.id,
-        studentId: uid,
-        studentName,
-        studentEmail,
-        coachId: session.coachId,
-        date: session.date,
-        startTime: session.startTime,
-        title: session.title,
-        status: bookingStatus,
-        createdAt: now,
-        reminderSent: false,
-      };
 
       setSessions(prev => prev.map(s => {
         if (s.id !== session.id) return s;
