@@ -363,7 +363,7 @@ export default function VideoPlayerPage() {
               onTimeUpdate={handleTimeUpdate}
               onSeeked={handleSeeked}
               className="w-full bg-black"
-              style={{ maxHeight: "50vh", display: "block" }}
+              style={{ maxHeight: "75vh", display: "block" }}
               playsInline
             >
               Your browser does not support video playback.
