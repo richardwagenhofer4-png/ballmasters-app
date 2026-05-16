@@ -505,7 +505,7 @@ export default function StudentCalendarPage() {
       {/* Tab bar */}
       <div className="flex border-b border-gray-200 bg-white">
         {(["available", "bookings", "pending"] as const).map(tab => {
-          const count = tab === "available" ? sessions.length : tab === "bookings" ? confirmedBookings.length : pendingBookings.length;
+          const count = tab === "available" ? availableSessions.length : tab === "bookings" ? confirmedBookings.length : pendingBookings.length;
           const baseLabel = tab === "available" ? "Available" : tab === "bookings" ? "My Bookings" : "Pending";
           const label = `${baseLabel} (${count})`;
           const isActive = activeTab === tab;

@@ -460,7 +460,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
           bookedAt: new Date().toISOString(),
         }],
         waitlist: session.waitlist.filter(w => w.uid !== entry.uid),
-        status: (session.bookedBy.length + 1) >= session.maxCapacity ? "full" : "available",
+        status: (confirmedBooked + 1) >= session.maxCapacity ? "full" : "available",
       };
       onUpdated(updated);
     } catch (err) {
@@ -573,12 +573,12 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
           )}
 
           <div>
-            <h3 className="text-sm font-semibold text-gray-800 mb-2">Booked ({session.bookedBy.length})</h3>
-            {session.bookedBy.length === 0 ? (
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Booked ({confirmedBooked})</h3>
+            {confirmedBooked === 0 ? (
               <p className="text-sm text-gray-400">No one booked yet.</p>
             ) : (
               <div className="space-y-2">
-                {session.bookedBy.map(b => (
+                {session.bookedBy.filter(b => !pendingBookings.some(p => p.studentId === b.uid)).map(b => (
                   <div key={b.uid} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2.5">
                     <div className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: "#dbeafe", color: "#001c48" }}>
                       {b.name.charAt(0).toUpperCase()}
