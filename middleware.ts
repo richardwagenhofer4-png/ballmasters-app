@@ -9,6 +9,7 @@ export function middleware(request: NextRequest) {
   // Unauthenticated users on protected routes → login
   const isProtected =
     pathname === "/dashboard" ||
+    pathname === "/incomplete-profile" ||
     pathname.startsWith("/coach") ||
     pathname.startsWith("/student") ||
     pathname.startsWith("/admin");
@@ -16,6 +17,11 @@ export function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
+  }
+
+  // /incomplete-profile is for authenticated users with no Firestore profile — let it through
+  if (pathname === "/incomplete-profile") {
+    return NextResponse.next();
   }
 
   // /dashboard (exact) is a relay — send authenticated users to their role page
@@ -26,7 +32,8 @@ export function middleware(request: NextRequest) {
     } else if (role === "student") {
       url.pathname = "/student/dashboard";
     } else {
-      return NextResponse.next();
+      // No valid role cookie — Firestore profile likely missing
+      url.pathname = "/incomplete-profile";
     }
     return NextResponse.redirect(url);
   }
@@ -59,5 +66,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard", "/coach/:path*", "/student/:path*", "/admin/:path*", "/login", "/register"],
+  matcher: ["/dashboard", "/incomplete-profile", "/coach/:path*", "/student/:path*", "/admin/:path*", "/login", "/register"],
 };

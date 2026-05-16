@@ -16,8 +16,8 @@ export default function NotFound() {
       if (user) {
         setTimeout(async () => {
           const profile = await getUserProfile(user.uid);
-          const role = profile?.role ?? "student";
-          router.push(role === "coach" || role === "admin" ? "/coach/dashboard" : "/student/dashboard");
+          if (!profile) { router.push("/incomplete-profile"); return; }
+          router.push(profile.role === "coach" || profile.role === "admin" ? "/coach/dashboard" : "/student/dashboard");
         }, 3000);
       }
     });

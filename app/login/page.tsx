@@ -44,7 +44,11 @@ export default function LoginPage() {
 
   async function afterLogin(uid: string) {
     const profile = await getUserProfile(uid);
-    setAuthCookies(profile?.role ?? "student");
+    if (!profile) {
+      router.push("/incomplete-profile");
+      return;
+    }
+    setAuthCookies(profile.role);
     router.push("/dashboard");
   }
 
