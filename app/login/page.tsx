@@ -71,12 +71,9 @@ export default function LoginPage() {
     try {
       const provider = new GoogleAuthProvider();
       const credential = await signInWithPopup(auth, provider);
-      console.log("[Google popup] got credential for uid:", credential.user.uid);
       await afterLogin(credential.user.uid);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
-      const message = (err as { message?: string }).message ?? "";
-      console.error("[Google popup error] code:", code, "message:", message);
       if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
         setError(getErrorMessage(code));
       }
