@@ -142,7 +142,13 @@ export default function StudentCalendarPage() {
           const bookingList: Booking[] = snap.docs
             .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
             .filter(b => b.status !== "cancelled");
-          setBookings(bookingList);
+          const seen = new Set<string>();
+          const deduped = bookingList.filter(b => {
+            if (seen.has(b.id)) return false;
+            seen.add(b.id);
+            return true;
+          });
+          setBookings(deduped);
           setLoading(false);
         },
         (err) => {
@@ -228,7 +234,6 @@ export default function StudentCalendarPage() {
         where("studentId", "==", uid)
       );
       const existingSnap = await getDocs(existingQ);
-      console.log("[handleBook] existing docs:", existingSnap.docs.map(d => ({ id: d.id, status: d.data().status })));
       const hasActive = existingSnap.docs.some(d => {
         const s = d.data().status;
         return s === "confirmed" || s === "pending_approval" || s === "waitlisted";
@@ -301,8 +306,6 @@ export default function StudentCalendarPage() {
         createdAt: now,
         reminderSent: false,
       };
-
-      setBookings(prev => [...prev, newBooking]);
 
       setSessions(prev => prev.map(s => {
         if (s.id !== session.id) return s;
