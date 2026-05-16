@@ -407,12 +407,17 @@ export default function CoachDashboard() {
                   <div className="flex gap-2">
                     <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
                       <button className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                        Annotate
+                        Watch
+                      </button>
+                    </Link>
+                    <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
+                      <button className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
+                        Annotate &amp; Notes
                       </button>
                     </Link>
                     <Link href={`/coach/videos/${v.id}/clips`} className="flex-1">
                       <button className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                        Clips
+                        Cut Clips
                       </button>
                     </Link>
                     <button
@@ -424,7 +429,7 @@ export default function CoachDashboard() {
                         border: copiedId === v.id ? "1px solid rgba(1,255,249,0.4)" : "1px solid transparent",
                       }}
                     >
-                      {copiedId === v.id ? "Copied!" : "Share"}
+                      {copiedId === v.id ? "Copied!" : "Assign to Student"}
                     </button>
                   </div>
                 </div>

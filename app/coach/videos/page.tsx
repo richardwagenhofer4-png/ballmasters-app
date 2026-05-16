@@ -513,9 +513,18 @@ export default function CoachVideosPage() {
                       <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
                         <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
                           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L8.029 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
+                          </svg>
+                          Watch
+                        </button>
+                      </Link>
+                      <div className="w-px bg-gray-100" />
+                      <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
+                        <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3a2 2 0 01.586-1.414z" />
                           </svg>
-                          Annotate
+                          Annotate &amp; Notes
                         </button>
                       </Link>
                       <div className="w-px bg-gray-100" />
@@ -524,7 +533,7 @@ export default function CoachVideosPage() {
                           <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           </svg>
-                          Clips
+                          Cut Clips
                         </button>
                       </Link>
                       <div className="w-px bg-gray-100" />
