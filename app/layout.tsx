@@ -30,7 +30,7 @@ export default function RootLayout({
       className={`${anton.variable} ${poppins.variable} h-full antialiased`}
     >
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#001c48" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -38,7 +38,11 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full bg-gray-100 flex flex-col items-center">
+        <div className="w-full max-w-[480px] min-h-screen flex flex-col bg-white shadow-none sm:shadow-xl">
+          {children}
+        </div>
+      </body>
     </html>
   );
 }
