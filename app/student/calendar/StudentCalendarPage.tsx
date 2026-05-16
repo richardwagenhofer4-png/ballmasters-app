@@ -228,6 +228,7 @@ export default function StudentCalendarPage() {
         where("studentId", "==", uid)
       );
       const existingSnap = await getDocs(existingQ);
+      console.log("[handleBook] existing docs:", existingSnap.docs.map(d => ({ id: d.id, status: d.data().status })));
       const hasActive = existingSnap.docs.some(d => {
         const s = d.data().status;
         return s === "confirmed" || s === "pending_approval" || s === "waitlisted";
