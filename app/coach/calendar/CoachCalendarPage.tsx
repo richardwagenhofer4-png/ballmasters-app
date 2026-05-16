@@ -823,18 +823,25 @@ export default function CoachCalendarPage() {
         console.log("[approve] updateDoc path: bookings/", docId, "| payload:", update);
         await updateDoc(doc(db, "bookings", docId), update);
         console.log("[approve] ✓ updateDoc succeeded");
+
+        // Update both bookings and sessions state together so React batches into one render.
+        // bookedBy already contains the approved student (added at booking time), so
+        // bookedBy.length is the correct confirmed count after approval.
+        const sessionToUpdate = sessions.find(s => s.id === booking.sessionId);
+        const newSessionStatus = sessionToUpdate
+          ? (sessionToUpdate.bookedBy.length >= sessionToUpdate.maxCapacity ? "full" : "available")
+          : null;
+        const updatedSession = sessionToUpdate && newSessionStatus
+          ? { ...sessionToUpdate, status: newSessionStatus as Session["status"] }
+          : null;
+
         setBookings(prev => prev.map(b =>
           b.id === docId ? { ...b, status: "confirmed", approvalMessage: message.trim() || undefined } : b
         ));
-
-        // Update session status based on bookedBy length now that this entry is confirmed
-        const sessionToUpdate = sessions.find(s => s.id === booking.sessionId);
-        if (sessionToUpdate) {
-          const newStatus = sessionToUpdate.bookedBy.length >= sessionToUpdate.maxCapacity ? "full" : "available";
-          await updateDoc(doc(db, "sessions", booking.sessionId), { status: newStatus });
-          const updatedSession: Session = { ...sessionToUpdate, status: newStatus };
+        if (updatedSession) {
           setSessions(prev => prev.map(s => s.id === booking.sessionId ? updatedSession : s));
           if (selectedSession?.id === booking.sessionId) setSelectedSession(updatedSession);
+          await updateDoc(doc(db, "sessions", booking.sessionId), { status: newSessionStatus });
         }
       } else {
         console.error("[approve] ✗ no matching pending_approval booking found in Firestore — cannot update");
