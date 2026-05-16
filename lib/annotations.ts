@@ -4,6 +4,8 @@ export interface Drawing {
   id: string;
   type: DrawingType;
   color: string;
+  // Normalized stroke width (fraction of canvas width). Absent on legacy drawings → use absolute fallback.
+  strokeWidth?: number;
   x1?: number; y1?: number; x2?: number; y2?: number;
   cx?: number; cy?: number; r?: number;
   points?: { x: number; y: number }[];
@@ -27,7 +29,11 @@ export function renderAnnotations(
     ctx.save();
     ctx.strokeStyle = d.color;
     ctx.fillStyle = d.color;
-    ctx.lineWidth = d.type === "freehand" ? 2.5 : 3.5;
+    // Normalized strokeWidth: multiply by canvas width to get pixels.
+    // Legacy drawings without strokeWidth fall back to hardcoded absolute values.
+    ctx.lineWidth = d.strokeWidth != null
+      ? d.strokeWidth * w
+      : (d.type === "freehand" ? 2.5 : 3.5);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -49,7 +55,8 @@ export function renderAnnotations(
         ctx.lineTo(ax2, ay2);
         ctx.stroke();
         const angle = Math.atan2(ay2 - ay1, ax2 - ax1);
-        const hlen = Math.max(12, Math.min(24, Math.hypot(ax2 - ax1, ay2 - ay1) * 0.3));
+        // Arrowhead clamp is proportional to canvas width so it scales with player size.
+        const hlen = Math.max(w * 0.025, Math.min(w * 0.065, Math.hypot(ax2 - ax1, ay2 - ay1) * 0.3));
         ctx.beginPath();
         ctx.moveTo(ax2, ay2);
         ctx.lineTo(ax2 - hlen * Math.cos(angle - Math.PI / 6), ay2 - hlen * Math.sin(angle - Math.PI / 6));

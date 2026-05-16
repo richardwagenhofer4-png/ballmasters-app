@@ -254,7 +254,9 @@ export default function AnnotatePage() {
     const start = drawStartRef.current!;
     drawStartRef.current = null;
 
-    const d: Drawing = { id: Date.now().toString(), type: tool, color };
+    const canvasW = canvasRef.current?.width ?? 1;
+    const baseStroke = tool === "freehand" ? 2.5 : 3.5;
+    const d: Drawing = { id: Date.now().toString(), type: tool, color, strokeWidth: baseStroke / canvasW };
 
     if (tool === "arrow" || tool === "line") {
       if (Math.hypot(pos.x - start.x, pos.y - start.y) < 0.01) { setLiveDrawing(null); return; }
@@ -282,9 +284,11 @@ export default function AnnotatePage() {
 
   function confirmText() {
     if (textValue.trim()) {
+      const canvasW = canvasRef.current?.width ?? 1;
       setDrawings(prev => [...prev, {
         id: Date.now().toString(),
         type: "text", color,
+        strokeWidth: 3.5 / canvasW,
         tx: textInput.x, ty: textInput.y,
         label: textValue.trim(),
       }]);
