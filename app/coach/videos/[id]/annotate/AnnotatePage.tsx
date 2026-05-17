@@ -157,11 +157,12 @@ export default function AnnotatePage() {
       const renderedWidth = video.clientWidth;
       const intrinsicAspect = video.videoWidth / video.videoHeight;
       const drawW = renderedWidth;
-      const drawH = renderedWidth / intrinsicAspect;
+      const drawH = Math.min(renderedWidth / intrinsicAspect, video.clientHeight);
       canvasRef.current.width = drawW;
       canvasRef.current.height = drawH;
       canvasRef.current.style.width = drawW + "px";
       canvasRef.current.style.height = drawH + "px";
+      canvasRef.current.style.maxHeight = video.clientHeight + "px";
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
@@ -696,9 +697,8 @@ export default function AnnotatePage() {
           ref={canvasRef}
           style={{
             position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
+            top: 0,
+            left: 0,
             cursor: drawingMode ? (tool === "text" ? "text" : "crosshair") : "default",
             pointerEvents: drawingMode ? "auto" : "none",
             touchAction: "none",
@@ -1182,9 +1182,8 @@ export default function AnnotatePage() {
               ref={previewCanvasRef}
               style={{
                 position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
+                top: 0,
+                left: 0,
                 pointerEvents: "none",
               }}
             />
