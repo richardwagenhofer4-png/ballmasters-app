@@ -148,30 +148,18 @@ export default function AnnotatePage() {
     };
   }, []);
 
-  // ── Size canvas to visible video content area ───────────────────────────────
+  // ── Keep canvas sized to video element ──────────────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const updateCanvas = () => {
-      if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = video.clientWidth;
-      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
-      canvasRef.current.width = Math.round(cssW * dpr);
-      canvasRef.current.height = Math.round(cssH * dpr);
-      canvasRef.current.style.width = cssW + "px";
-      canvasRef.current.style.height = cssH + "px";
-      canvasRef.current.style.position = "absolute";
-      canvasRef.current.style.left = "0px";
-      canvasRef.current.style.top = "0px";
-    };
-    const obs = new ResizeObserver(updateCanvas);
+    const obs = new ResizeObserver(() => {
+      if (canvasRef.current) {
+        canvasRef.current.width = video.clientWidth;
+        canvasRef.current.height = video.clientHeight;
+      }
+    });
     obs.observe(video);
-    video.addEventListener("loadedmetadata", updateCanvas);
-    return () => {
-      obs.disconnect();
-      video.removeEventListener("loadedmetadata", updateCanvas);
-    };
+    return () => obs.disconnect();
   }, [videoUrl]);
 
   // ── Redraw canvas ───────────────────────────────────────────────────────────
@@ -180,13 +168,9 @@ export default function AnnotatePage() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const cssW = canvas.width / dpr;
-    const cssH = canvas.height / dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, cssW, cssH);
+    renderAnnotations(ctx, all, canvas.width, canvas.height);
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -503,35 +487,20 @@ export default function AnnotatePage() {
     }
   }
 
-  // ── Preview canvas sizing (excludes controls bar) ──────────────────────────
+  // ── Preview canvas sizing ───────────────────────────────────────────────────
   useEffect(() => {
     if (!previewMode) return;
     const pvid = previewVideoRef.current;
     const pcanvas = previewCanvasRef.current;
     if (!pvid || !pcanvas) return;
     const syncSize = () => {
-      if (!pvid.videoWidth || !pvid.videoHeight) return;
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = Math.round(pvid.clientWidth * pvid.videoWidth / Math.max(pvid.videoWidth, pvid.clientWidth * pvid.videoHeight / pvid.clientHeight));
-      const cssH = Math.round(cssW * pvid.videoHeight / pvid.videoWidth);
-      const offsetX = Math.round((pvid.clientWidth - cssW) / 2);
-      const offsetY = Math.round((pvid.clientHeight - cssH) / 2);
-      pcanvas.width = Math.round(cssW * dpr);
-      pcanvas.height = Math.round(cssH * dpr);
-      pcanvas.style.width = cssW + "px";
-      pcanvas.style.height = cssH + "px";
-      pcanvas.style.position = "absolute";
-      pcanvas.style.left = offsetX + "px";
-      pcanvas.style.top = offsetY + "px";
+      pcanvas.width = pvid.clientWidth;
+      pcanvas.height = pvid.clientHeight;
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
-    pvid.addEventListener("loadedmetadata", syncSize);
     syncSize();
-    return () => {
-      obs.disconnect();
-      pvid.removeEventListener("loadedmetadata", syncSize);
-    };
+    return () => obs.disconnect();
   }, [previewMode]);
 
   // ── Preview mode handlers ───────────────────────────────────────────────────
@@ -574,12 +543,8 @@ export default function AnnotatePage() {
 
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = pcanvas.width / dpr;
-      const cssH = pcanvas.height / dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
+      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
     }
 
     if (ann?.pauseOnPlay && !pvid.paused && previewPausedAtRef.current !== ann.timestamp) {
@@ -618,12 +583,8 @@ export default function AnnotatePage() {
     const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = pcanvas.width / dpr;
-      const cssH = pcanvas.height / dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
+      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
     }
     if (!pvid.paused && previewModeAudioRef.current && voiceover) {
       const offset = t - voiceover.startTime;
@@ -710,8 +671,9 @@ export default function AnnotatePage() {
           ref={canvasRef}
           style={{
             position: "absolute",
-            top: 0,
-            left: 0,
+            inset: 0,
+            width: "100%",
+            height: "100%",
             cursor: drawingMode ? (tool === "text" ? "text" : "crosshair") : "default",
             pointerEvents: drawingMode ? "auto" : "none",
             touchAction: "none",
@@ -1195,8 +1157,9 @@ export default function AnnotatePage() {
               ref={previewCanvasRef}
               style={{
                 position: "absolute",
-                top: 0,
-                left: 0,
+                inset: 0,
+                width: "100%",
+                height: "100%",
                 pointerEvents: "none",
               }}
             />

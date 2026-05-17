@@ -159,26 +159,31 @@ export default function VideoPlayerPage() {
     return unsub;
   }, [id, router]);
 
-  // Size the canvas to exactly the visible video content area (no letterbox, no controls)
+  // Keep canvas sized to the actual video content area (excludes letterbox bars)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const updateCanvas = () => {
-      if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = Math.round(video.clientWidth * video.videoWidth / Math.max(video.videoWidth, video.clientWidth * video.videoHeight / video.clientHeight));
-      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
-      const offsetX = Math.round((video.clientWidth - cssW) / 2);
-      const offsetY = Math.round((video.clientHeight - cssH) / 2);
-      canvasRef.current.width = Math.round(cssW * dpr);
-      canvasRef.current.height = Math.round(cssH * dpr);
-      canvasRef.current.style.width = cssW + "px";
-      canvasRef.current.style.height = cssH + "px";
+      if (!canvasRef.current || !video.videoWidth) return;
+      const rect = video.getBoundingClientRect();
+      const videoAspect = video.videoWidth / video.videoHeight;
+      const containerAspect = rect.width / rect.height;
+      let drawW: number, drawH: number;
+      if (videoAspect < containerAspect) {
+        drawH = rect.height;
+        drawW = drawH * videoAspect;
+      } else {
+        drawW = rect.width;
+        drawH = drawW / videoAspect;
+      }
+      canvasRef.current.width = drawW;
+      canvasRef.current.height = drawH;
+      canvasRef.current.style.width = drawW + "px";
+      canvasRef.current.style.height = drawH + "px";
       canvasRef.current.style.position = "absolute";
-      canvasRef.current.style.left = offsetX + "px";
-      canvasRef.current.style.top = offsetY + "px";
-      canvasRef.current.style.pointerEvents = "none";
-      setCanvasSize({ w: cssW, h: cssH });
+      canvasRef.current.style.left = ((rect.width - drawW) / 2) + "px";
+      canvasRef.current.style.top = ((rect.height - drawH) / 2) + "px";
+      setCanvasSize({ w: drawW, h: drawH });
     };
     const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
@@ -198,19 +203,15 @@ export default function VideoPlayerPage() {
     };
   }, []);
 
-  // Render active annotation; reruns on activeAnnotation change or canvas resize
+  // Render active annotation on canvas — reruns on resize so annotations track the video content area
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const cssW = canvas.width / dpr;
-    const cssH = canvas.height / dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (activeAnnotation) {
-      renderAnnotations(ctx, activeAnnotation.drawings, cssW, cssH);
+      renderAnnotations(ctx, activeAnnotation.drawings, canvas.width, canvas.height);
     }
   }, [activeAnnotation, canvasSize]);
 
@@ -390,8 +391,17 @@ export default function VideoPlayerPage() {
               Your browser does not support video playback.
             </video>
 
-            {/* Annotation canvas — sized and positioned imperatively by updateCanvas */}
-            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }} />
+            {/* Annotation canvas — pointer-events:none so video controls still work */}
+            <canvas
+              ref={canvasRef}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                pointerEvents: "none",
+              }}
+            />
 
             {/* Voiceover active badge */}
             {voiceoverActive && (
