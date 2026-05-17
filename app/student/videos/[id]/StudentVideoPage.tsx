@@ -166,15 +166,17 @@ export default function VideoPlayerPage() {
     const updateCanvas = () => {
       if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
       const dpr = window.devicePixelRatio || 1;
-      const cssW = video.clientWidth;
+      const cssW = Math.round(video.clientWidth * video.videoWidth / Math.max(video.videoWidth, video.clientWidth * video.videoHeight / video.clientHeight));
       const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
+      const offsetX = Math.round((video.clientWidth - cssW) / 2);
+      const offsetY = Math.round((video.clientHeight - cssH) / 2);
       canvasRef.current.width = Math.round(cssW * dpr);
       canvasRef.current.height = Math.round(cssH * dpr);
       canvasRef.current.style.width = cssW + "px";
       canvasRef.current.style.height = cssH + "px";
       canvasRef.current.style.position = "absolute";
-      canvasRef.current.style.left = "0px";
-      canvasRef.current.style.top = "0px";
+      canvasRef.current.style.left = offsetX + "px";
+      canvasRef.current.style.top = offsetY + "px";
       canvasRef.current.style.pointerEvents = "none";
       setCanvasSize({ w: cssW, h: cssH });
     };

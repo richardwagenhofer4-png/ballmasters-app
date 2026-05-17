@@ -512,15 +512,17 @@ export default function AnnotatePage() {
     const syncSize = () => {
       if (!pvid.videoWidth || !pvid.videoHeight) return;
       const dpr = window.devicePixelRatio || 1;
-      const cssW = pvid.clientWidth;
+      const cssW = Math.round(pvid.clientWidth * pvid.videoWidth / Math.max(pvid.videoWidth, pvid.clientWidth * pvid.videoHeight / pvid.clientHeight));
       const cssH = Math.round(cssW * pvid.videoHeight / pvid.videoWidth);
+      const offsetX = Math.round((pvid.clientWidth - cssW) / 2);
+      const offsetY = Math.round((pvid.clientHeight - cssH) / 2);
       pcanvas.width = Math.round(cssW * dpr);
       pcanvas.height = Math.round(cssH * dpr);
       pcanvas.style.width = cssW + "px";
       pcanvas.style.height = cssH + "px";
       pcanvas.style.position = "absolute";
-      pcanvas.style.left = "0px";
-      pcanvas.style.top = "0px";
+      pcanvas.style.left = offsetX + "px";
+      pcanvas.style.top = offsetY + "px";
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
