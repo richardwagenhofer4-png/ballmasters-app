@@ -165,20 +165,23 @@ export default function VideoPlayerPage() {
     if (!video) return;
     const updateCanvas = () => {
       if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
-      // Use the rendered width as the source of truth.
-      // Calculate height purely from intrinsic aspect ratio — never from getBoundingClientRect height
-      // which includes the native controls bar.
       const renderedWidth = video.clientWidth;
       const intrinsicAspect = video.videoWidth / video.videoHeight;
       const drawW = renderedWidth;
       const drawH = renderedWidth / intrinsicAspect;
-      canvasRef.current.width = drawW;
-      canvasRef.current.height = drawH;
+      const dpr = window.devicePixelRatio || 1;
+      // Physical canvas pixels = CSS pixels × dpr for crisp Retina rendering
+      canvasRef.current.width = drawW * dpr;
+      canvasRef.current.height = drawH * dpr;
+      // CSS size stays at logical pixels so layout is unchanged
       canvasRef.current.style.width = drawW + "px";
       canvasRef.current.style.height = drawH + "px";
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
+      // Scale context once so all draw calls use CSS pixel coordinates
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       setCanvasSize({ w: drawW, h: drawH });
     };
     const obs = new ResizeObserver(updateCanvas);
@@ -205,9 +208,10 @@ export default function VideoPlayerPage() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Use CSS pixel dimensions (canvasSize) — context is pre-scaled to dpr by updateCanvas
+    ctx.clearRect(0, 0, canvasSize.w, canvasSize.h);
     if (activeAnnotation) {
-      renderAnnotations(ctx, activeAnnotation.drawings, canvas.width, canvas.height);
+      renderAnnotations(ctx, activeAnnotation.drawings, canvasSize.w, canvasSize.h);
     }
   }, [activeAnnotation, canvasSize]);
 

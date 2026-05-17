@@ -87,6 +87,7 @@ export default function AnnotatePage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasCssDimsRef = useRef({ w: 0, h: 0 });
   const isDrawingRef = useRef(false);
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
   const freehandRef = useRef<{ x: number; y: number }[]>([]);
@@ -158,14 +159,18 @@ export default function AnnotatePage() {
       const intrinsicAspect = video.videoWidth / video.videoHeight;
       const drawW = renderedWidth;
       const drawH = Math.min(renderedWidth / intrinsicAspect, video.clientHeight);
-      canvasRef.current.width = drawW;
-      canvasRef.current.height = drawH;
+      const dpr = window.devicePixelRatio || 1;
+      canvasRef.current.width = drawW * dpr;
+      canvasRef.current.height = drawH * dpr;
       canvasRef.current.style.width = drawW + "px";
       canvasRef.current.style.height = drawH + "px";
       canvasRef.current.style.maxHeight = video.clientHeight + "px";
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      canvasCssDimsRef.current = { w: drawW, h: drawH };
     };
     const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
@@ -182,9 +187,11 @@ export default function AnnotatePage() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Use CSS pixel dims — context is pre-scaled to dpr by updateCanvas
+    const { w, h } = canvasCssDimsRef.current;
+    ctx.clearRect(0, 0, w, h);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, canvas.width, canvas.height);
+    renderAnnotations(ctx, all, w, h);
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -511,13 +518,16 @@ export default function AnnotatePage() {
       if (!pvid.videoWidth || !pvid.videoHeight) return;
       const drawW = pvid.clientWidth;
       const drawH = drawW / (pvid.videoWidth / pvid.videoHeight);
-      pcanvas.width = drawW;
-      pcanvas.height = drawH;
+      const dpr = window.devicePixelRatio || 1;
+      pcanvas.width = drawW * dpr;
+      pcanvas.height = drawH * dpr;
       pcanvas.style.width = drawW + "px";
       pcanvas.style.height = drawH + "px";
       pcanvas.style.position = "absolute";
       pcanvas.style.left = "0px";
       pcanvas.style.top = "0px";
+      const ctx = pcanvas.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
@@ -569,8 +579,11 @@ export default function AnnotatePage() {
 
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
-      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = pcanvas.width / dpr;
+      const cssH = pcanvas.height / dpr;
+      ctx.clearRect(0, 0, cssW, cssH);
+      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
     }
 
     if (ann?.pauseOnPlay && !pvid.paused && previewPausedAtRef.current !== ann.timestamp) {
@@ -609,8 +622,11 @@ export default function AnnotatePage() {
     const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
-      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = pcanvas.width / dpr;
+      const cssH = pcanvas.height / dpr;
+      ctx.clearRect(0, 0, cssW, cssH);
+      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
     }
     if (!pvid.paused && previewModeAudioRef.current && voiceover) {
       const offset = t - voiceover.startTime;
