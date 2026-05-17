@@ -164,25 +164,18 @@ export default function VideoPlayerPage() {
     const video = videoRef.current;
     if (!video) return;
     const updateCanvas = () => {
-      if (!canvasRef.current || !video.videoWidth) return;
-      const rect = video.getBoundingClientRect();
-      const videoAspect = video.videoWidth / video.videoHeight;
-      const containerAspect = rect.width / rect.height;
-      let drawW: number, drawH: number;
-      if (videoAspect < containerAspect) {
-        drawH = rect.height;
-        drawW = drawH * videoAspect;
-      } else {
-        drawW = rect.width;
-        drawH = drawW / videoAspect;
-      }
+      if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
+      // Use clientWidth as source of truth — never getBoundingClientRect().height
+      // which includes the native controls bar and distorts the aspect ratio.
+      const drawW = video.clientWidth;
+      const drawH = drawW / (video.videoWidth / video.videoHeight);
       canvasRef.current.width = drawW;
       canvasRef.current.height = drawH;
       canvasRef.current.style.width = drawW + "px";
       canvasRef.current.style.height = drawH + "px";
       canvasRef.current.style.position = "absolute";
-      canvasRef.current.style.left = ((rect.width - drawW) / 2) + "px";
-      canvasRef.current.style.top = ((rect.height - drawH) / 2) + "px";
+      canvasRef.current.style.left = "0px";
+      canvasRef.current.style.top = "0px";
       setCanvasSize({ w: drawW, h: drawH });
     };
     const obs = new ResizeObserver(updateCanvas);
