@@ -179,9 +179,6 @@ export default function VideoPlayerPage() {
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
-      // Scale context once so all draw calls use CSS pixel coordinates
-      const ctx = canvasRef.current.getContext("2d");
-      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       setCanvasSize({ w: drawW, h: drawH });
     };
     const obs = new ResizeObserver(updateCanvas);
@@ -208,7 +205,8 @@ export default function VideoPlayerPage() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Use CSS pixel dimensions (canvasSize) — context is pre-scaled to dpr by updateCanvas
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, canvasSize.w, canvasSize.h);
     if (activeAnnotation) {
       renderAnnotations(ctx, activeAnnotation.drawings, canvasSize.w, canvasSize.h);

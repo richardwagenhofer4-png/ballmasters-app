@@ -168,8 +168,6 @@ export default function AnnotatePage() {
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
-      const ctx = canvasRef.current.getContext("2d");
-      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       canvasCssDimsRef.current = { w: drawW, h: drawH };
     };
     const obs = new ResizeObserver(updateCanvas);
@@ -187,8 +185,9 @@ export default function AnnotatePage() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Use CSS pixel dims — context is pre-scaled to dpr by updateCanvas
+    const dpr = window.devicePixelRatio || 1;
     const { w, h } = canvasCssDimsRef.current;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
     renderAnnotations(ctx, all, w, h);
@@ -526,8 +525,6 @@ export default function AnnotatePage() {
       pcanvas.style.position = "absolute";
       pcanvas.style.left = "0px";
       pcanvas.style.top = "0px";
-      const ctx = pcanvas.getContext("2d");
-      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
@@ -582,6 +579,7 @@ export default function AnnotatePage() {
       const dpr = window.devicePixelRatio || 1;
       const cssW = pcanvas.width / dpr;
       const cssH = pcanvas.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
       if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
     }
@@ -625,6 +623,7 @@ export default function AnnotatePage() {
       const dpr = window.devicePixelRatio || 1;
       const cssW = pcanvas.width / dpr;
       const cssH = pcanvas.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssW, cssH);
       if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
     }
