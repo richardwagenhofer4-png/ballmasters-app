@@ -159,27 +159,24 @@ export default function VideoPlayerPage() {
     return unsub;
   }, [id, router]);
 
-  // Keep canvas sized to the actual video content area (excludes letterbox bars)
+  // Size the canvas to exactly the visible video content area (no letterbox, no controls)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const updateCanvas = () => {
       if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
-      const renderedWidth = video.clientWidth;
-      const intrinsicAspect = video.videoWidth / video.videoHeight;
-      const drawW = renderedWidth;
-      const drawH = renderedWidth / intrinsicAspect;
       const dpr = window.devicePixelRatio || 1;
-      // Physical canvas pixels = CSS pixels × dpr for crisp Retina rendering
-      canvasRef.current.width = drawW * dpr;
-      canvasRef.current.height = drawH * dpr;
-      // CSS size stays at logical pixels so layout is unchanged
-      canvasRef.current.style.width = drawW + "px";
-      canvasRef.current.style.height = drawH + "px";
+      const cssW = video.clientWidth;
+      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
+      canvasRef.current.width = Math.round(cssW * dpr);
+      canvasRef.current.height = Math.round(cssH * dpr);
+      canvasRef.current.style.width = cssW + "px";
+      canvasRef.current.style.height = cssH + "px";
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
-      setCanvasSize({ w: drawW, h: drawH });
+      canvasRef.current.style.pointerEvents = "none";
+      setCanvasSize({ w: cssW, h: cssH });
     };
     const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
@@ -199,17 +196,19 @@ export default function VideoPlayerPage() {
     };
   }, []);
 
-  // Render active annotation on canvas — reruns on resize so annotations track the video content area
+  // Render active annotation; reruns on activeAnnotation change or canvas resize
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.width / dpr;
+    const cssH = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, canvasSize.w, canvasSize.h);
+    ctx.clearRect(0, 0, cssW, cssH);
     if (activeAnnotation) {
-      renderAnnotations(ctx, activeAnnotation.drawings, canvasSize.w, canvasSize.h);
+      renderAnnotations(ctx, activeAnnotation.drawings, cssW, cssH);
     }
   }, [activeAnnotation, canvasSize]);
 
@@ -389,17 +388,8 @@ export default function VideoPlayerPage() {
               Your browser does not support video playback.
             </video>
 
-            {/* Annotation canvas — pointer-events:none so video controls still work */}
-            <canvas
-              ref={canvasRef}
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                pointerEvents: "none",
-              }}
-            />
+            {/* Annotation canvas — sized and positioned imperatively by updateCanvas */}
+            <canvas ref={canvasRef} style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none" }} />
 
             {/* Voiceover active badge */}
             {voiceoverActive && (

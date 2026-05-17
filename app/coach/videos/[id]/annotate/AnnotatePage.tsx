@@ -87,7 +87,6 @@ export default function AnnotatePage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasCssDimsRef = useRef({ w: 0, h: 0 });
   const isDrawingRef = useRef(false);
   const drawStartRef = useRef<{ x: number; y: number } | null>(null);
   const freehandRef = useRef<{ x: number; y: number }[]>([]);
@@ -149,26 +148,22 @@ export default function AnnotatePage() {
     };
   }, []);
 
-  // ── Keep canvas sized to video content area (excludes controls bar) ─────────
+  // ── Size canvas to visible video content area ───────────────────────────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const updateCanvas = () => {
       if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
-      const renderedWidth = video.clientWidth;
-      const intrinsicAspect = video.videoWidth / video.videoHeight;
-      const drawW = renderedWidth;
-      const drawH = Math.min(renderedWidth / intrinsicAspect, video.clientHeight);
       const dpr = window.devicePixelRatio || 1;
-      canvasRef.current.width = drawW * dpr;
-      canvasRef.current.height = drawH * dpr;
-      canvasRef.current.style.width = drawW + "px";
-      canvasRef.current.style.height = drawH + "px";
-      canvasRef.current.style.maxHeight = video.clientHeight + "px";
+      const cssW = video.clientWidth;
+      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
+      canvasRef.current.width = Math.round(cssW * dpr);
+      canvasRef.current.height = Math.round(cssH * dpr);
+      canvasRef.current.style.width = cssW + "px";
+      canvasRef.current.style.height = cssH + "px";
       canvasRef.current.style.position = "absolute";
       canvasRef.current.style.left = "0px";
       canvasRef.current.style.top = "0px";
-      canvasCssDimsRef.current = { w: drawW, h: drawH };
     };
     const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
@@ -186,11 +181,12 @@ export default function AnnotatePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
-    const { w, h } = canvasCssDimsRef.current;
+    const cssW = canvas.width / dpr;
+    const cssH = canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, cssW, cssH);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, w, h);
+    renderAnnotations(ctx, all, cssW, cssH);
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -515,13 +511,13 @@ export default function AnnotatePage() {
     if (!pvid || !pcanvas) return;
     const syncSize = () => {
       if (!pvid.videoWidth || !pvid.videoHeight) return;
-      const drawW = pvid.clientWidth;
-      const drawH = drawW / (pvid.videoWidth / pvid.videoHeight);
       const dpr = window.devicePixelRatio || 1;
-      pcanvas.width = drawW * dpr;
-      pcanvas.height = drawH * dpr;
-      pcanvas.style.width = drawW + "px";
-      pcanvas.style.height = drawH + "px";
+      const cssW = pvid.clientWidth;
+      const cssH = Math.round(cssW * pvid.videoHeight / pvid.videoWidth);
+      pcanvas.width = Math.round(cssW * dpr);
+      pcanvas.height = Math.round(cssH * dpr);
+      pcanvas.style.width = cssW + "px";
+      pcanvas.style.height = cssH + "px";
       pcanvas.style.position = "absolute";
       pcanvas.style.left = "0px";
       pcanvas.style.top = "0px";
