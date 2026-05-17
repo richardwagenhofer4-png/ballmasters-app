@@ -154,8 +154,11 @@ export default function AnnotatePage() {
     if (!video) return;
     const obs = new ResizeObserver(() => {
       if (canvasRef.current) {
-        canvasRef.current.width = video.clientWidth;
-        canvasRef.current.height = video.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        canvasRef.current.width = video.clientWidth * dpr;
+        canvasRef.current.height = video.clientHeight * dpr;
+        canvasRef.current.style.width = video.clientWidth + "px";
+        canvasRef.current.style.height = video.clientHeight + "px";
       }
     });
     obs.observe(video);
@@ -165,12 +168,15 @@ export default function AnnotatePage() {
   // ── Redraw canvas ───────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, video.clientWidth, video.clientHeight);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, canvas.width, canvas.height);
+    renderAnnotations(ctx, all, video.clientWidth, video.clientHeight);
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -254,7 +260,7 @@ export default function AnnotatePage() {
     const start = drawStartRef.current!;
     drawStartRef.current = null;
 
-    const canvasW = canvasRef.current?.width ?? 1;
+    const canvasW = videoRef.current?.clientWidth ?? 1;
     const baseStroke = tool === "freehand" ? 2.5 : 3.5;
     const d: Drawing = { id: Date.now().toString(), type: tool, color, strokeWidth: baseStroke / canvasW };
 
@@ -284,7 +290,7 @@ export default function AnnotatePage() {
 
   function confirmText() {
     if (textValue.trim()) {
-      const canvasW = canvasRef.current?.width ?? 1;
+      const canvasW = videoRef.current?.clientWidth ?? 1;
       setDrawings(prev => [...prev, {
         id: Date.now().toString(),
         type: "text", color,

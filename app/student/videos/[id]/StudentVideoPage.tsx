@@ -159,31 +159,18 @@ export default function VideoPlayerPage() {
     return unsub;
   }, [id, router]);
 
-  // Keep canvas sized to the actual video content area (excludes letterbox bars)
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     const updateCanvas = () => {
-      if (!canvasRef.current || !video.videoWidth) return;
-      const rect = video.getBoundingClientRect();
-      const videoAspect = video.videoWidth / video.videoHeight;
-      const containerAspect = rect.width / rect.height;
-      let drawW: number, drawH: number;
-      if (videoAspect < containerAspect) {
-        drawH = rect.height;
-        drawW = drawH * videoAspect;
-      } else {
-        drawW = rect.width;
-        drawH = drawW / videoAspect;
-      }
-      canvasRef.current.width = drawW;
-      canvasRef.current.height = drawH;
-      canvasRef.current.style.width = drawW + "px";
-      canvasRef.current.style.height = drawH + "px";
-      canvasRef.current.style.position = "absolute";
-      canvasRef.current.style.left = ((rect.width - drawW) / 2) + "px";
-      canvasRef.current.style.top = ((rect.height - drawH) / 2) + "px";
-      setCanvasSize({ w: drawW, h: drawH });
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = video.clientWidth * dpr;
+      canvas.height = video.clientHeight * dpr;
+      canvas.style.width = video.clientWidth + "px";
+      canvas.style.height = video.clientHeight + "px";
+      setCanvasSize({ w: video.clientWidth, h: video.clientHeight });
     };
     const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
@@ -203,15 +190,16 @@ export default function VideoPlayerPage() {
     };
   }, []);
 
-  // Render active annotation on canvas — reruns on resize so annotations track the video content area
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, canvasSize.w, canvasSize.h);
     if (activeAnnotation) {
-      renderAnnotations(ctx, activeAnnotation.drawings, canvas.width, canvas.height);
+      renderAnnotations(ctx, activeAnnotation.drawings, canvasSize.w, canvasSize.h);
     }
   }, [activeAnnotation, canvasSize]);
 
