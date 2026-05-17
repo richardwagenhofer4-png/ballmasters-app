@@ -165,10 +165,13 @@ export default function VideoPlayerPage() {
     if (!video) return;
     const updateCanvas = () => {
       if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
-      // Use clientWidth as source of truth — never getBoundingClientRect().height
-      // which includes the native controls bar and distorts the aspect ratio.
-      const drawW = video.clientWidth;
-      const drawH = drawW / (video.videoWidth / video.videoHeight);
+      // Use the rendered width as the source of truth.
+      // Calculate height purely from intrinsic aspect ratio — never from getBoundingClientRect height
+      // which includes the native controls bar.
+      const renderedWidth = video.clientWidth;
+      const intrinsicAspect = video.videoWidth / video.videoHeight;
+      const drawW = renderedWidth;
+      const drawH = renderedWidth / intrinsicAspect;
       canvasRef.current.width = drawW;
       canvasRef.current.height = drawH;
       canvasRef.current.style.width = drawW + "px";

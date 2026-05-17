@@ -148,18 +148,31 @@ export default function AnnotatePage() {
     };
   }, []);
 
-  // ── Keep canvas sized to video element ──────────────────────────────────────
+  // ── Keep canvas sized to video content area (excludes controls bar) ─────────
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const obs = new ResizeObserver(() => {
-      if (canvasRef.current) {
-        canvasRef.current.width = video.clientWidth;
-        canvasRef.current.height = video.clientHeight;
-      }
-    });
+    const updateCanvas = () => {
+      if (!canvasRef.current || !video.videoWidth || !video.videoHeight) return;
+      const renderedWidth = video.clientWidth;
+      const intrinsicAspect = video.videoWidth / video.videoHeight;
+      const drawW = renderedWidth;
+      const drawH = renderedWidth / intrinsicAspect;
+      canvasRef.current.width = drawW;
+      canvasRef.current.height = drawH;
+      canvasRef.current.style.width = drawW + "px";
+      canvasRef.current.style.height = drawH + "px";
+      canvasRef.current.style.position = "absolute";
+      canvasRef.current.style.left = "0px";
+      canvasRef.current.style.top = "0px";
+    };
+    const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
-    return () => obs.disconnect();
+    video.addEventListener("loadedmetadata", updateCanvas);
+    return () => {
+      obs.disconnect();
+      video.removeEventListener("loadedmetadata", updateCanvas);
+    };
   }, [videoUrl]);
 
   // ── Redraw canvas ───────────────────────────────────────────────────────────
@@ -487,20 +500,32 @@ export default function AnnotatePage() {
     }
   }
 
-  // ── Preview canvas sizing ───────────────────────────────────────────────────
+  // ── Preview canvas sizing (excludes controls bar) ──────────────────────────
   useEffect(() => {
     if (!previewMode) return;
     const pvid = previewVideoRef.current;
     const pcanvas = previewCanvasRef.current;
     if (!pvid || !pcanvas) return;
     const syncSize = () => {
-      pcanvas.width = pvid.clientWidth;
-      pcanvas.height = pvid.clientHeight;
+      if (!pvid.videoWidth || !pvid.videoHeight) return;
+      const drawW = pvid.clientWidth;
+      const drawH = drawW / (pvid.videoWidth / pvid.videoHeight);
+      pcanvas.width = drawW;
+      pcanvas.height = drawH;
+      pcanvas.style.width = drawW + "px";
+      pcanvas.style.height = drawH + "px";
+      pcanvas.style.position = "absolute";
+      pcanvas.style.left = "0px";
+      pcanvas.style.top = "0px";
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
+    pvid.addEventListener("loadedmetadata", syncSize);
     syncSize();
-    return () => obs.disconnect();
+    return () => {
+      obs.disconnect();
+      pvid.removeEventListener("loadedmetadata", syncSize);
+    };
   }, [previewMode]);
 
   // ── Preview mode handlers ───────────────────────────────────────────────────
