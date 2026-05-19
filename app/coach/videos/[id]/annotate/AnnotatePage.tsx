@@ -361,6 +361,15 @@ export default function AnnotatePage() {
     videoRef.current.pause();
   }
 
+  function previewAnnotation(a: AnnotationFrame) {
+    if (!videoRef.current) return;
+    videoRef.current.currentTime = a.timestamp;
+    videoRef.current.pause();
+    setDrawings(a.drawings);
+    setPauseOnPlay(a.pauseOnPlay);
+    setLiveDrawing(null);
+  }
+
   async function startRecording() {
     setVoiceoverError("");
     try {
@@ -935,20 +944,21 @@ export default function AnnotatePage() {
             {annotations.map(a => (
               <div
                 key={a.id}
-                className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                onClick={() => previewAnnotation(a)}
+                className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors cursor-pointer"
               >
-                <button
-                  onClick={() => seekTo(a.timestamp)}
-                  className="text-sm font-mono font-semibold hover:underline shrink-0"
-                  style={{ color: "#01fff9" }}
-                >
+                {/* Play/preview icon */}
+                <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm font-mono font-semibold shrink-0" style={{ color: "#01fff9" }}>
                   {fmt(a.timestamp)}
-                </button>
+                </span>
                 <span className="text-xs text-gray-400 shrink-0">
                   {a.drawings.length} drawing{a.drawings.length !== 1 ? "s" : ""}
                 </span>
                 <button
-                  onClick={() => togglePauseOnPlay(a)}
+                  onClick={e => { e.stopPropagation(); togglePauseOnPlay(a); }}
                   className="text-xs px-2 py-0.5 rounded-full transition shrink-0"
                   style={{
                     backgroundColor: a.pauseOnPlay ? "#fef9c3" : "#f3f4f6",
@@ -959,7 +969,7 @@ export default function AnnotatePage() {
                 </button>
                 <div className="flex-1" />
                 <button
-                  onClick={() => deleteAnnotation(a)}
+                  onClick={e => { e.stopPropagation(); deleteAnnotation(a); }}
                   className="shrink-0 text-gray-300 hover:text-red-400 transition"
                   title="Delete annotation"
                 >
