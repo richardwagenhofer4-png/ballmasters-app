@@ -192,14 +192,17 @@ export default function VideoPlayerPage() {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || canvas.width === 0 || canvas.height === 0) return;
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvasSize.w;
+    const cssH = canvasSize.h;
+    if (!cssW || !cssH) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, canvasSize.w, canvasSize.h);
+    ctx.clearRect(0, 0, cssW, cssH);
     if (activeAnnotation) {
-      renderAnnotations(ctx, activeAnnotation.drawings, canvasSize.w, canvasSize.h);
+      renderAnnotations(ctx, activeAnnotation.drawings, cssW, cssH);
     }
   }, [activeAnnotation, canvasSize]);
 
