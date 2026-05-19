@@ -191,6 +191,7 @@ export default function VideoPlayerPage() {
   }, []);
 
   useEffect(() => {
+    console.log("[annotation render] canvasSize:", canvasSize, "activeAnnotation:", activeAnnotation?.id ?? "none", "canvas dims:", canvasRef.current?.width, canvasRef.current?.height);
     const canvas = canvasRef.current;
     if (!canvas || canvas.width === 0 || canvas.height === 0) return;
     const dpr = window.devicePixelRatio || 1;
