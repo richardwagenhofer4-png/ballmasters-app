@@ -195,7 +195,7 @@ export default function VideoPlayerPage() {
       video.removeEventListener("loadedmetadata", updateCanvas);
       clearTimeout(timer);
     };
-  }, [videoUrl]);
+  }, []);
 
   // Voiceover + reactions cleanup
   useEffect(() => {
@@ -207,12 +207,24 @@ export default function VideoPlayerPage() {
   }, []);
 
   useEffect(() => {
-    console.log("[annotation render] canvasSize:", canvasSize, "activeAnnotation:", activeAnnotation?.id ?? "none", "canvas dims:", canvasRef.current?.width, canvasRef.current?.height);
     const canvas = canvasRef.current;
-    if (!canvas || canvas.width === 0 || canvas.height === 0) return;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+    // Force size canvas from video right now if not yet sized
+    if (canvas.width <= 300 && canvas.height <= 150) {
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = video.clientWidth;
+      const cssH = video.clientHeight;
+      if (cssW && cssH) {
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
+        canvas.style.width = cssW + "px";
+        canvas.style.height = cssH + "px";
+      }
+    }
     const dpr = window.devicePixelRatio || 1;
-    const cssW = canvasSize.w;
-    const cssH = canvasSize.h;
+    const cssW = canvas.width / dpr;
+    const cssH = canvas.height / dpr;
     if (!cssW || !cssH) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
