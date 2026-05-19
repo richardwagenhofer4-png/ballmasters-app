@@ -164,6 +164,7 @@ export default function VideoPlayerPage() {
     if (!video) return;
 
     const updateCanvas = () => {
+      console.log("[updateCanvas] video clientWidth:", video.clientWidth, "clientHeight:", video.clientHeight, "videoWidth:", video.videoWidth, "videoHeight:", video.videoHeight);
       const canvas = canvasRef.current;
       if (!canvas || !video.clientWidth || !video.clientHeight) return;
       const dpr = window.devicePixelRatio || 1;
