@@ -162,22 +162,37 @@ export default function VideoPlayerPage() {
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+
     const updateCanvas = () => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas || !video.clientWidth || !video.clientHeight) return;
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = video.clientWidth * dpr;
-      canvas.height = video.clientHeight * dpr;
-      canvas.style.width = video.clientWidth + "px";
-      canvas.style.height = video.clientHeight + "px";
-      setCanvasSize({ w: video.clientWidth, h: video.clientHeight });
+      const cssW = video.clientWidth;
+      const cssH = video.clientHeight;
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
+      canvas.style.width = cssW + "px";
+      canvas.style.height = cssH + "px";
+      setCanvasSize({ w: cssW, h: cssH });
     };
+
+    // Try immediately in case video is already sized
+    updateCanvas();
+
+    // Also on metadata load
+    video.addEventListener("loadedmetadata", updateCanvas);
+
+    // Also on resize
     const obs = new ResizeObserver(updateCanvas);
     obs.observe(video);
-    video.addEventListener("loadedmetadata", updateCanvas);
+
+    // Also fire after a short delay as a fallback for slow renders
+    const timer = setTimeout(updateCanvas, 500);
+
     return () => {
       obs.disconnect();
       video.removeEventListener("loadedmetadata", updateCanvas);
+      clearTimeout(timer);
     };
   }, [videoUrl]);
 
