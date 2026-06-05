@@ -165,17 +165,14 @@ export default function VideoPlayerPage() {
 
     const updateCanvas = () => {
       const canvas = canvasRef.current;
-      if (!canvas || !video.videoWidth || !video.videoHeight) return;
+      if (!canvas || !video.clientWidth || !video.clientHeight) return;
       const dpr = window.devicePixelRatio || 1;
       const cssW = video.clientWidth;
-      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
-      canvas.width = Math.round(cssW * dpr);
-      canvas.height = Math.round(cssH * dpr);
+      const cssH = video.clientHeight;
+      canvas.width = cssW * dpr;
+      canvas.height = cssH * dpr;
       canvas.style.width = cssW + "px";
       canvas.style.height = cssH + "px";
-      canvas.style.position = "absolute";
-      canvas.style.left = "0px";
-      canvas.style.top = "0px";
       setCanvasSize({ w: cssW, h: cssH });
     };
 
@@ -216,10 +213,10 @@ export default function VideoPlayerPage() {
     if (canvas.width <= 300 && canvas.height <= 150) {
       const dpr = window.devicePixelRatio || 1;
       const cssW = video.clientWidth;
-      if (cssW && video.videoWidth && video.videoHeight) {
-        const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssH * dpr);
+      const cssH = video.clientHeight;
+      if (cssW && cssH) {
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
         canvas.style.width = cssW + "px";
         canvas.style.height = cssH + "px";
       }
@@ -418,9 +415,9 @@ export default function VideoPlayerPage() {
               ref={canvasRef}
               style={{
                 position: "absolute",
-                top: 0,
-                left: 0,
+                inset: 0,
                 width: "100%",
+                height: "100%",
                 pointerEvents: "none",
               }}
             />

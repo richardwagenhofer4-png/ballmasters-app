@@ -153,14 +153,12 @@ export default function AnnotatePage() {
     const video = videoRef.current;
     if (!video) return;
     const obs = new ResizeObserver(() => {
-      if (canvasRef.current && video.videoWidth && video.videoHeight) {
+      if (canvasRef.current) {
         const dpr = window.devicePixelRatio || 1;
-        const cssW = video.clientWidth;
-        const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
-        canvasRef.current.width = Math.round(cssW * dpr);
-        canvasRef.current.height = Math.round(cssH * dpr);
-        canvasRef.current.style.width = cssW + "px";
-        canvasRef.current.style.height = cssH + "px";
+        canvasRef.current.width = video.clientWidth * dpr;
+        canvasRef.current.height = video.clientHeight * dpr;
+        canvasRef.current.style.width = video.clientWidth + "px";
+        canvasRef.current.style.height = video.clientHeight + "px";
       }
     });
     obs.observe(video);
@@ -175,14 +173,10 @@ export default function AnnotatePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
-    const cssW = video.clientWidth;
-    const cssH = video.videoWidth
-      ? Math.round(cssW * video.videoHeight / video.videoWidth)
-      : video.clientHeight;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.clearRect(0, 0, video.clientWidth, video.clientHeight);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, cssW, cssH);
+    renderAnnotations(ctx, all, video.clientWidth, video.clientHeight);
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -266,12 +260,7 @@ export default function AnnotatePage() {
     const start = drawStartRef.current!;
     drawStartRef.current = null;
 
-    const vid = videoRef.current;
-    const canvasW = vid?.clientWidth ?? 1;
-    const canvasH = (vid?.videoWidth && vid?.videoHeight)
-      ? Math.round(canvasW * vid.videoHeight / vid.videoWidth)
-      : (vid?.clientHeight ?? 1);
-    void canvasH;
+    const canvasW = videoRef.current?.clientWidth ?? 1;
     const baseStroke = tool === "freehand" ? 2.5 : 3.5;
     const d: Drawing = { id: Date.now().toString(), type: tool, color, strokeWidth: baseStroke / canvasW };
 
@@ -301,12 +290,7 @@ export default function AnnotatePage() {
 
   function confirmText() {
     if (textValue.trim()) {
-      const vid = videoRef.current;
-      const canvasW = vid?.clientWidth ?? 1;
-      const canvasH = (vid?.videoWidth && vid?.videoHeight)
-        ? Math.round(canvasW * vid.videoHeight / vid.videoWidth)
-        : (vid?.clientHeight ?? 1);
-      void canvasH;
+      const canvasW = videoRef.current?.clientWidth ?? 1;
       setDrawings(prev => [...prev, {
         id: Date.now().toString(),
         type: "text", color,
@@ -520,29 +504,18 @@ export default function AnnotatePage() {
 
   // ── Preview canvas sizing ───────────────────────────────────────────────────
   useEffect(() => {
-    const video = previewVideoRef.current;
-    const canvas = previewCanvasRef.current;
-    if (!video || !canvas) return;
-    const updatePreviewCanvas = () => {
-      if (!video.videoWidth || !video.videoHeight) return;
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = video.clientWidth;
-      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
-      canvas.width = Math.round(cssW * dpr);
-      canvas.height = Math.round(cssH * dpr);
-      canvas.style.width = cssW + "px";
-      canvas.style.height = cssH + "px";
-      canvas.style.position = "absolute";
-      canvas.style.left = "0px";
-      canvas.style.top = "0px";
+    if (!previewMode) return;
+    const pvid = previewVideoRef.current;
+    const pcanvas = previewCanvasRef.current;
+    if (!pvid || !pcanvas) return;
+    const syncSize = () => {
+      pcanvas.width = pvid.clientWidth;
+      pcanvas.height = pvid.clientHeight;
     };
-    const obs = new ResizeObserver(updatePreviewCanvas);
-    obs.observe(video);
-    video.addEventListener("loadedmetadata", updatePreviewCanvas);
-    return () => {
-      obs.disconnect();
-      video.removeEventListener("loadedmetadata", updatePreviewCanvas);
-    };
+    const obs = new ResizeObserver(syncSize);
+    obs.observe(pvid);
+    syncSize();
+    return () => obs.disconnect();
   }, [previewMode]);
 
   // ── Preview mode handlers ───────────────────────────────────────────────────
@@ -585,12 +558,8 @@ export default function AnnotatePage() {
 
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = pcanvas.width / dpr;
-      const cssH = pcanvas.height / dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
+      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
     }
 
     if (ann?.pauseOnPlay && !pvid.paused && previewPausedAtRef.current !== ann.timestamp) {
@@ -629,12 +598,8 @@ export default function AnnotatePage() {
     const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      const dpr = window.devicePixelRatio || 1;
-      const cssW = pcanvas.width / dpr;
-      const cssH = pcanvas.height / dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
+      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
     }
     if (!pvid.paused && previewModeAudioRef.current && voiceover) {
       const offset = t - voiceover.startTime;
@@ -721,9 +686,9 @@ export default function AnnotatePage() {
           ref={canvasRef}
           style={{
             position: "absolute",
-            top: 0,
-            left: 0,
+            inset: 0,
             width: "100%",
+            height: "100%",
             cursor: drawingMode ? (tool === "text" ? "text" : "crosshair") : "default",
             pointerEvents: drawingMode ? "auto" : "none",
             touchAction: "none",
@@ -1190,13 +1155,13 @@ export default function AnnotatePage() {
           </div>
 
           {/* Preview video + canvas */}
-          <div style={{ flex: 1, position: "relative", lineHeight: 0, overflow: "hidden", display: "flex", alignItems: "flex-start" }}>
+          <div style={{ flex: 1, position: "relative", lineHeight: 0, overflow: "hidden" }}>
             {videoUrl && (
               <video
                 ref={previewVideoRef}
                 src={videoUrl}
                 controls
-                style={{ width: "100%", maxHeight: "calc(100vh - 120px)", display: "block" }}
+                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                 playsInline
                 onTimeUpdate={handlePreviewTimeUpdate}
                 onPlay={handlePreviewPlay}
@@ -1208,6 +1173,9 @@ export default function AnnotatePage() {
               ref={previewCanvasRef}
               style={{
                 position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
                 pointerEvents: "none",
               }}
             />
