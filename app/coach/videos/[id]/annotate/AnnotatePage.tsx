@@ -705,9 +705,9 @@ export default function AnnotatePage() {
           ref={canvasRef}
           style={{
             position: "absolute",
-            inset: 0,
+            top: 0,
+            left: 0,
             width: "100%",
-            height: "100%",
             cursor: drawingMode ? (tool === "text" ? "text" : "crosshair") : "default",
             pointerEvents: drawingMode ? "auto" : "none",
             touchAction: "none",
