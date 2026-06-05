@@ -520,21 +520,29 @@ export default function AnnotatePage() {
 
   // ── Preview canvas sizing ───────────────────────────────────────────────────
   useEffect(() => {
-    if (!previewMode) return;
-    const pvid = previewVideoRef.current;
-    const pcanvas = previewCanvasRef.current;
-    if (!pvid || !pcanvas) return;
-    const syncSize = () => {
-      if (!pvid.videoWidth || !pvid.videoHeight) return;
-      const cssW = pvid.clientWidth;
-      const cssH = Math.round(cssW * pvid.videoHeight / pvid.videoWidth);
-      pcanvas.width = cssW;
-      pcanvas.height = cssH;
+    const video = previewVideoRef.current;
+    const canvas = previewCanvasRef.current;
+    if (!video || !canvas) return;
+    const updatePreviewCanvas = () => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = video.clientWidth;
+      const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      canvas.style.width = cssW + "px";
+      canvas.style.height = cssH + "px";
+      canvas.style.position = "absolute";
+      canvas.style.left = "0px";
+      canvas.style.top = "0px";
     };
-    const obs = new ResizeObserver(syncSize);
-    obs.observe(pvid);
-    syncSize();
-    return () => obs.disconnect();
+    const obs = new ResizeObserver(updatePreviewCanvas);
+    obs.observe(video);
+    video.addEventListener("loadedmetadata", updatePreviewCanvas);
+    return () => {
+      obs.disconnect();
+      video.removeEventListener("loadedmetadata", updatePreviewCanvas);
+    };
   }, [previewMode]);
 
   // ── Preview mode handlers ───────────────────────────────────────────────────
@@ -577,8 +585,12 @@ export default function AnnotatePage() {
 
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
-      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = pcanvas.width / dpr;
+      const cssH = pcanvas.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
     }
 
     if (ann?.pauseOnPlay && !pvid.paused && previewPausedAtRef.current !== ann.timestamp) {
@@ -617,8 +629,12 @@ export default function AnnotatePage() {
     const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
-      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = pcanvas.width / dpr;
+      const cssH = pcanvas.height / dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      if (ann) renderAnnotations(ctx, ann.drawings, cssW, cssH);
     }
     if (!pvid.paused && previewModeAudioRef.current && voiceover) {
       const offset = t - voiceover.startTime;
@@ -1180,7 +1196,7 @@ export default function AnnotatePage() {
                 ref={previewVideoRef}
                 src={videoUrl}
                 controls
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                style={{ width: "100%", display: "block" }}
                 playsInline
                 onTimeUpdate={handlePreviewTimeUpdate}
                 onPlay={handlePreviewPlay}
@@ -1192,9 +1208,6 @@ export default function AnnotatePage() {
               ref={previewCanvasRef}
               style={{
                 position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
                 pointerEvents: "none",
               }}
             />
