@@ -1190,13 +1190,13 @@ export default function AnnotatePage() {
           </div>
 
           {/* Preview video + canvas */}
-          <div style={{ flex: 1, position: "relative", lineHeight: 0, overflow: "hidden" }}>
+          <div style={{ flex: 1, position: "relative", lineHeight: 0, overflow: "hidden", display: "flex", alignItems: "flex-start" }}>
             {videoUrl && (
               <video
                 ref={previewVideoRef}
                 src={videoUrl}
                 controls
-                style={{ width: "100%", display: "block" }}
+                style={{ width: "100%", maxHeight: "calc(100vh - 120px)", display: "block" }}
                 playsInline
                 onTimeUpdate={handlePreviewTimeUpdate}
                 onPlay={handlePreviewPlay}
