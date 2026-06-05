@@ -7,6 +7,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  onAuthStateChanged,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
@@ -35,10 +36,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
-
-  useEffect(() => {
-    setAccountDeleted(new URLSearchParams(window.location.search).has("deleted"));
-  }, []);
+  const [checkingAuth, setCheckingAuth] = useState(true);
 
   async function afterLogin(uid: string) {
     const profile = await getUserProfile(uid);
@@ -49,6 +47,21 @@ export default function LoginPage() {
     setAuthCookies(profile.role);
     router.push("/dashboard");
   }
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        await afterLogin(user.uid);
+      } else {
+        setCheckingAuth(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    setAccountDeleted(new URLSearchParams(window.location.search).has("deleted"));
+  }, []);
 
   async function handleEmailLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -80,6 +93,10 @@ export default function LoginPage() {
     } finally {
       setGoogleLoading(false);
     }
+  }
+
+  if (checkingAuth) {
+    return <div style={{ minHeight: "100vh", backgroundColor: "#001c48" }} />;
   }
 
   return (
