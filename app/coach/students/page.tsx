@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/AuthContext";
 
 interface Student {
   id: string;
@@ -38,18 +38,18 @@ const NAV_ITEMS = [
 ];
 
 export default function StudentsListPage() {
-  console.log("[students] component mounted", Date.now());
   const router = useRouter();
   const pathname = usePathname();
+  const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      console.log("[students] auth state fired", Date.now());
-      if (!user) { router.push("/login"); return; }
+    if (authLoading) return;
+    if (!user) { router.push("/login"); return; }
+    (async () => {
       try {
         const snap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
         const list: Student[] = snap.docs
@@ -60,22 +60,20 @@ export default function StudentsListPage() {
           }))
           .sort((a, b) => a.fullName.localeCompare(b.fullName));
         setStudents(list);
-        console.log("[students] data loaded", Date.now());
       } catch (err) {
         console.error("[coach/students]", err);
       } finally {
         setLoading(false);
       }
-    });
-    return unsub;
-  }, [router]);
+    })();
+  }, [authLoading, user, router]);
 
   const filtered = students.filter(s => {
     const q = search.toLowerCase();
     return !q || s.fullName.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
   });
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">
         <svg className="h-10 w-10 animate-spin text-white opacity-40" viewBox="0 0 24 24" fill="none">
