@@ -38,6 +38,7 @@ const NAV_ITEMS = [
 ];
 
 export default function StudentsListPage() {
+  console.log("[students] component mounted", Date.now());
   const router = useRouter();
   const pathname = usePathname();
 
@@ -47,6 +48,7 @@ export default function StudentsListPage() {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
+      console.log("[students] auth state fired", Date.now());
       if (!user) { router.push("/login"); return; }
       try {
         const snap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
@@ -58,6 +60,7 @@ export default function StudentsListPage() {
           }))
           .sort((a, b) => a.fullName.localeCompare(b.fullName));
         setStudents(list);
+        console.log("[students] data loaded", Date.now());
       } catch (err) {
         console.error("[coach/students]", err);
       } finally {
