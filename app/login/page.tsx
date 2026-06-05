@@ -28,6 +28,11 @@ function getErrorMessage(code: string): string {
   return FIREBASE_ERROR_MESSAGES[code] ?? "An unexpected error occurred. Please try again.";
 }
 
+function getCookieValue(name: string): string {
+  const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -51,7 +56,16 @@ export default function LoginPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        await afterLogin(user.uid);
+        // Fast path: role cookie already set — skip Firestore read
+        const role = getCookieValue("ballmasters_role");
+        if (role === "coach" || role === "admin") {
+          router.push("/coach/dashboard");
+        } else if (role === "student") {
+          router.push("/student/dashboard");
+        } else {
+          // No role cookie — must read Firestore to get role
+          await afterLogin(user.uid);
+        }
       } else {
         setCheckingAuth(false);
       }
@@ -96,7 +110,15 @@ export default function LoginPage() {
   }
 
   if (checkingAuth) {
-    return <div style={{ minHeight: "100vh", backgroundColor: "#001c48" }} />;
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "#001c48", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24 }}>
+        <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 140, height: "auto" }} />
+        <svg style={{ width: 28, height: 28, color: "#01fff9" }} className="animate-spin" viewBox="0 0 24 24" fill="none">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+      </div>
+    );
   }
 
   return (
