@@ -153,12 +153,14 @@ export default function AnnotatePage() {
     const video = videoRef.current;
     if (!video) return;
     const obs = new ResizeObserver(() => {
-      if (canvasRef.current) {
+      if (canvasRef.current && video.videoWidth && video.videoHeight) {
         const dpr = window.devicePixelRatio || 1;
-        canvasRef.current.width = video.clientWidth * dpr;
-        canvasRef.current.height = video.clientHeight * dpr;
-        canvasRef.current.style.width = video.clientWidth + "px";
-        canvasRef.current.style.height = video.clientHeight + "px";
+        const cssW = video.clientWidth;
+        const cssH = Math.round(cssW * video.videoHeight / video.videoWidth);
+        canvasRef.current.width = Math.round(cssW * dpr);
+        canvasRef.current.height = Math.round(cssH * dpr);
+        canvasRef.current.style.width = cssW + "px";
+        canvasRef.current.style.height = cssH + "px";
       }
     });
     obs.observe(video);
@@ -173,10 +175,14 @@ export default function AnnotatePage() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
+    const cssW = video.clientWidth;
+    const cssH = video.videoWidth
+      ? Math.round(cssW * video.videoHeight / video.videoWidth)
+      : video.clientHeight;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, video.clientWidth, video.clientHeight);
+    ctx.clearRect(0, 0, cssW, cssH);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, video.clientWidth, video.clientHeight);
+    renderAnnotations(ctx, all, cssW, cssH);
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -260,7 +266,12 @@ export default function AnnotatePage() {
     const start = drawStartRef.current!;
     drawStartRef.current = null;
 
-    const canvasW = videoRef.current?.clientWidth ?? 1;
+    const vid = videoRef.current;
+    const canvasW = vid?.clientWidth ?? 1;
+    const canvasH = (vid?.videoWidth && vid?.videoHeight)
+      ? Math.round(canvasW * vid.videoHeight / vid.videoWidth)
+      : (vid?.clientHeight ?? 1);
+    void canvasH;
     const baseStroke = tool === "freehand" ? 2.5 : 3.5;
     const d: Drawing = { id: Date.now().toString(), type: tool, color, strokeWidth: baseStroke / canvasW };
 
@@ -290,7 +301,12 @@ export default function AnnotatePage() {
 
   function confirmText() {
     if (textValue.trim()) {
-      const canvasW = videoRef.current?.clientWidth ?? 1;
+      const vid = videoRef.current;
+      const canvasW = vid?.clientWidth ?? 1;
+      const canvasH = (vid?.videoWidth && vid?.videoHeight)
+        ? Math.round(canvasW * vid.videoHeight / vid.videoWidth)
+        : (vid?.clientHeight ?? 1);
+      void canvasH;
       setDrawings(prev => [...prev, {
         id: Date.now().toString(),
         type: "text", color,
@@ -509,8 +525,11 @@ export default function AnnotatePage() {
     const pcanvas = previewCanvasRef.current;
     if (!pvid || !pcanvas) return;
     const syncSize = () => {
-      pcanvas.width = pvid.clientWidth;
-      pcanvas.height = pvid.clientHeight;
+      if (!pvid.videoWidth || !pvid.videoHeight) return;
+      const cssW = pvid.clientWidth;
+      const cssH = Math.round(cssW * pvid.videoHeight / pvid.videoWidth);
+      pcanvas.width = cssW;
+      pcanvas.height = cssH;
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
