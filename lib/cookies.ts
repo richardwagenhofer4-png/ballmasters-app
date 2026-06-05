@@ -8,4 +8,5 @@ export function setAuthCookies(role: string): void {
 export function clearAuthCookies(): void {
   document.cookie = "ballmasters_auth=; path=/; max-age=0; SameSite=Strict";
   document.cookie = "ballmasters_role=; path=/; max-age=0; SameSite=Strict";
+  localStorage.removeItem("ballmasters_role");
 }

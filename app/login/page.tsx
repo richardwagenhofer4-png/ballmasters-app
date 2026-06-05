@@ -44,11 +44,18 @@ export default function LoginPage() {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   async function afterLogin(uid: string) {
+    const cachedRole = localStorage.getItem("ballmasters_role");
+    if (cachedRole === "coach" || cachedRole === "admin" || cachedRole === "student") {
+      setAuthCookies(cachedRole);
+      router.push("/dashboard");
+      return;
+    }
     const profile = await getUserProfile(uid);
     if (!profile) {
       router.push("/incomplete-profile");
       return;
     }
+    localStorage.setItem("ballmasters_role", profile.role);
     setAuthCookies(profile.role);
     router.push("/dashboard");
   }
