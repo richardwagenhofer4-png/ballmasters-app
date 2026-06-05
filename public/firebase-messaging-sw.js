@@ -18,77 +18,35 @@ firebase.initializeApp(FIREBASE_CONFIG);
 
 var messaging = firebase.messaging();
 
-var CACHE_NAME = "ballmasters-shell-v1";
-
-// App-shell resources to precache on install
-var SHELL_URLS = [
-  "/",
-  "/manifest.json",
-  "/icon-192.png",
-  "/icon-512.png",
-];
-
-// Force the SW to activate immediately without waiting for existing clients to close
-self.addEventListener("install", function (event) {
+self.addEventListener("install", function () {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(SHELL_URLS);
-    })
-  );
 });
 
 self.addEventListener("activate", function (event) {
-  // Delete caches from previous versions
-  event.waitUntil(
-    caches.keys().then(function (keys) {
-      return Promise.all(
-        keys
-          .filter(function (key) { return key !== CACHE_NAME; })
-          .map(function (key) { return caches.delete(key); })
-      );
-    }).then(function () {
-      return self.clients.claim();
-    })
-  );
+  event.waitUntil(self.clients.claim());
 });
 
-// Network-first for API/auth requests; cache-first for static assets
 self.addEventListener("fetch", function (event) {
+  if (event.request.method !== "GET") return;
   var url = new URL(event.request.url);
+  if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/api/")) return;
 
-  // Skip non-GET requests and cross-origin requests
-  if (event.request.method !== "GET" || url.origin !== self.location.origin) return;
-
-  // Skip Next.js internals, API routes, and HMR
-  if (
-    url.pathname.startsWith("/_next/") ||
-    url.pathname.startsWith("/api/") ||
-    url.pathname.includes("__nextjs")
-  ) return;
-
-  // Cache-first for static assets (icons, manifest, fonts)
-  if (
-    url.pathname.startsWith("/icon-") ||
-    url.pathname === "/manifest.json"
-  ) {
+  // For navigation requests (page loads), always go to network first
+  // This ensures auth redirects work correctly on iOS PWA
+  if (event.request.mode === "navigate") {
     event.respondWith(
-      caches.match(event.request).then(function (cached) {
-        return cached || fetch(event.request).then(function (response) {
-          var clone = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, clone); });
-          return response;
-        });
+      fetch(event.request).catch(function () {
+        return caches.match("/") || caches.match("/dashboard");
       })
     );
     return;
   }
 
-  // Network-first for navigation (HTML pages) — fall back to cached "/" if offline
-  if (event.request.mode === "navigate") {
+  // For static assets (icons, manifest), use cache first
+  if (url.pathname.match(/\.(png|ico|json|svg)$/)) {
     event.respondWith(
-      fetch(event.request).catch(function () {
-        return caches.match("/") || new Response("You are offline", { status: 503 });
+      caches.match(event.request).then(function (cached) {
+        return cached || fetch(event.request);
       })
     );
   }
