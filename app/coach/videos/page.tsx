@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -128,7 +128,7 @@ function StudentAvatars({ ids, students }: { ids: string[]; students: Student[] 
 // Page
 // ---------------------------------------------------------------------------
 
-export default function CoachVideosPage() {
+function CoachVideosPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -907,5 +907,13 @@ export default function CoachVideosPage() {
         })}
       </nav>
     </main>
+  );
+}
+
+export default function CoachVideosPageWrapper() {
+  return (
+    <Suspense>
+      <CoachVideosPage />
+    </Suspense>
   );
 }
