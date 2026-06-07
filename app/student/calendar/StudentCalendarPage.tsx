@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -16,7 +15,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/AuthContext";
 import type { Session, Booking } from "@/lib/sessionTypes";
 
 // ---------------------------------------------------------------------------
@@ -77,6 +77,7 @@ function getFirstDayOfMonth(year: number, month: number): number {
 export default function StudentCalendarPage() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
@@ -93,20 +94,19 @@ export default function StudentCalendarPage() {
   const [cancelPendingConfirmId, setCancelPendingConfirmId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push("/login"); return; }
+
     let unsubBookings: (() => void) | null = null;
 
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      // Cancel the previous bookings listener whenever auth state changes
-      if (unsubBookings) { unsubBookings(); unsubBookings = null; }
+    setUid(user.uid);
+    setStudentEmail(user.email ?? "");
 
-      if (!user) { router.push("/login"); return; }
-      setUid(user.uid);
-      setStudentEmail(user.email ?? "");
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-
-      // Load profile + sessions once (sessions are infrequently updated; use refresh button for those)
+    // Load profile + sessions once (sessions are infrequently updated; use refresh button for those)
+    (async () => {
       try {
         const [profileSnap, sessionsSnap] = await Promise.all([
           getDoc(doc(db, "users", user.uid)),
@@ -156,13 +156,12 @@ export default function StudentCalendarPage() {
           setLoading(false);
         }
       );
-    });
+    })();
 
     return () => {
-      unsubAuth();
       if (unsubBookings) unsubBookings();
     };
-  }, [router]);
+  }, [authLoading, user, router]);
 
   async function handleRefresh() {
     if (refreshing || !uid) return;

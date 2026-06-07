@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
 import {
   addDoc,
   collection,
@@ -17,7 +16,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/AuthContext";
 import type { Session, Booking, BookedEntry, WaitlistEntry } from "@/lib/sessionTypes";
 
 // ---------------------------------------------------------------------------
@@ -407,10 +407,6 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
     setCancelling(true);
     try {
       await updateDoc(doc(db, "sessions", session.id), { status: "cancelled" });
-      console.log("[cancel session] Push notifications would be sent to:", [
-        ...session.bookedBy.map(b => b.uid),
-        ...session.waitlist.map(w => w.uid),
-      ]);
       onCancelled(session.id);
       onClose();
     } catch (err) {
@@ -651,6 +647,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
 export default function CoachCalendarPage() {
   const router = useRouter();
   const pathname = usePathname();
+  const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
@@ -669,14 +666,15 @@ export default function CoachCalendarPage() {
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push("/login"); return; }
+
     let unsubBookings: (() => void) | null = null;
     let unsubSessions: (() => void) | null = null;
 
-    const unsubAuth = onAuthStateChanged(auth, async (user) => {
-      if (unsubBookings) { unsubBookings(); unsubBookings = null; }
-      if (unsubSessions) { unsubSessions(); unsubSessions = null; }
-      if (!user) { router.push("/login"); return; }
-      setUid(user.uid);
+    setUid(user.uid);
+
+    (async () => {
       try {
         const profileSnap = await getDoc(doc(db, "users", user.uid));
         const data = profileSnap.data();
@@ -727,8 +725,6 @@ export default function CoachCalendarPage() {
           const bookingList: Booking[] = snap.docs
             .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
             .filter(b => b.status !== "cancelled");
-          console.log("[coach/calendar] bookings snapshot:", bookingList.length, "total, pending:", bookingList.filter(b => b.status === "pending_approval").length);
-          bookingList.forEach(b => console.log("  →", b.id, "| status:", b.status, "| coachId:", b.coachId, "| sessionId:", b.sessionId, "| student:", b.studentId));
           setBookings(prev => {
             // For any booking already confirmed locally, don't downgrade it back to pending_approval
             // from a snapshot that may be slightly behind the Firestore write
@@ -748,14 +744,13 @@ export default function CoachCalendarPage() {
         console.error("[coach/calendar]", err);
         setLoading(false);
       }
-    });
+    })();
 
     return () => {
-      unsubAuth();
       if (unsubBookings) unsubBookings();
       if (unsubSessions) unsubSessions();
     };
-  }, [router]);
+  }, [authLoading, user, router]);
 
   async function handleRefresh() {
     if (refreshing || !uid) return;
@@ -806,38 +801,20 @@ export default function CoachCalendarPage() {
   }
 
   async function handleApproveBooking(booking: Booking, message: string) {
-    console.log("[approve] ▶ called with:", {
-      bookingId: booking.id,
-      sessionId: booking.sessionId,
-      studentId: booking.studentId,
-      currentStatus: booking.status,
-      message: message || "(none)",
-    });
-
     try {
-      // Verify the booking doc exists before updating
       const verifyQuery = query(
         collection(db, "bookings"),
         where("sessionId", "==", booking.sessionId),
         where("studentId", "==", booking.studentId),
         where("status", "==", "pending_approval")
       );
-      console.log("[approve] querying bookings where sessionId ==", booking.sessionId, "AND studentId ==", booking.studentId, "AND status == pending_approval");
       const verifySnap = await getDocs(verifyQuery);
-      console.log("[approve] query found", verifySnap.size, "doc(s):");
-      verifySnap.forEach(d => console.log("  doc id:", d.id, "| status:", d.data().status, "| matches booking.id:", d.id === booking.id));
 
       if (booking.id === verifySnap.docs[0]?.id || verifySnap.size > 0) {
-        // Use the ID from the query result as a safeguard if they differ
         const docId = verifySnap.size > 0 ? verifySnap.docs[0].id : booking.id;
-        if (docId !== booking.id) {
-          console.warn("[approve] ⚠ booking.id mismatch — state has", booking.id, "but query found", docId, "— using query result");
-        }
         const update: Record<string, string> = { status: "confirmed" };
         if (message.trim()) update.approvalMessage = message.trim();
-        console.log("[approve] updateDoc path: bookings/", docId, "| payload:", update);
         await updateDoc(doc(db, "bookings", docId), update);
-        console.log("[approve] ✓ updateDoc succeeded");
 
         // Update both bookings and sessions state together so React batches into one render.
         // bookedBy already contains the approved student (added at booking time), so
@@ -885,7 +862,6 @@ export default function CoachCalendarPage() {
           setSelectedSession(updatedSession);
         }
       }
-      console.log("[decline booking] Push notification would be sent to student:", booking.studentId);
       setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "declined" } : b));
     } catch (err) {
       console.error("[decline booking]", err);

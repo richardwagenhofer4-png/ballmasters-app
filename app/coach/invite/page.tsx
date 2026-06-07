@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/lib/AuthContext";
 import { createInviteCode, getInviteCode, type InviteCode } from "@/lib/inviteCodes";
 
 type Status = "loading" | "ready" | "generating" | "error";
 
 export default function CoachInvitePage() {
+  const { user, loading: authLoading } = useAuth();
   const [coachUid, setCoachUid] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<InviteCode | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -21,9 +22,10 @@ export default function CoachInvitePage() {
     : "";
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
-      setCoachUid(user.uid);
+    if (authLoading) return;
+    if (!user) return;
+    setCoachUid(user.uid);
+    (async () => {
       try {
         const profileSnap = await getDoc(doc(db, "users", user.uid));
         const currentCode = profileSnap.data()?.currentInviteCode as string | undefined;
@@ -37,9 +39,8 @@ export default function CoachInvitePage() {
       } finally {
         setStatus("ready");
       }
-    });
-    return unsub;
-  }, []);
+    })();
+  }, [authLoading, user]);
 
   async function handleGenerate() {
     if (!coachUid) return;
