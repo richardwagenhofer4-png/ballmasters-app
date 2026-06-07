@@ -5,7 +5,7 @@ import {
   indexedDBLocalPersistence,
   browserLocalPersistence,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -34,4 +34,15 @@ function makeAuth() {
 }
 
 export const auth = makeAuth();
-export const db = getFirestore(app);
+
+function makeDb() {
+  try {
+    return initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+    });
+  } catch {
+    return getFirestore(app);
+  }
+}
+
+export const db = makeDb();
