@@ -38,7 +38,7 @@ export const auth = makeAuth();
 function makeDb() {
   try {
     return initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
     });
   } catch {
     return getFirestore(app);

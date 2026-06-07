@@ -17,13 +17,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(auth.currentUser === null);
 
   useEffect(() => {
-    console.log("[AuthContext] provider mounted at", Date.now());
     // Safety timeout: if onAuthStateChanged hasn't fired in 3s, stop blocking.
     // On iOS PWA the listener can take 30s; currentUser is reliable enough to proceed.
     const timeout = setTimeout(() => setLoading(false), 3000);
 
     const unsub = onAuthStateChanged(auth, (u) => {
-      console.log("[AuthContext] auth fired at", Date.now(), "user:", u ? "yes" : "no");
       setUser(u);
       setLoading(false);
       clearTimeout(timeout);
