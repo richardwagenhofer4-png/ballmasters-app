@@ -35,6 +35,7 @@ interface Student {
   id: string;
   fullName: string;
   email: string;
+  avatarId: string;
 }
 
 type StatusFilter = "all" | "published" | "draft";
@@ -87,7 +88,7 @@ function VideoMetaRows({ v, students, size, abbreviate }: {
         <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Student:</span>
         {firstStudent ? (
           <>
-            <InitialsAvatar name={firstStudent.fullName} id={firstStudent.id} size={size} variant="student" />
+            <InitialsAvatar name={firstStudent.fullName} id={firstStudent.id} size={size} variant="student" avatarId={firstStudent.avatarId || undefined} />
             <span className="text-xs text-gray-700 truncate">
               {abbreviate ? firstStudent.fullName.split(" ")[0] : firstStudent.fullName}
               {extra > 0 ? ` +${extra} more` : ""}
@@ -201,6 +202,7 @@ function CoachVideosPage() {
               id: d.id,
               fullName: (d.data().fullName as string) ?? "Student",
               email: (d.data().email as string) ?? "",
+              avatarId: (d.data().avatarId as string) ?? "",
             }))
             .sort((a, b) => a.fullName.localeCompare(b.fullName))
         );

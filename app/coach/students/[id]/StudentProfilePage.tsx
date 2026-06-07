@@ -46,6 +46,7 @@ const NAV_ITEMS = [
 interface StudentDoc {
   fullName: string;
   email: string;
+  avatarId?: string;
 }
 
 interface VideoDoc {
@@ -83,7 +84,7 @@ function VideoMetaRows({ v, student, studentId, size, abbreviate }: {
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">
         <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Student:</span>
-        <InitialsAvatar name={student.fullName} id={studentId} size={size} variant="student" />
+        <InitialsAvatar name={student.fullName} id={studentId} size={size} variant="student" avatarId={student.avatarId || undefined} />
         <span className="text-xs text-gray-700 truncate">
           {abbreviate ? student.fullName.split(" ")[0] : student.fullName}
           {extra > 0 ? ` +${extra} more` : ""}
@@ -215,12 +216,7 @@ export default function StudentProfilePage() {
 
         {/* Student identity */}
         <div className="flex items-center gap-3 mb-5">
-          <div
-            className="h-14 w-14 rounded-full flex items-center justify-center shrink-0 text-xl font-bold"
-            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "white" }}
-          >
-            {student.fullName.charAt(0).toUpperCase()}
-          </div>
+          <InitialsAvatar name={student.fullName} id={id} size={56} variant="student" avatarId={student.avatarId || undefined} />
           <div>
             <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
             <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
