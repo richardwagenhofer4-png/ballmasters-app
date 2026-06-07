@@ -7,6 +7,8 @@ import { collection, doc, getDoc, getDocs, query, where } from "firebase/firesto
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import type { Booking } from "@/lib/sessionTypes";
+import ViewToggle from "@/components/ViewToggle";
+import { useViewMode } from "@/lib/useViewMode";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -48,10 +50,19 @@ interface StudentDoc {
 interface VideoDoc {
   id: string;
   title: string;
+  coachName: string;
   createdAt: string;
   viewedBy: string[];
+  studentIds: string[];
   type?: string;
   coachVideoKey?: string;
+}
+
+function studentLabel(ids: string[], currentName: string): string {
+  if (ids.length === 0) return "Unassigned";
+  const firstName = currentName.split(" ")[0];
+  if (ids.length === 1) return firstName;
+  return `${firstName} and ${ids.length - 1} more`;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +75,7 @@ export default function StudentProfilePage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
+  const [viewMode, setViewMode] = useViewMode("student-profile");
 
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -95,8 +107,10 @@ export default function StudentProfilePage() {
           .map(d => ({
             id: d.id,
             title: (d.data().title as string) ?? "Untitled",
+            coachName: (d.data().coachName as string) ?? "",
             createdAt: (d.data().createdAt as string) ?? "",
             viewedBy: (d.data().viewedBy as string[]) ?? [],
+            studentIds: (d.data().studentIds as string[]) ?? [],
             type: d.data().type as string | undefined,
             coachVideoKey: d.data().coachVideoKey as string | undefined,
           }))
@@ -208,29 +222,33 @@ export default function StudentProfilePage() {
 
         {/* Videos */}
         <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Videos</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">Videos</h2>
+            {videos.length > 0 && <ViewToggle value={viewMode} onChange={setViewMode} />}
+          </div>
           {videos.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
               No videos assigned yet
             </div>
-          ) : (
+          ) : viewMode === "list" ? (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {videos.map((v, i) => {
                 const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
                 const href = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
                 const isWatched = v.viewedBy.includes(id);
-                const dateStr = v.createdAt
-                  ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                  : "";
+                const meta = [v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, student!.fullName), v.createdAt ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null].filter(Boolean).join(" · ");
                 return (
                   <Link key={v.id} href={href}>
                     <div
                       className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition"
                       style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
                     >
+                      <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                      </svg>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{v.title}</p>
-                        {dateStr && <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>}
+                        <p className="text-xs text-gray-400 truncate">{meta}</p>
                       </div>
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"
@@ -242,6 +260,81 @@ export default function StudentProfilePage() {
                       </span>
                     </div>
                   </Link>
+                );
+              })}
+            </div>
+          ) : viewMode === "grid" ? (
+            <div className="grid grid-cols-2 gap-3">
+              {videos.map(v => {
+                const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+                const href = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
+                const isWatched = v.viewedBy.includes(id);
+                const meta = [v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, student!.fullName), v.createdAt ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null].filter(Boolean).join(" · ");
+                return (
+                  <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <Link href={href}>
+                      <div className="flex items-center justify-center h-16" style={{ backgroundColor: "rgba(0,28,72,0.05)" }}>
+                        <svg className="h-7 w-7 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    </Link>
+                    <div className="p-2.5">
+                      <Link href={href}>
+                        <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1 hover:underline">{v.title}</p>
+                      </Link>
+                      <p className="text-xs text-gray-400 truncate mb-1.5">{meta}</p>
+                      <span
+                        className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                        style={isWatched
+                          ? { backgroundColor: "#dcfce7", color: "#15803d" }
+                          : { backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}
+                      >
+                        {isWatched ? "Watched" : "New"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {videos.map(v => {
+                const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+                const href = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
+                const isWatched = v.viewedBy.includes(id);
+                const meta = [v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, student!.fullName), v.createdAt ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null].filter(Boolean).join(" · ");
+                return (
+                  <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="p-4 pb-3">
+                      <div className="flex items-start gap-2 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <Link href={href}>
+                            <h3 className="text-sm font-bold text-gray-900 leading-snug hover:underline truncate cursor-pointer">{v.title}</h3>
+                          </Link>
+                          <p className="text-xs text-gray-400 mt-0.5 truncate">{meta}</p>
+                        </div>
+                        <span
+                          className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"
+                          style={isWatched
+                            ? { backgroundColor: "#dcfce7", color: "#15803d" }
+                            : { backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}
+                        >
+                          {isWatched ? "Watched" : "New"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-100">
+                      <Link href={href}>
+                        <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                          <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L8.029 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
+                          </svg>
+                          Watch
+                        </button>
+                      </Link>
+                    </div>
+                  </div>
                 );
               })}
             </div>

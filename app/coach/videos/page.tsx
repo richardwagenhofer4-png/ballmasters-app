@@ -62,6 +62,14 @@ function rateColor(rate: number): string {
   return "#dc2626";
 }
 
+function studentLabel(ids: string[], students: Student[]): string {
+  if (ids.length === 0) return "Unassigned";
+  const first = students.find(s => s.id === ids[0]);
+  const firstName = first?.fullName.split(" ")[0] ?? "Student";
+  if (ids.length === 1) return firstName;
+  return `${firstName} and ${ids.length - 1} more`;
+}
+
 // ---------------------------------------------------------------------------
 // Nav
 // ---------------------------------------------------------------------------
@@ -550,7 +558,7 @@ function CoachVideosPage() {
                     </svg>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{v.title}</p>
-                      <p className="text-xs text-gray-400">{formatDate(v.createdAt)} · {isDrill ? "Drill" : "Standard"}</p>
+                      <p className="text-xs text-gray-400 truncate">{[v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, students), formatDate(v.createdAt)].filter(Boolean).join(" · ")}</p>
                     </div>
                   </Link>
                   <div className="shrink-0 flex items-center gap-1.5">
@@ -606,8 +614,9 @@ function CoachVideosPage() {
                   </Link>
                   <div className="p-2.5">
                     <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
-                      <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1.5 hover:underline">{v.title}</p>
+                      <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1 hover:underline">{v.title}</p>
                     </Link>
+                    <p className="text-xs text-gray-400 truncate mb-1.5">{[v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, students), formatDate(v.createdAt)].filter(Boolean).join(" · ")}</p>
                     <div className="flex flex-wrap gap-1 mb-2">
                       <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#001c48", color: "#01fff9" }}>
                         {isDrill ? "Drill" : "Std"}
@@ -656,10 +665,7 @@ function CoachVideosPage() {
                         <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
                           <h3 className="text-sm font-bold text-gray-900 leading-snug hover:underline truncate cursor-pointer">{v.title}</h3>
                         </Link>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {v.coachName && <span className="font-medium text-gray-500">{v.coachName} · </span>}
-                          {formatDate(v.createdAt)}
-                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">{[v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, students), formatDate(v.createdAt)].filter(Boolean).join(" · ")}</p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                         {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
