@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/AuthContext";
 import type { Booking } from "@/lib/sessionTypes";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
+import InitialsAvatar from "@/components/InitialsAvatar";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -58,11 +59,38 @@ interface VideoDoc {
   coachVideoKey?: string;
 }
 
-function studentLabel(ids: string[], currentName: string): string {
-  if (ids.length === 0) return "Unassigned";
-  const firstName = currentName.split(" ")[0];
-  if (ids.length === 1) return firstName;
-  return `${firstName} and ${ids.length - 1} more`;
+function abbreviateName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
+function VideoMetaRows({ v, student, studentId, size, abbreviate }: {
+  v: VideoDoc; student: StudentDoc; studentId: string; size: number; abbreviate?: boolean;
+}) {
+  const extra = Math.max(0, v.studentIds.length - 1);
+  const labelW = size <= 24 ? 44 : 52;
+  const dateStr = v.createdAt
+    ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "";
+  return (
+    <>
+      <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
+      <div className="flex items-center gap-1.5 mt-1">
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Coach:</span>
+        <InitialsAvatar name={v.coachName || "?"} id={v.id} size={size} variant="coach" />
+        <span className="text-xs text-gray-700 truncate">{abbreviate ? abbreviateName(v.coachName) : (v.coachName || "Unknown")}</span>
+      </div>
+      <div className="flex items-center gap-1.5 mt-0.5">
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Student:</span>
+        <InitialsAvatar name={student.fullName} id={studentId} size={size} variant="student" />
+        <span className="text-xs text-gray-700 truncate">
+          {abbreviate ? student.fullName.split(" ")[0] : student.fullName}
+          {extra > 0 ? ` +${extra} more` : ""}
+        </span>
+      </div>
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +264,6 @@ export default function StudentProfilePage() {
                 const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
                 const href = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
                 const isWatched = v.viewedBy.includes(id);
-                const meta = [v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, student!.fullName), v.createdAt ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null].filter(Boolean).join(" · ");
                 return (
                   <Link key={v.id} href={href}>
                     <div
@@ -248,7 +275,7 @@ export default function StudentProfilePage() {
                       </svg>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{v.title}</p>
-                        <p className="text-xs text-gray-400 truncate">{meta}</p>
+                        <VideoMetaRows v={v} student={student!} studentId={id} size={26} />
                       </div>
                       <span
                         className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"
@@ -269,7 +296,6 @@ export default function StudentProfilePage() {
                 const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
                 const href = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
                 const isWatched = v.viewedBy.includes(id);
-                const meta = [v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, student!.fullName), v.createdAt ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null].filter(Boolean).join(" · ");
                 return (
                   <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <Link href={href}>
@@ -283,9 +309,9 @@ export default function StudentProfilePage() {
                       <Link href={href}>
                         <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1 hover:underline">{v.title}</p>
                       </Link>
-                      <p className="text-xs text-gray-400 truncate mb-1.5">{meta}</p>
+                      <VideoMetaRows v={v} student={student!} studentId={id} size={24} abbreviate />
                       <span
-                        className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
+                        className="text-xs font-semibold px-1.5 py-0.5 mt-1.5 inline-block rounded-full"
                         style={isWatched
                           ? { backgroundColor: "#dcfce7", color: "#15803d" }
                           : { backgroundColor: "rgba(1,255,249,0.15)", color: "#001c48" }}
@@ -303,7 +329,6 @@ export default function StudentProfilePage() {
                 const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
                 const href = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
                 const isWatched = v.viewedBy.includes(id);
-                const meta = [v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, student!.fullName), v.createdAt ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null].filter(Boolean).join(" · ");
                 return (
                   <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="p-4 pb-3">
@@ -312,7 +337,7 @@ export default function StudentProfilePage() {
                           <Link href={href}>
                             <h3 className="text-sm font-bold text-gray-900 leading-snug hover:underline truncate cursor-pointer">{v.title}</h3>
                           </Link>
-                          <p className="text-xs text-gray-400 mt-0.5 truncate">{meta}</p>
+                          <VideoMetaRows v={v} student={student!} studentId={id} size={26} />
                         </div>
                         <span
                           className="text-xs font-semibold px-2 py-0.5 rounded-full shrink-0"

@@ -12,6 +12,7 @@ import { clearAuthCookies } from "@/lib/cookies";
 import { sendVideoNotification } from "@/lib/notifications";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
+import InitialsAvatar from "@/components/InitialsAvatar";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -62,12 +63,45 @@ function rateColor(rate: number): string {
   return "#dc2626";
 }
 
-function studentLabel(ids: string[], students: Student[]): string {
-  if (ids.length === 0) return "Unassigned";
-  const first = students.find(s => s.id === ids[0]);
-  const firstName = first?.fullName.split(" ")[0] ?? "Student";
-  if (ids.length === 1) return firstName;
-  return `${firstName} and ${ids.length - 1} more`;
+function abbreviateName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
+function VideoMetaRows({ v, students, size, abbreviate }: {
+  v: Video; students: Student[]; size: number; abbreviate?: boolean;
+}) {
+  const firstStudent = students.find(s => s.id === v.studentIds[0]) ?? null;
+  const extra = Math.max(0, v.studentIds.length - 1);
+  const labelW = size <= 24 ? 44 : 52;
+  return (
+    <>
+      <p className="text-xs text-gray-400 mt-0.5">{formatDate(v.createdAt)}</p>
+      <div className="flex items-center gap-1.5 mt-1">
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Coach:</span>
+        <InitialsAvatar name={v.coachName || "?"} id={v.id} size={size} variant="coach" />
+        <span className="text-xs text-gray-700 truncate">{abbreviate ? abbreviateName(v.coachName) : (v.coachName || "Unknown")}</span>
+      </div>
+      <div className="flex items-center gap-1.5 mt-0.5">
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Student:</span>
+        {firstStudent ? (
+          <>
+            <InitialsAvatar name={firstStudent.fullName} id={firstStudent.id} size={size} variant="student" />
+            <span className="text-xs text-gray-700 truncate">
+              {abbreviate ? firstStudent.fullName.split(" ")[0] : firstStudent.fullName}
+              {extra > 0 ? ` +${extra} more` : ""}
+            </span>
+          </>
+        ) : (
+          <>
+            <InitialsAvatar name="?" id="" size={size} variant="student" />
+            <span className="text-xs text-gray-400">Unassigned</span>
+          </>
+        )}
+      </div>
+    </>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -97,40 +131,6 @@ const NAV_ITEMS = [
   { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/coach/invite", label: "Invite", Icon: InviteIcon },
 ];
-
-// ---------------------------------------------------------------------------
-// Student Avatars
-// ---------------------------------------------------------------------------
-
-function StudentAvatars({ ids, students }: { ids: string[]; students: Student[] }) {
-  const shown = ids.slice(0, 3).map(id => students.find(s => s.id === id)).filter(Boolean) as Student[];
-  const extra = ids.length - 3;
-  if (ids.length === 0) return <span className="text-xs text-gray-400">No students</span>;
-  return (
-    <div className="flex items-center gap-1">
-      <div className="flex" style={{ gap: -4 }}>
-        {shown.map((s, i) => (
-          <div
-            key={s.id}
-            className="h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold border border-white"
-            style={{ backgroundColor: "#dbeafe", color: "#001c48", marginLeft: i > 0 ? -6 : 0, zIndex: 3 - i, position: "relative" }}
-          >
-            {s.fullName.charAt(0).toUpperCase()}
-          </div>
-        ))}
-        {extra > 0 && (
-          <div
-            className="h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold border border-white"
-            style={{ backgroundColor: "#f3f4f6", color: "#6b7280", marginLeft: -6, position: "relative" }}
-          >
-            +{extra}
-          </div>
-        )}
-      </div>
-      <span className="text-xs text-gray-500">{ids.length} student{ids.length !== 1 ? "s" : ""}</span>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -558,7 +558,7 @@ function CoachVideosPage() {
                     </svg>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{v.title}</p>
-                      <p className="text-xs text-gray-400 truncate">{[v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, students), formatDate(v.createdAt)].filter(Boolean).join(" · ")}</p>
+                      <VideoMetaRows v={v} students={students} size={26} />
                     </div>
                   </Link>
                   <div className="shrink-0 flex items-center gap-1.5">
@@ -616,8 +616,8 @@ function CoachVideosPage() {
                     <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
                       <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1 hover:underline">{v.title}</p>
                     </Link>
-                    <p className="text-xs text-gray-400 truncate mb-1.5">{[v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, students), formatDate(v.createdAt)].filter(Boolean).join(" · ")}</p>
-                    <div className="flex flex-wrap gap-1 mb-2">
+                    <VideoMetaRows v={v} students={students} size={24} abbreviate />
+                    <div className="flex flex-wrap gap-1 mt-1.5 mb-2">
                       <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#001c48", color: "#01fff9" }}>
                         {isDrill ? "Drill" : "Std"}
                       </span>
@@ -660,12 +660,12 @@ function CoachVideosPage() {
                     </div>
                   )}
                   <div className="p-4 pb-3">
-                    <div className="flex items-start gap-2 mb-2">
+                    <div className="flex items-start gap-2 mb-3">
                       <div className="flex-1 min-w-0">
                         <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
                           <h3 className="text-sm font-bold text-gray-900 leading-snug hover:underline truncate cursor-pointer">{v.title}</h3>
                         </Link>
-                        <p className="text-xs text-gray-400 mt-0.5 truncate">{[v.coachName ? `Coach ${v.coachName}` : null, studentLabel(v.studentIds, students), formatDate(v.createdAt)].filter(Boolean).join(" · ")}</p>
+                        <VideoMetaRows v={v} students={students} size={26} />
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                         {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
@@ -676,9 +676,6 @@ function CoachVideosPage() {
                           {v.status === "published" ? "Published" : "Draft"}
                         </span>
                       </div>
-                    </div>
-                    <div className="mb-3">
-                      <StudentAvatars ids={v.studentIds} students={students} />
                     </div>
                     {rate !== null ? (
                       <div>
