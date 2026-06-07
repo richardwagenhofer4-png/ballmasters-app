@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
@@ -62,6 +62,8 @@ function formatJoinDate(createdAt: unknown): string {
   } catch { return ""; }
 }
 
+type SortField = "videos" | "lessons" | "watched";
+
 function rateColor(rate: number): string {
   if (rate >= 75) return "#16a34a";
   if (rate >= 40) return "#d97706";
@@ -78,6 +80,17 @@ export default function StudentsListPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [stats, setStats] = useState<Record<string, StudentStat>>({});
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
+
+  function handleSort(field: SortField) {
+    if (sortBy === field) {
+      setSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setSortBy(field);
+      setSortDir("desc");
+    }
+  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -134,6 +147,26 @@ export default function StudentsListPage() {
     const q = search.toLowerCase();
     return !q || s.fullName.toLowerCase().includes(q) || s.email.toLowerCase().includes(q);
   });
+
+  const displayed = useMemo(() => {
+    if (!sortBy) return filtered;
+    return [...filtered].sort((a, b) => {
+      const sa = stats[a.id];
+      const sb = stats[b.id];
+      let av: number, bv: number;
+      if (sortBy === "videos") {
+        av = sa?.videoCount ?? 0;
+        bv = sb?.videoCount ?? 0;
+      } else if (sortBy === "lessons") {
+        av = sa?.lessonCount ?? 0;
+        bv = sb?.lessonCount ?? 0;
+      } else {
+        av = sa?.watchRate ?? -1;
+        bv = sb?.watchRate ?? -1;
+      }
+      return sortDir === "desc" ? bv - av : av - bv;
+    });
+  }, [filtered, sortBy, sortDir, stats]);
 
   if (authLoading || loading) {
     return (
@@ -202,11 +235,34 @@ export default function StudentsListPage() {
               <ViewToggle value={viewMode} onChange={setViewMode} />
             </div>
 
+            <div className="flex gap-2 mb-3">
+              {([
+                { field: "videos" as SortField, label: "Videos" },
+                { field: "lessons" as SortField, label: "Lessons" },
+                { field: "watched" as SortField, label: "Watched" },
+              ]).map(({ field, label }) => {
+                const isActive = sortBy === field;
+                return (
+                  <button
+                    key={field}
+                    onClick={() => handleSort(field)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+                    style={isActive
+                      ? { backgroundColor: "#001c48", color: "white" }
+                      : { backgroundColor: "#f3f4f6", color: "#6b7280" }}
+                  >
+                    {label}
+                    {isActive && <span className="ml-0.5">{sortDir === "desc" ? "▼" : "▲"}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
             {filtered.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">No students match &ldquo;{search}&rdquo;</p>
             ) : viewMode === "list" ? (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {filtered.map((s, i) => {
+                {displayed.map((s, i) => {
                   const st = stats[s.id];
                   return (
                     <Link key={s.id} href={`/coach/students/${s.id}`}>
@@ -237,7 +293,7 @@ export default function StudentsListPage() {
               </div>
             ) : viewMode === "cards" ? (
               <div className="space-y-3">
-                {filtered.map(s => {
+                {displayed.map(s => {
                   const st = stats[s.id];
                   return (
                     <Link key={s.id} href={`/coach/students/${s.id}`}>
@@ -285,7 +341,7 @@ export default function StudentsListPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {filtered.map(s => {
+                {displayed.map(s => {
                   const st = stats[s.id];
                   return (
                     <Link key={s.id} href={`/coach/students/${s.id}`}>
