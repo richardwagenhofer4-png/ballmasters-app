@@ -103,7 +103,7 @@ export default function RegisterForm() {
     if (!inviteCode.trim()) return true; // coach invite path — no student code needed
     const result = await validateInviteCode(inviteCode.trim());
     if (!result.valid) {
-      setError(result.error ?? "Invalid invite code.");
+      setError(result.error ?? "That invite code is invalid. Please check the code or use the link your coach gave you.");
       return false;
     }
     return true;

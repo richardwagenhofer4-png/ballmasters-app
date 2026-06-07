@@ -62,7 +62,7 @@ export async function validateInviteCode(
   code: string
 ): Promise<{ valid: boolean; error?: string }> {
   const data = await getInviteCode(code);
-  if (!data) return { valid: false, error: "Invalid invite code." };
+  if (!data) return { valid: false, error: "That invite code doesn't exist. Please check the code or use the link your coach gave you." };
   if (!data.active) return { valid: false, error: "This invite code is no longer active." };
   if (data.usedBy.length >= data.maxUses)
     return { valid: false, error: "This invite code has reached its maximum uses." };
