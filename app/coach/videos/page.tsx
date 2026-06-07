@@ -39,6 +39,7 @@ interface Student {
 type StatusFilter = "all" | "published" | "draft";
 type TypeFilter = "all" | "standard" | "drill";
 type SortBy = "newest" | "oldest" | "most_watched" | "least_watched";
+type WatchedFilter = "all" | "fully_watched" | "not_fully_watched";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -135,12 +136,19 @@ export default function CoachVideosPage() {
   const [uid, setUid] = useState<string | null>(null);
   const [videos, setVideos] = useState<Video[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
+  const [videoNeedsReply, setVideoNeedsReply] = useState<Map<string, boolean>>(new Map());
 
-  // Filters
+  // Existing filters
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("newest");
+
+  // New filters
+  const [watchedFilter, setWatchedFilter] = useState<WatchedFilter>("all");
+  const [studentFilter, setStudentFilter] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [needsReplyFilter, setNeedsReplyFilter] = useState(false);
 
   // Edit modal
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
@@ -165,7 +173,7 @@ export default function CoachVideosPage() {
           getDocs(collection(db, "videos")),
           getDocs(query(collection(db, "users"), where("role", "==", "student"))),
         ]);
-        setVideos(videosSnap.docs.map(d => ({
+        const videoDocs: Video[] = videosSnap.docs.map(d => ({
           id: d.id,
           title: (d.data().title as string) ?? "Untitled",
           coachName: (d.data().coachName as string) ?? "",
@@ -176,20 +184,81 @@ export default function CoachVideosPage() {
           downloadAllowed: (d.data().downloadAllowed as boolean) ?? false,
           status: (d.data().status as "published" | "draft") ?? "published",
           createdAt: (d.data().createdAt as string) ?? "",
-        })));
-        setStudents(studentsSnap.docs.map(d => ({
-          id: d.id,
-          fullName: (d.data().fullName as string) ?? "Student",
-          email: (d.data().email as string) ?? "",
-        })));
+        }));
+        setVideos(videoDocs);
+        setStudents(
+          studentsSnap.docs
+            .map(d => ({
+              id: d.id,
+              fullName: (d.data().fullName as string) ?? "Student",
+              email: (d.data().email as string) ?? "",
+            }))
+            .sort((a, b) => a.fullName.localeCompare(b.fullName))
+        );
+        setLoading(false);
+
+        // Load comments in background to compute needs-reply status (same logic as dashboard)
+        if (videoDocs.length > 0) {
+          const commentSnaps = await Promise.all(
+            videoDocs.map(v => getDocs(collection(db, "videos", v.id, "comments")))
+          );
+          const needsReply = new Map<string, boolean>();
+          commentSnaps.forEach((snap, i) => {
+            const comments = snap.docs.map(d => ({
+              id: d.id,
+              role: d.data().role as "coach" | "student",
+              parentId: d.data().parentId as string | null,
+            }));
+            const topLevelStudent = comments.filter(c => c.role === "student" && c.parentId === null);
+            const hasUnreplied = topLevelStudent.some(c =>
+              !comments.some(r => r.parentId === c.id && r.role === "coach")
+            );
+            needsReply.set(videoDocs[i].id, hasUnreplied);
+          });
+          setVideoNeedsReply(needsReply);
+        }
       } catch (err) {
         console.error("[coach/videos]", err);
-      } finally {
         setLoading(false);
       }
     });
     return unsub;
   }, [router]);
+
+  // Stats computed from all videos (not filtered)
+  const stats = useMemo(() => {
+    const total = videos.length;
+    const videosWithStudents = videos.filter(v => v.studentIds.length > 0);
+    const avgWatchRate = videosWithStudents.length === 0
+      ? null
+      : Math.round(
+          videosWithStudents.reduce((sum, v) => {
+            return sum + v.studentIds.filter(sid => v.viewedBy.includes(sid)).length / v.studentIds.length;
+          }, 0) / videosWithStudents.length * 100
+        );
+    const fullyWatched = videos.filter(v =>
+      v.studentIds.length > 0 && v.studentIds.every(sid => v.viewedBy.includes(sid))
+    ).length;
+    const needsReplyCount = videos.filter(v => videoNeedsReply.get(v.id)).length;
+    return { total, avgWatchRate, fullyWatched, needsReplyCount };
+  }, [videos, videoNeedsReply]);
+
+  // Month options derived from video dates
+  const monthOptions = useMemo(() => {
+    const months = new Set<string>();
+    videos.forEach(v => {
+      if (!v.createdAt) return;
+      try {
+        const d = new Date(v.createdAt);
+        months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+      } catch { /* ignore */ }
+    });
+    return Array.from(months).sort().reverse().map(ym => {
+      const [y, m] = ym.split("-");
+      const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      return { value: ym, label };
+    });
+  }, [videos]);
 
   // Filtered + sorted videos
   const filtered = useMemo(() => {
@@ -201,6 +270,37 @@ export default function CoachVideosPage() {
     if (statusFilter !== "all") result = result.filter(v => v.status === statusFilter);
     if (typeFilter === "standard") result = result.filter(v => (!v.type || v.type === "standard") && !v.coachVideoKey);
     if (typeFilter === "drill") result = result.filter(v => v.type === "drill_comparison" || !!v.coachVideoKey);
+
+    // Student filter + per-student watched semantics
+    if (studentFilter) {
+      result = result.filter(v => v.studentIds.includes(studentFilter));
+      if (watchedFilter === "fully_watched") {
+        result = result.filter(v => v.viewedBy.includes(studentFilter));
+      } else if (watchedFilter === "not_fully_watched") {
+        result = result.filter(v => !v.viewedBy.includes(studentFilter));
+      }
+    } else {
+      if (watchedFilter === "fully_watched") {
+        result = result.filter(v => v.studentIds.length > 0 && v.studentIds.every(sid => v.viewedBy.includes(sid)));
+      } else if (watchedFilter === "not_fully_watched") {
+        result = result.filter(v => v.studentIds.length === 0 || !v.studentIds.every(sid => v.viewedBy.includes(sid)));
+      }
+    }
+
+    // Month filter
+    if (monthFilter) {
+      result = result.filter(v => {
+        if (!v.createdAt) return false;
+        try {
+          const d = new Date(v.createdAt);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` === monthFilter;
+        } catch { return false; }
+      });
+    }
+
+    // Needs reply filter
+    if (needsReplyFilter) result = result.filter(v => videoNeedsReply.get(v.id));
+
     switch (sortBy) {
       case "newest": result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); break;
       case "oldest": result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); break;
@@ -208,7 +308,7 @@ export default function CoachVideosPage() {
       case "least_watched": result.sort((a, b) => (watchRate(a) ?? 101) - (watchRate(b) ?? 101)); break;
     }
     return result;
-  }, [videos, search, statusFilter, typeFilter, sortBy]);
+  }, [videos, search, statusFilter, typeFilter, sortBy, watchedFilter, studentFilter, monthFilter, needsReplyFilter, videoNeedsReply]);
 
   const editFilteredStudents = useMemo(() => {
     const q = editStudentSearch.toLowerCase();
@@ -216,7 +316,13 @@ export default function CoachVideosPage() {
     return students.filter(s => s.fullName.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
   }, [students, editStudentSearch]);
 
-  // Open edit modal
+  const hasActiveFilters = !!(search || statusFilter !== "all" || typeFilter !== "all" || watchedFilter !== "all" || studentFilter || monthFilter || needsReplyFilter);
+
+  function clearAllFilters() {
+    setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setSortBy("newest");
+    setWatchedFilter("all"); setStudentFilter(""); setMonthFilter(""); setNeedsReplyFilter(false);
+  }
+
   function openEdit(v: Video) {
     setEditingVideo(v);
     setEditTitle(v.title);
@@ -226,7 +332,6 @@ export default function CoachVideosPage() {
     setEditStudentSearch("");
   }
 
-  // Save edit
   async function saveEdit() {
     if (!editingVideo || !editTitle.trim()) return;
     setEditSaving(true);
@@ -239,12 +344,10 @@ export default function CoachVideosPage() {
       };
       await updateDoc(doc(db, "videos", editingVideo.id), updated);
       setVideos(prev => prev.map(v => v.id === editingVideo.id ? { ...v, ...updated } : v));
-
       const wasPublishedNow = editStatus === "published" && editingVideo.status !== "published";
       if (wasPublishedNow && updated.studentIds.length > 0) {
         sendVideoNotification(updated.studentIds, updated.title, editingVideo.id).catch(console.error);
       }
-
       setEditingVideo(null);
     } catch (err) {
       console.error("[edit video]", err);
@@ -253,7 +356,6 @@ export default function CoachVideosPage() {
     }
   }
 
-  // Confirm delete
   async function confirmDelete() {
     if (!deletingVideo) return;
     setDeleteConfirming(true);
@@ -285,13 +387,13 @@ export default function CoachVideosPage() {
     );
   }
 
+  const selectClass = "flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none";
+
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Header                                                               */}
-      {/* ------------------------------------------------------------------ */}
-      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-4 px-4">
+      {/* Header */}
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center justify-between mb-1">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
           <button onClick={handleSignOut} className="hover:text-white transition text-xs font-medium flex items-center gap-1" style={{ color: "rgba(1,255,249,0.7)" }}>
@@ -301,7 +403,7 @@ export default function CoachVideosPage() {
             Sign out
           </button>
         </div>
-        <div className="flex items-center justify-between mt-3">
+        <div className="flex items-center justify-between mt-3 mb-4">
           <div>
             <h1 className="text-2xl font-extrabold text-white leading-tight">My Videos</h1>
             <p className="text-xs mt-0.5" style={{ color: "#01fff9" }}>{videos.length} video{videos.length !== 1 ? "s" : ""} total</p>
@@ -309,20 +411,33 @@ export default function CoachVideosPage() {
           <Link href="/coach/upload">
             <button
               className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition hover:opacity-90 active:opacity-80"
-              style={{ backgroundColor: "#001c48", color: "white" }}
+              style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "white" }}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              Upload New
+              Upload
             </button>
           </Link>
         </div>
+
+        {/* Stats bar */}
+        <div className="grid grid-cols-4 gap-2">
+          {([
+            { label: "Videos", value: stats.total.toString() },
+            { label: "Watch Rate", value: stats.avgWatchRate !== null ? `${stats.avgWatchRate}%` : "—" },
+            { label: "All Watched", value: stats.fullyWatched.toString() },
+            { label: "Needs Reply", value: stats.needsReplyCount.toString() },
+          ] as const).map(({ label, value }) => (
+            <div key={label} className="rounded-xl text-center py-2.5 px-1" style={{ backgroundColor: "rgba(255,255,255,0.12)" }}>
+              <div className="text-base font-extrabold text-white leading-none">{value}</div>
+              <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>{label}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Filters                                                              */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Filters */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 space-y-2.5">
         {/* Search */}
         <div className="relative">
@@ -340,31 +455,19 @@ export default function CoachVideosPage() {
           />
         </div>
 
-        {/* Filter selects */}
+        {/* Row 1: Status | Type | Sort */}
         <div className="flex gap-2">
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-            className="flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none"
-          >
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as StatusFilter)} className={selectClass}>
             <option value="all">All Status</option>
             <option value="published">Published</option>
             <option value="draft">Draft</option>
           </select>
-          <select
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value as TypeFilter)}
-            className="flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none"
-          >
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as TypeFilter)} className={selectClass}>
             <option value="all">All Types</option>
             <option value="standard">Standard</option>
             <option value="drill">Drill</option>
           </select>
-          <select
-            value={sortBy}
-            onChange={e => setSortBy(e.target.value as SortBy)}
-            className="flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none"
-          >
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)} className={selectClass}>
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
             <option value="most_watched">Most Watched</option>
@@ -372,30 +475,49 @@ export default function CoachVideosPage() {
           </select>
         </div>
 
-        {/* Results count + view toggle */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-500">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
-            {(search || statusFilter !== "all" || typeFilter !== "all") && (
-              <button
-                onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); setSortBy("newest"); }}
-                className="text-xs font-semibold"
-                style={{ color: "#001c48" }}
-              >
-                Clear
-              </button>
+        {/* Row 2: Watched | Student | Month */}
+        <div className="flex gap-2">
+          <select value={watchedFilter} onChange={e => setWatchedFilter(e.target.value as WatchedFilter)} className={selectClass}>
+            <option value="all">All Watched</option>
+            <option value="fully_watched">{studentFilter ? "Student Watched" : "Fully Watched"}</option>
+            <option value="not_fully_watched">{studentFilter ? "Not Watched" : "Not Fully Watched"}</option>
+          </select>
+          <select value={studentFilter} onChange={e => setStudentFilter(e.target.value)} className={selectClass}>
+            <option value="">All Students</option>
+            {students.map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
+          </select>
+          <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className={selectClass}>
+            <option value="">All Months</option>
+            {monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+
+        {/* Row 3: Needs Reply toggle + results count + view toggle */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setNeedsReplyFilter(f => !f)}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+              style={needsReplyFilter
+                ? { backgroundColor: "#001c48", color: "#01fff9" }
+                : { backgroundColor: "#f3f4f6", color: "#374151" }}
+            >
+              <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+              </svg>
+              Needs Reply{stats.needsReplyCount > 0 && ` (${stats.needsReplyCount})`}
+            </button>
+            <span className="text-xs text-gray-400">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
+            {hasActiveFilters && (
+              <button onClick={clearAllFilters} className="text-xs font-semibold" style={{ color: "#001c48" }}>Clear</button>
             )}
           </div>
           <ViewToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Video list                                                           */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Video list */}
       <div className="px-4 py-4 space-y-3">
-
-        {/* Empty state */}
         {videos.length === 0 ? (
           <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 py-12 text-center px-4 mt-4">
             <svg className="h-10 w-10 text-gray-200 mx-auto mb-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -411,19 +533,14 @@ export default function CoachVideosPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-sm text-gray-400">No videos match your filters.</p>
-            <button
-              onClick={() => { setSearch(""); setStatusFilter("all"); setTypeFilter("all"); }}
-              className="mt-2 text-sm font-semibold"
-              style={{ color: "#001c48" }}
-            >
-              Clear filters
-            </button>
+            <button onClick={clearAllFilters} className="mt-2 text-sm font-semibold" style={{ color: "#001c48" }}>Clear filters</button>
           </div>
         ) : viewMode === "list" ? (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
             {filtered.map(v => {
               const rate = watchRate(v);
               const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+              const needsReply = videoNeedsReply.get(v.id);
               return (
                 <div key={v.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition">
                   <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`} className="flex-1 min-w-0 flex items-center gap-3">
@@ -435,7 +552,8 @@ export default function CoachVideosPage() {
                       <p className="text-xs text-gray-400">{formatDate(v.createdAt)} · {isDrill ? "Drill" : "Standard"}</p>
                     </div>
                   </Link>
-                  <div className="shrink-0 flex items-center gap-2">
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
                     {rate !== null && <span className="text-xs font-bold" style={{ color: rateColor(rate) }}>{rate}%</span>}
                     <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={v.status === "published" ? { backgroundColor: "#001c48", color: "#01fff9" } : { backgroundColor: "#f3f4f6", color: "#374151" }}>
                       {v.status === "published" ? "Pub" : "Draft"}
@@ -460,6 +578,7 @@ export default function CoachVideosPage() {
             {filtered.map(v => {
               const rate = watchRate(v);
               const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+              const needsReply = videoNeedsReply.get(v.id);
               return (
                 <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
@@ -495,9 +614,8 @@ export default function CoachVideosPage() {
                       <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={v.status === "published" ? { backgroundColor: "#001c48", color: "#01fff9" } : { backgroundColor: "#f3f4f6", color: "#374151" }}>
                         {v.status === "published" ? "Pub" : "Draft"}
                       </span>
-                      {rate !== null && (
-                        <span className="text-xs font-bold" style={{ color: rateColor(rate) }}>{rate}%</span>
-                      )}
+                      {rate !== null && <span className="text-xs font-bold" style={{ color: rateColor(rate) }}>{rate}%</span>}
+                      {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
                     </div>
                     <div className="flex gap-1">
                       <button onClick={() => openEdit(v)} className="flex-1 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition">Edit</button>
@@ -514,6 +632,7 @@ export default function CoachVideosPage() {
             {filtered.map(v => {
               const rate = watchRate(v);
               const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+              const needsReply = videoNeedsReply.get(v.id);
               return (
                 <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   {isDrill && (
@@ -541,7 +660,8 @@ export default function CoachVideosPage() {
                           {formatDate(v.createdAt)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                        {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
                         <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#001c48", color: "#01fff9" }}>
                           {isDrill ? "Drill" : "Standard"}
                         </span>
@@ -632,14 +752,11 @@ export default function CoachVideosPage() {
         )}
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Edit Modal                                                           */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Edit Modal */}
       {editingVideo && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/50" onClick={() => !editSaving && setEditingVideo(null)} />
           <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md flex flex-col" style={{ maxHeight: "85vh" }}>
-            {/* Header */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900">Edit Video</h2>
               <button onClick={() => !editSaving && setEditingVideo(null)} className="text-gray-400 hover:text-gray-600 transition">
@@ -648,10 +765,7 @@ export default function CoachVideosPage() {
                 </svg>
               </button>
             </div>
-
-            {/* Scrollable body */}
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-              {/* Title */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
                 <input
@@ -663,8 +777,6 @@ export default function CoachVideosPage() {
                   onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
                 />
               </div>
-
-              {/* Students */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-sm font-medium text-gray-700">Assigned Students</label>
@@ -718,8 +830,6 @@ export default function CoachVideosPage() {
                   </div>
                 </div>
               </div>
-
-              {/* Download allowed */}
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-700">Allow download</p>
@@ -730,56 +840,26 @@ export default function CoachVideosPage() {
                   className="relative inline-flex h-6 w-11 shrink-0 rounded-full transition"
                   style={{ backgroundColor: editDownloadAllowed ? "#001c48" : "#d1d5db" }}
                 >
-                  <span
-                    className="inline-block h-5 w-5 rounded-full bg-white shadow transform transition mt-0.5"
-                    style={{ marginLeft: editDownloadAllowed ? "22px" : "2px" }}
-                  />
+                  <span className="inline-block h-5 w-5 rounded-full bg-white shadow transform transition mt-0.5" style={{ marginLeft: editDownloadAllowed ? "22px" : "2px" }} />
                 </button>
               </div>
-
-              {/* Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setEditStatus("published")}
-                    className="flex-1 py-2 text-sm font-semibold rounded-lg transition"
-                    style={{
-                      backgroundColor: editStatus === "published" ? "#001c48" : "#f3f4f6",
-                      color: editStatus === "published" ? "white" : "#374151",
-                    }}
-                  >
+                  <button onClick={() => setEditStatus("published")} className="flex-1 py-2 text-sm font-semibold rounded-lg transition" style={{ backgroundColor: editStatus === "published" ? "#001c48" : "#f3f4f6", color: editStatus === "published" ? "white" : "#374151" }}>
                     Published
                   </button>
-                  <button
-                    onClick={() => setEditStatus("draft")}
-                    className="flex-1 py-2 text-sm font-semibold rounded-lg transition"
-                    style={{
-                      backgroundColor: editStatus === "draft" ? "#374151" : "#f3f4f6",
-                      color: editStatus === "draft" ? "white" : "#374151",
-                    }}
-                  >
+                  <button onClick={() => setEditStatus("draft")} className="flex-1 py-2 text-sm font-semibold rounded-lg transition" style={{ backgroundColor: editStatus === "draft" ? "#374151" : "#f3f4f6", color: editStatus === "draft" ? "white" : "#374151" }}>
                     Draft
                   </button>
                 </div>
               </div>
             </div>
-
-            {/* Footer buttons */}
             <div className="px-6 pb-6 pt-3 flex gap-3 border-t border-gray-100">
-              <button
-                onClick={() => setEditingVideo(null)}
-                disabled={editSaving}
-                className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-              >
+              <button onClick={() => setEditingVideo(null)} disabled={editSaving} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
                 Cancel
               </button>
-              <button
-                onClick={saveEdit}
-                disabled={editSaving || !editTitle.trim()}
-                className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-                style={{ backgroundColor: "#001c48" }}
-              >
+              <button onClick={saveEdit} disabled={editSaving || !editTitle.trim()} className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: "#001c48" }}>
                 {editSaving ? "Saving…" : "Save changes"}
               </button>
             </div>
@@ -787,9 +867,7 @@ export default function CoachVideosPage() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Delete Confirmation Modal                                            */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Delete Modal */}
       {deletingVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => !deleteConfirming && setDeletingVideo(null)} />
@@ -804,18 +882,10 @@ export default function CoachVideosPage() {
               <span className="font-semibold text-gray-700">&ldquo;{deletingVideo.title}&rdquo;</span> will be permanently deleted. This cannot be undone.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setDeletingVideo(null)}
-                disabled={deleteConfirming}
-                className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
-              >
+              <button onClick={() => setDeletingVideo(null)} disabled={deleteConfirming} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
                 Cancel
               </button>
-              <button
-                onClick={confirmDelete}
-                disabled={deleteConfirming}
-                className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50"
-              >
+              <button onClick={confirmDelete} disabled={deleteConfirming} className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50">
                 {deleteConfirming ? "Deleting…" : "Delete"}
               </button>
             </div>
@@ -823,9 +893,7 @@ export default function CoachVideosPage() {
         </div>
       )}
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Bottom Navigation                                                    */}
-      {/* ------------------------------------------------------------------ */}
+      {/* Bottom Nav */}
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
