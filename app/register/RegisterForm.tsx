@@ -91,11 +91,16 @@ export default function RegisterForm() {
     if (isMinor && !parentEmail.trim())
       return "A parent or guardian email is required for users under 13.";
     if (!role) return "Please select a role.";
+    if (!coachInviteToken && !inviteCode.trim()) return "An invite code is required to register.";
     return "";
   }
 
   async function checkInviteCode(): Promise<boolean> {
-    if (!inviteCode.trim()) return true; // code is optional
+    if (!coachInviteToken && !inviteCode.trim()) {
+      setError("An invite code is required to register. Please use the link your coach gave you.");
+      return false;
+    }
+    if (!inviteCode.trim()) return true; // coach invite path — no student code needed
     const result = await validateInviteCode(inviteCode.trim());
     if (!result.valid) {
       setError(result.error ?? "Invalid invite code.");
@@ -114,14 +119,11 @@ export default function RegisterForm() {
       const ageNum = parseInt(age, 10);
       const code = inviteCode.trim().toUpperCase();
 
-      // Validate coach invite token first (before creating account)
+      // Validate invite token / code BEFORE creating the account to avoid orphan accounts
       if (coachInviteToken) {
         const result = await validateCoachInvite(coachInviteToken);
         if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
-      }
-
-      // Validate invite code BEFORE creating the account to avoid orphan accounts
-      if (code) {
+      } else {
         const valid = await checkInviteCode();
         if (!valid) return;
       }
@@ -171,11 +173,9 @@ export default function RegisterForm() {
       if (coachInviteToken) {
         const result = await validateCoachInvite(coachInviteToken);
         if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
-      }
-
-      if (code) {
-        const result = await validateInviteCode(code);
-        if (!result.valid) { setError(result.error ?? "Invalid invite code."); return; }
+      } else {
+        const valid = await checkInviteCode();
+        if (!valid) return;
       }
 
       console.log("[register/google] opening Google sign-in popup");
@@ -345,8 +345,9 @@ export default function RegisterForm() {
             {/* Invite code */}
             <div>
               <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-700 mb-1">
-                Invite code{" "}
-                <span className="text-gray-400 font-normal">{codeIsLocked ? "" : "(optional)"}</span>
+                Invite code{!coachInviteToken && !codeIsLocked && (
+                  <span className="text-red-500 ml-1 font-normal">*</span>
+                )}
               </label>
               <input
                 id="inviteCode"
