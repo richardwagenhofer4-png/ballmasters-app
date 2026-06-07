@@ -15,7 +15,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("[AuthContext] provider mounted at", Date.now());
     const unsub = onAuthStateChanged(auth, (u) => {
+      console.log("[AuthContext] auth fired at", Date.now(), "user:", u ? "yes" : "no");
       setUser(u);
       setLoading(false);
     });

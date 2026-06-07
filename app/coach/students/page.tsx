@@ -43,6 +43,7 @@ export default function StudentsListPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  console.log("[students] render, loading=", loading, "at", Date.now());
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState("");
 
