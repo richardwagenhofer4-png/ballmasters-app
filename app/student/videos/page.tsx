@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import ViewToggle from "@/components/ViewToggle";
+import { useViewMode } from "@/lib/useViewMode";
 
 interface Video {
   id: string;
@@ -33,6 +35,7 @@ function formatDate(iso: string): string {
 
 export default function StudentVideosPage() {
   const router = useRouter();
+  const [viewMode, setViewMode] = useViewMode("student-videos");
   const [videos, setVideos] = useState<Video[]>([]);
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,12 +78,15 @@ export default function StudentVideosPage() {
               <p className="text-xs text-gray-400">Ball Masters Florida</p>
             </div>
           </div>
-          <Link
-            href="/student/dashboard"
-            className="text-sm font-medium text-gray-500 hover:text-gray-700 transition"
-          >
-            ← Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            <ViewToggle value={viewMode} onChange={setViewMode} />
+            <Link
+              href="/student/dashboard"
+              className="text-sm font-medium text-gray-500 hover:text-gray-700 transition"
+            >
+              ← Dashboard
+            </Link>
+          </div>
         </div>
 
         {/* Error */}
@@ -112,72 +118,121 @@ export default function StudentVideosPage() {
             </p>
           </div>
         ) : (
-          /* Video list */
-          <div className="space-y-3">
-            {videos.map((video) => {
-              const watched = uid ? (video.viewedBy ?? []).includes(uid) : false;
-              return (
-                <Link
-                  key={video.id}
-                  href={`/student/videos/${video.id}`}
-                  className="group block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
-                >
-                  <div
-                    className="flex items-stretch"
-                    style={{
-                      borderLeft: `4px solid ${watched ? "#d1d5db" : "#001c48"}`,
-                    }}
-                  >
-                    {/* Play icon column */}
-                    <div className="flex items-center justify-center w-14 shrink-0 bg-gray-50 group-hover:bg-gray-100 transition-colors">
-                      <svg
-                        className="h-6 w-6 transition-colors"
-                        style={{ color: watched ? "#9ca3af" : "#001c48" }}
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
+          /* Video list — layout switches with viewMode */
+          viewMode === "grid" ? (
+            <div className="grid grid-cols-2 gap-3">
+              {videos.map((video) => {
+                const watched = uid ? (video.viewedBy ?? []).includes(uid) : false;
+                return (
+                  <Link key={video.id} href={`/student/videos/${video.id}`} className="group block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                    <div className="flex items-center justify-center h-24" style={{ backgroundColor: watched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}>
+                      <svg className="h-10 w-10" style={{ color: watched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
                         <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
                       </svg>
                     </div>
-
-                    {/* Content */}
-                    <div className="flex-1 px-4 py-3.5 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-gray-900 truncate leading-snug">
-                          {video.title}
-                        </h3>
-                        {!watched ? (
-                          <span
-                            className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
-                            style={{ backgroundColor: "#01fff9", color: "#001c48" }}
-                          >
-                            New
-                          </span>
-                        ) : (
-                          <span className="shrink-0 text-xs text-gray-400 font-medium">
-                            Watched
-                          </span>
-                        )}
+                    <div className="px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-1 mb-0.5">
+                        <h3 className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2">{video.title}</h3>
+                        <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full ml-1" style={watched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
+                          {watched ? "✓" : "New"}
+                        </span>
                       </div>
-                      <p className="mt-0.5 text-xs text-gray-500">
-                        {video.coachName}
-                        {video.createdAt && (
-                          <span className="ml-2 text-gray-400">· {formatDate(video.createdAt)}</span>
-                        )}
-                      </p>
+                      <p className="text-xs text-gray-400 truncate">{video.coachName}{video.createdAt && ` · ${formatDate(video.createdAt)}`}</p>
                     </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : viewMode === "list" ? (
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-gray-100">
+              {videos.map((video) => {
+                const watched = uid ? (video.viewedBy ?? []).includes(uid) : false;
+                return (
+                  <Link key={video.id} href={`/student/videos/${video.id}`} className="group flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition">
+                    <svg className="h-4 w-4 shrink-0" style={{ color: watched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-semibold text-gray-900 truncate">{video.title}</span>
+                      <span className="text-xs text-gray-400 ml-2">{video.coachName}{video.createdAt && ` · ${formatDate(video.createdAt)}`}</span>
+                    </div>
+                    {!watched ? (
+                      <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#01fff9", color: "#001c48" }}>New</span>
+                    ) : (
+                      <span className="shrink-0 text-xs text-gray-400 font-medium">Watched</span>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            /* cards — original layout */
+            <div className="space-y-3">
+              {videos.map((video) => {
+                const watched = uid ? (video.viewedBy ?? []).includes(uid) : false;
+                return (
+                  <Link
+                    key={video.id}
+                    href={`/student/videos/${video.id}`}
+                    className="group block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                  >
+                    <div
+                      className="flex items-stretch"
+                      style={{
+                        borderLeft: `4px solid ${watched ? "#d1d5db" : "#001c48"}`,
+                      }}
+                    >
+                      {/* Play icon column */}
+                      <div className="flex items-center justify-center w-14 shrink-0 bg-gray-50 group-hover:bg-gray-100 transition-colors">
+                        <svg
+                          className="h-6 w-6 transition-colors"
+                          style={{ color: watched ? "#9ca3af" : "#001c48" }}
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                        </svg>
+                      </div>
 
-                    {/* Chevron */}
-                    <div className="flex items-center pr-4">
-                      <svg className="h-4 w-4 text-gray-300 group-hover:text-gray-400 transition-colors" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                      </svg>
+                      {/* Content */}
+                      <div className="flex-1 px-4 py-3.5 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-gray-900 truncate leading-snug">
+                            {video.title}
+                          </h3>
+                          {!watched ? (
+                            <span
+                              className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: "#01fff9", color: "#001c48" }}
+                            >
+                              New
+                            </span>
+                          ) : (
+                            <span className="shrink-0 text-xs text-gray-400 font-medium">
+                              Watched
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          {video.coachName}
+                          {video.createdAt && (
+                            <span className="ml-2 text-gray-400">· {formatDate(video.createdAt)}</span>
+                          )}
+                        </p>
+                      </div>
+
+                      {/* Chevron */}
+                      <div className="flex items-center pr-4">
+                        <svg className="h-4 w-4 text-gray-300 group-hover:text-gray-400 transition-colors" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                        </svg>
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
     </main>
