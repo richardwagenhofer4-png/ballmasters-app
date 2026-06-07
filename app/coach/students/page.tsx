@@ -6,11 +6,27 @@ import { usePathname, useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import ViewToggle from "@/components/ViewToggle";
+import { useViewMode } from "@/lib/useViewMode";
+import InitialsAvatar from "@/components/InitialsAvatar";
 
 interface Student {
   id: string;
   fullName: string;
   email: string;
+  avatarId: string;
+  joinedStr: string;
+}
+
+interface StudentStat {
+  videoCount: number;
+  watchRate: number | null;
+  lessonCount: number;
+}
+
+interface VideoData {
+  studentIds: string[];
+  viewedBy: string[];
 }
 
 function HomeIcon({ className }: { className?: string }) {
@@ -37,13 +53,30 @@ const NAV_ITEMS = [
   { href: "/coach/invite", label: "Invite", Icon: InviteIcon },
 ];
 
+function formatJoinDate(createdAt: unknown): string {
+  if (!createdAt) return "";
+  try {
+    const ts = createdAt as { toDate?: () => Date; seconds?: number };
+    const d = ts.toDate ? ts.toDate() : ts.seconds ? new Date(ts.seconds * 1000) : new Date(createdAt as string);
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  } catch { return ""; }
+}
+
+function rateColor(rate: number): string {
+  if (rate >= 75) return "#16a34a";
+  if (rate >= 40) return "#d97706";
+  return "#dc2626";
+}
+
 export default function StudentsListPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
+  const [viewMode, setViewMode] = useViewMode("coach-students");
 
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
+  const [stats, setStats] = useState<Record<string, StudentStat>>({});
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -51,15 +84,44 @@ export default function StudentsListPage() {
     if (!user) { router.push("/login"); return; }
     (async () => {
       try {
-        const snap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
-        const list: Student[] = snap.docs
+        const [usersSnap, videosSnap, bookingsSnap] = await Promise.all([
+          getDocs(query(collection(db, "users"), where("role", "==", "student"))),
+          getDocs(collection(db, "videos")),
+          getDocs(query(collection(db, "bookings"), where("status", "==", "confirmed"))),
+        ]);
+
+        const list: Student[] = usersSnap.docs
           .map(d => ({
             id: d.id,
             fullName: (d.data().fullName as string) ?? "Student",
             email: (d.data().email as string) ?? "",
+            avatarId: (d.data().avatarId as string) ?? "",
+            joinedStr: formatJoinDate(d.data().createdAt),
           }))
           .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+        const videos: VideoData[] = videosSnap.docs.map(d => ({
+          studentIds: (d.data().studentIds as string[]) ?? [],
+          viewedBy: (d.data().viewedBy as string[]) ?? [],
+        }));
+
+        const lessonsBySid: Record<string, number> = {};
+        bookingsSnap.docs.forEach(d => {
+          const sid = d.data().studentId as string;
+          if (sid) lessonsBySid[sid] = (lessonsBySid[sid] ?? 0) + 1;
+        });
+
+        const statsMap: Record<string, StudentStat> = {};
+        for (const s of list) {
+          const myVideos = videos.filter(v => v.studentIds.includes(s.id));
+          const videoCount = myVideos.length;
+          const watchedCount = myVideos.filter(v => v.viewedBy.includes(s.id)).length;
+          const watchRate = videoCount > 0 ? Math.round(watchedCount / videoCount * 100) : null;
+          statsMap[s.id] = { videoCount, watchRate, lessonCount: lessonsBySid[s.id] ?? 0 };
+        }
+
         setStudents(list);
+        setStats(statsMap);
       } catch (err) {
         console.error("[coach/students]", err);
       } finally {
@@ -122,47 +184,127 @@ export default function StudentsListPage() {
           </div>
         ) : (
           <>
-            <div className="relative mb-3">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
-              </svg>
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search students…"
-                className="w-full pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-200 rounded-xl focus:outline-none"
-                onFocus={e => (e.target.style.borderColor = "#001c48")}
-                onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
-              />
+            <div className="flex items-center gap-2 mb-3">
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
+                </svg>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search students…"
+                  className="w-full pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-200 rounded-xl focus:outline-none"
+                  onFocus={e => (e.target.style.borderColor = "#001c48")}
+                  onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
+                />
+              </div>
+              <ViewToggle value={viewMode} onChange={setViewMode} />
             </div>
 
             {filtered.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">No students match &ldquo;{search}&rdquo;</p>
-            ) : (
+            ) : viewMode === "list" ? (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {filtered.map((s, i) => (
-                  <Link key={s.id} href={`/coach/students/${s.id}`}>
-                    <div
-                      className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition"
-                      style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
-                    >
+                {filtered.map((s, i) => {
+                  const st = stats[s.id];
+                  return (
+                    <Link key={s.id} href={`/coach/students/${s.id}`}>
                       <div
-                        className="h-10 w-10 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
-                        style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 active:bg-gray-100 transition"
+                        style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
                       >
-                        {s.fullName.charAt(0).toUpperCase()}
+                        <InitialsAvatar name={s.fullName} id={s.id} size={36} variant="student" avatarId={s.avatarId || undefined} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
+                          <p className="text-xs text-gray-400 truncate">{s.email}</p>
+                        </div>
+                        {st && (
+                          <div className="text-right shrink-0">
+                            <p className="text-xs text-gray-500">{st.videoCount} vid{st.videoCount !== 1 ? "s" : ""} · {st.lessonCount} lesson{st.lessonCount !== 1 ? "s" : ""}</p>
+                            {st.watchRate !== null && (
+                              <p className="text-xs font-semibold" style={{ color: rateColor(st.watchRate) }}>{st.watchRate}% watched</p>
+                            )}
+                          </div>
+                        )}
+                        <svg className="h-4 w-4 text-gray-300 shrink-0 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                        </svg>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
-                        <p className="text-xs text-gray-400 truncate">{s.email}</p>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : viewMode === "cards" ? (
+              <div className="space-y-3">
+                {filtered.map(s => {
+                  const st = stats[s.id];
+                  return (
+                    <Link key={s.id} href={`/coach/students/${s.id}`}>
+                      <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition">
+                        <div className="flex items-center gap-3 mb-3">
+                          <InitialsAvatar name={s.fullName} id={s.id} size={52} variant="student" avatarId={s.avatarId || undefined} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate">{s.fullName}</p>
+                            <p className="text-xs text-gray-400 truncate">{s.email}</p>
+                            {s.joinedStr && <p className="text-xs text-gray-300 mt-0.5">Joined {s.joinedStr}</p>}
+                          </div>
+                          <svg className="h-4 w-4 text-gray-300 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        {st && (
+                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                            <div className="text-center">
+                              <p className="text-base font-bold text-gray-900">{st.videoCount}</p>
+                              <p className="text-xs text-gray-400">Videos</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-base font-bold text-gray-900">{st.lessonCount}</p>
+                              <p className="text-xs text-gray-400">Lessons</p>
+                            </div>
+                            <div className="text-center">
+                              {st.watchRate !== null ? (
+                                <>
+                                  <p className="text-base font-bold" style={{ color: rateColor(st.watchRate) }}>{st.watchRate}%</p>
+                                  <p className="text-xs text-gray-400">Watch rate</p>
+                                </>
+                              ) : (
+                                <>
+                                  <p className="text-base font-bold text-gray-300">—</p>
+                                  <p className="text-xs text-gray-400">Watch rate</p>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <svg className="h-4 w-4 text-gray-300 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {filtered.map(s => {
+                  const st = stats[s.id];
+                  return (
+                    <Link key={s.id} href={`/coach/students/${s.id}`}>
+                      <div className="bg-white rounded-xl border border-gray-200 px-3 py-4 flex flex-col items-center text-center hover:bg-gray-50 active:bg-gray-100 transition">
+                        <InitialsAvatar name={s.fullName} id={s.id} size={48} variant="student" avatarId={s.avatarId || undefined} />
+                        <p className="text-sm font-bold text-gray-900 mt-2 truncate w-full">{s.fullName}</p>
+                        {s.joinedStr && <p className="text-xs text-gray-300 mt-0.5">Joined {s.joinedStr}</p>}
+                        {st && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            {st.videoCount}v · {st.lessonCount}l
+                            {st.watchRate !== null && (
+                              <span style={{ color: rateColor(st.watchRate) }}> · {st.watchRate}%</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
             )}
           </>
