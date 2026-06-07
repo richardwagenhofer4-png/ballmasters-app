@@ -83,7 +83,7 @@ function VideoMetaRows({ v, student, studentId, size, abbreviate }: {
         <span className="text-xs text-gray-700 truncate">{abbreviate ? abbreviateName(v.coachName) : (v.coachName || "Unknown")}</span>
       </div>
       <div className="flex items-center gap-1.5 mt-0.5">
-        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Student:</span>
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Athlete:</span>
         <InitialsAvatar name={student.fullName} id={studentId} size={size} variant="student" avatarId={student.avatarId || undefined} />
         <span className="text-xs text-gray-700 truncate">
           {abbreviate ? student.fullName.split(" ")[0] : student.fullName}

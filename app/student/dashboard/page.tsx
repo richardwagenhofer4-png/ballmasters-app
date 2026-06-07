@@ -10,6 +10,7 @@ import { clearAuthCookies } from "@/lib/cookies";
 import { requestNotificationPermission } from "@/lib/notifications";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
+import InitialsAvatar from "@/components/InitialsAvatar";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,6 +23,36 @@ interface Video {
   viewedBy: string[];
   createdAt: string;
   type?: string;
+}
+
+function abbreviateName(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return name;
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
+
+function VideoMetaRows({ v, studentName, uid, avatarId, size, abbreviate }: {
+  v: Video; studentName: string; uid: string; avatarId: string; size: number; abbreviate?: boolean;
+}) {
+  const labelW = size <= 24 ? 44 : 52;
+  const dateStr = v.createdAt
+    ? new Date(v.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "";
+  return (
+    <>
+      <p className="text-xs text-gray-400 mt-0.5">{dateStr}</p>
+      <div className="flex items-center gap-1.5 mt-1">
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Coach:</span>
+        <InitialsAvatar name={v.coachName || "?"} id={v.id} size={size} variant="coach" />
+        <span className="text-xs text-gray-700 truncate">{abbreviate ? abbreviateName(v.coachName) : (v.coachName || "Coach")}</span>
+      </div>
+      <div className="flex items-center gap-1.5 mt-0.5">
+        <span className="text-xs text-gray-400 shrink-0" style={{ width: labelW }}>Athlete:</span>
+        <InitialsAvatar name={studentName || "?"} id={uid} size={size} variant="student" avatarId={avatarId || undefined} />
+        <span className="text-xs text-gray-700 truncate">{abbreviate ? (studentName.split(" ")[0] || "Me") : (studentName || "Me")}</span>
+      </div>
+    </>
+  );
 }
 
 interface CoachActivity {
@@ -115,6 +146,7 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
+  const [avatarId, setAvatarId] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [activity, setActivity] = useState<CoachActivity[]>([]);
   const [showNotifBanner, setShowNotifBanner] = useState(false);
@@ -144,6 +176,7 @@ export default function StudentDashboard() {
 
         const profileData = profileSnap.data();
         setStudentName(profileData?.fullName ?? profileData?.name ?? user.displayName ?? "Athlete");
+        setAvatarId(profileData?.avatarId ?? "");
 
         const videoDocs: Video[] = videosSnap.docs.map(d => ({
           id: d.id,
@@ -316,33 +349,13 @@ export default function StudentDashboard() {
             <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>Watched</div>
           </div>
 
-          {/* New / Unread — amber if > 0 */}
-          <div
-            className="rounded-xl text-center py-3 px-1 transition"
-            style={{
-              backgroundColor: unwatchedCount > 0 ? "rgba(0,28,72,0.5)" : "rgba(255,255,255,0.12)",
-            }}
-          >
-            <svg
-              className="h-4 w-4 mb-1 mx-auto"
-              style={{ color: unwatchedCount > 0 ? "#01fff9" : "#01fff9" }}
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
+          {/* New */}
+          <div className="rounded-xl text-center py-3 px-1" style={{ backgroundColor: "rgba(255,255,255,0.12)" }}>
+            <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor">
               <path fillRule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zM12.75 9a.75.75 0 00-1.5 0v2.25H9a.75.75 0 000 1.5h2.25V15a.75.75 0 001.5 0v-2.25H15a.75.75 0 000-1.5h-2.25V9z" clipRule="evenodd" />
             </svg>
-            <div
-              className="text-lg font-extrabold leading-none"
-              style={{ color: "white" }}
-            >
-              {unwatchedCount}
-            </div>
-            <div
-              className="text-xs mt-0.5 leading-tight"
-              style={{ color: "rgba(1,255,249,0.7)" }}
-            >
-              New
-            </div>
+            <div className="text-lg font-extrabold leading-none text-white">{unwatchedCount}</div>
+            <div className="text-xs mt-0.5 leading-tight" style={{ color: "rgba(1,255,249,0.7)" }}>New</div>
           </div>
         </div>
       </div>
@@ -351,6 +364,34 @@ export default function StudentDashboard() {
       {/* Content                                                              */}
       {/* ------------------------------------------------------------------ */}
       <div className="px-4 py-5 space-y-7">
+
+        {/* Quick Actions */}
+        <div>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Actions</h2>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              {
+                label: "Book Lesson", href: "/student/calendar",
+                icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>,
+              },
+              {
+                label: "Message Coach", href: "/student/messages",
+                icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>,
+              },
+              {
+                label: "All Videos", href: "/student/videos",
+                icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-3.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0118 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-3.75 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C6.504 8.25 7 7.746 7 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5m0-5.25v5.25m0-5.25C6 5.004 6.504 4.5 7.125 4.5h9.75c.621 0 1.125.504 1.125 1.125m1.125 2.625h1.5m-1.5 0A1.125 1.125 0 0118 7.125v-1.5m1.125 2.625c-.621 0-1.125.504-1.125 1.125v1.5m2.625-2.625c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M18 5.625v5.25M7.125 12h9.75m-9.75 0A1.125 1.125 0 016 10.875M7.125 12C6.504 12 6 12.504 6 13.125m0-2.25C6 11.496 5.496 12 4.875 12M18 10.875c0 .621-.504 1.125-1.125 1.125M18 10.875c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-7.5 0h7.5" /></svg>,
+              },
+            ].map(action => (
+              <Link key={action.href} href={action.href}>
+                <div className="rounded-xl p-4 flex flex-col items-center gap-2 active:opacity-80 transition shadow-sm" style={{ backgroundColor: "#001c48" }}>
+                  {action.icon}
+                  <span className="text-xs font-semibold text-white text-center leading-tight">{action.label}</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
 
         {/* Continue Watching */}
         <div>
@@ -381,88 +422,81 @@ export default function StudentDashboard() {
                   {continueWatching.map(v => {
                     const isWatched = uid ? v.viewedBy.includes(uid) : false;
                     return (
-                      <Link key={v.id} href={`/student/videos/${v.id}`} className="group block bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-                        <div className="flex items-center justify-center h-20" style={{ backgroundColor: isWatched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}>
-                          <svg className="h-8 w-8" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <div className="px-3 py-2">
-                          <div className="flex items-start justify-between gap-1 mb-0.5">
-                            <h3 className="text-xs font-semibold text-gray-900 leading-snug line-clamp-2">{v.title}</h3>
-                            <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full ml-1" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
-                              {isWatched ? "✓" : "New"}
-                            </span>
+                      <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <Link href={`/student/videos/${v.id}`}>
+                          <div className="flex items-center justify-center h-16" style={{ backgroundColor: isWatched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}>
+                            <svg className="h-7 w-7" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
+                              <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                            </svg>
                           </div>
-                          <p className="text-xs text-gray-400 truncate">{v.coachName}{v.createdAt && ` · ${formatDate(v.createdAt)}`}</p>
+                        </Link>
+                        <div className="p-2.5">
+                          <Link href={`/student/videos/${v.id}`}>
+                            <div className="flex items-start gap-1 mb-0.5">
+                              <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug flex-1 min-w-0 hover:underline">{v.title}</p>
+                              <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
+                                {isWatched ? "✓" : "New"}
+                              </span>
+                            </div>
+                          </Link>
+                          <VideoMetaRows v={v} studentName={studentName} uid={uid!} avatarId={avatarId} size={24} abbreviate />
                         </div>
-                      </Link>
+                      </div>
                     );
                   })}
                 </div>
               ) : viewMode === "list" ? (
-                <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-gray-100">
-                  {continueWatching.map(v => {
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  {continueWatching.map((v, i) => {
                     const isWatched = uid ? v.viewedBy.includes(uid) : false;
                     return (
-                      <Link key={v.id} href={`/student/videos/${v.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition">
-                        <svg className="h-4 w-4 shrink-0" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-semibold text-gray-900 truncate">{v.title}</span>
-                          <span className="text-xs text-gray-400 ml-2">{v.coachName}{v.createdAt && ` · ${formatDate(v.createdAt)}`}</span>
+                      <Link key={v.id} href={`/student/videos/${v.id}`}>
+                        <div className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition" style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}>
+                          <svg className="h-4 w-4 shrink-0" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-gray-900 truncate">{v.title}</p>
+                            <VideoMetaRows v={v} studentName={studentName} uid={uid!} avatarId={avatarId} size={26} />
+                          </div>
+                          <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
+                            {isWatched ? "Watched" : "New"}
+                          </span>
                         </div>
-                        {!isWatched ? (
-                          <span className="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: "#01fff9", color: "#001c48" }}>New</span>
-                        ) : (
-                          <span className="shrink-0 text-xs text-gray-400 font-medium">Watched</span>
-                        )}
                       </Link>
                     );
                   })}
                 </div>
               ) : (
-                /* cards — original layout */
                 <div className="space-y-2.5">
                   {continueWatching.map(v => {
                     const isWatched = uid ? v.viewedBy.includes(uid) : false;
-                    const isDrill = v.type === "drill_comparison";
                     return (
-                      <Link key={v.id} href={`/student/videos/${v.id}`}>
-                        <div className="bg-white rounded-xl border border-gray-200 flex items-stretch overflow-hidden hover:shadow-sm active:opacity-90 transition">
-                          <div className="w-1 shrink-0" style={{ backgroundColor: isWatched ? "#e5e7eb" : "#001c48" }} />
-                          <div className="flex items-center justify-center w-12 shrink-0" style={{ backgroundColor: isWatched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}>
-                            <svg className="h-5 w-5" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
-                              <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
-                            </svg>
-                          </div>
-                          <div className="flex-1 min-w-0 py-3 px-3">
-                            <div className="flex items-start gap-2">
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 truncate leading-snug">{v.title}</p>
-                                <p className="text-xs text-gray-400 mt-0.5">
-                                  {v.coachName}
-                                  {v.createdAt && <> · {formatDate(v.createdAt)}</>}
-                                  {isDrill && <> · Drill</>}
-                                </p>
-                              </div>
-                              <div className="shrink-0 mt-0.5">
-                                {isWatched ? (
-                                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#f3f4f6", color: "#9ca3af" }}>Watched</span>
-                                ) : (
-                                  <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#01fff9", color: "#001c48" }}>New</span>
-                                )}
-                              </div>
+                      <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                        <div className="p-4 pb-3">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <Link href={`/student/videos/${v.id}`}>
+                                <h3 className="text-sm font-bold text-gray-900 truncate hover:underline">{v.title}</h3>
+                              </Link>
+                              <VideoMetaRows v={v} studentName={studentName} uid={uid!} avatarId={avatarId} size={26} />
                             </div>
-                          </div>
-                          <div className="flex items-center pr-3">
-                            <svg className="h-4 w-4 text-gray-300" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
-                            </svg>
+                            <span className="shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
+                              {isWatched ? "Watched" : "New"}
+                            </span>
                           </div>
                         </div>
-                      </Link>
+                        <div className="border-t border-gray-100">
+                          <Link href={`/student/videos/${v.id}`}>
+                            <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L8.029 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
+                              </svg>
+                              Watch
+                            </button>
+                          </Link>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
