@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection, deleteDoc, doc, getDocs, query, updateDoc, where,
@@ -131,6 +131,7 @@ function StudentAvatars({ ids, students }: { ids: string[]; students: Student[] 
 export default function CoachVideosPage() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
@@ -148,7 +149,7 @@ export default function CoachVideosPage() {
   const [watchedFilter, setWatchedFilter] = useState<WatchedFilter>("all");
   const [studentFilter, setStudentFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
-  const [needsReplyFilter, setNeedsReplyFilter] = useState(false);
+  const [needsReplyFilter, setNeedsReplyFilter] = useState(() => searchParams.get("needsReply") === "true");
 
   // Edit modal
   const [editingVideo, setEditingVideo] = useState<Video | null>(null);
