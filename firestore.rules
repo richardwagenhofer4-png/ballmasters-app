@@ -108,5 +108,35 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    // 1-to-1 messaging threads
+    match /threads/{threadId} {
+      // The thread doc is readable/writable by the coach or the athlete in the thread
+      allow read, write: if request.auth != null
+        && (
+          resource.data.coachId == request.auth.uid
+          || resource.data.athleteId == request.auth.uid
+        );
+      // Allow create when the doc doesn't exist yet — validate the ids match the caller
+      allow create: if request.auth != null
+        && (
+          request.resource.data.coachId == request.auth.uid
+          || request.resource.data.athleteId == request.auth.uid
+        );
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null
+          && (
+            get(/databases/$(database)/documents/threads/$(threadId)).data.coachId == request.auth.uid
+            || get(/databases/$(database)/documents/threads/$(threadId)).data.athleteId == request.auth.uid
+          );
+        allow create: if request.auth != null
+          && (
+            get(/databases/$(database)/documents/threads/$(threadId)).data.coachId == request.auth.uid
+            || get(/databases/$(database)/documents/threads/$(threadId)).data.athleteId == request.auth.uid
+          )
+          && request.resource.data.senderId == request.auth.uid;
+      }
+    }
+
   }
 }

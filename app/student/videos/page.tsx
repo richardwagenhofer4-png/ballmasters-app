@@ -67,11 +67,15 @@ function CalendarIcon({ className }: { className?: string }) {
 function ProfileIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" /></svg>;
 }
+function ChatIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
+}
 
 const NAV_ITEMS = [
   { href: "/student/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/student/videos", label: "My Videos", Icon: VideoIcon },
   { href: "/student/calendar", label: "Calendar", Icon: CalendarIcon },
+  { href: "/student/messages", label: "Messages", Icon: ChatIcon },
   { href: "/student/profile", label: "Profile", Icon: ProfileIcon },
 ];
 

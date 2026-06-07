@@ -9,7 +9,8 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { saveUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
 import { validateInviteCode, recordCodeUsage } from "@/lib/inviteCodes";
@@ -133,6 +134,20 @@ export default function RegisterForm() {
       console.log("[register] Auth account created, uid:", credential.user.uid);
 
       await updateProfile(credential.user, { displayName: fullName.trim() });
+
+      // Look up coachId from invite code for students
+      let coachId: string | undefined;
+      if (role === "student" && code) {
+        try {
+          const codeSnap = await getDoc(doc(db, "inviteCodes", code));
+          if (codeSnap.exists()) {
+            coachId = codeSnap.data().createdBy as string | undefined;
+          }
+        } catch (err) {
+          console.warn("[register] could not look up coachId from invite code:", err);
+        }
+      }
+
       await saveUserProfile({
         uid: credential.user.uid,
         email: credential.user.email ?? email,
@@ -140,6 +155,7 @@ export default function RegisterForm() {
         role: role as "student" | "coach",
         age: ageNum,
         ...(ageNum < 13 && parentEmail ? { parentEmail } : {}),
+        ...(coachId ? { coachId } : {}),
       });
 
       if (coachInviteToken) {
@@ -182,12 +198,26 @@ export default function RegisterForm() {
       const credential = await signInWithPopup(auth, googleProvider);
       console.log("[register/google] signed in, uid:", credential.user.uid);
 
+      // Look up coachId from invite code for students (Google sign-up)
+      let coachIdGoogle: string | undefined;
+      if (role === "student" && code) {
+        try {
+          const codeSnap = await getDoc(doc(db, "inviteCodes", code));
+          if (codeSnap.exists()) {
+            coachIdGoogle = codeSnap.data().createdBy as string | undefined;
+          }
+        } catch (err) {
+          console.warn("[register/google] could not look up coachId from invite code:", err);
+        }
+      }
+
       await saveUserProfile({
         uid: credential.user.uid,
         email: credential.user.email ?? "",
         fullName: credential.user.displayName ?? "",
         role: role as "student" | "coach",
         age: null,
+        ...(coachIdGoogle ? { coachId: coachIdGoogle } : {}),
       });
 
       if (coachInviteToken) {

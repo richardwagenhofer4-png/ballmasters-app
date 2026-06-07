@@ -40,12 +40,16 @@ function InviteIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.354-1z" clipRule="evenodd" /></svg>;
 }
 
+function ChatIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
+}
+
 const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
-  { href: "/coach/students", label: "Students", Icon: StudentsIcon },
+  { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
   { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
-  { href: "/coach/invite", label: "Invite", Icon: InviteIcon },
+  { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
 // ---------------------------------------------------------------------------
@@ -347,7 +351,7 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
               value={notes}
               onChange={e => setNotes(e.target.value)}
               rows={3}
-              placeholder="Any details for students…"
+              placeholder="Any details for athletes…"
               className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none resize-none"
               onFocus={e => (e.target.style.borderColor = "#001c48")}
               onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
@@ -608,7 +612,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
         <div className="px-6 pb-6 pt-3 border-t border-gray-100">
           {confirmCancel ? (
             <div className="space-y-2">
-              <p className="text-sm text-red-700 font-medium text-center">Cancel this session for all students?</p>
+              <p className="text-sm text-red-700 font-medium text-center">Cancel this session for all athletes?</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setConfirmCancel(false)}

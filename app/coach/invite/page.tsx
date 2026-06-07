@@ -2,15 +2,41 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { createInviteCode, getInviteCode, type InviteCode } from "@/lib/inviteCodes";
 
+function HomeIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M11.47 3.841a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.061l-1.97-1.97V6a.75.75 0 00-.75-.75h-1.5a.75.75 0 00-.75.75v1.78L13.5 5.409a3 3 0 00-3 0L2.19 11.47a.75.75 0 001.061 1.06l8.219-8.69z" /><path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" /></svg>;
+}
+function VideoIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>;
+}
+function StudentsIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" /></svg>;
+}
+function CalendarIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>;
+}
+function ChatIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
+}
+
+const NAV_ITEMS = [
+  { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
+  { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
+  { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
+  { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
+  { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
+];
+
 type Status = "loading" | "ready" | "generating" | "error";
 
 export default function CoachInvitePage() {
   const { user, loading: authLoading } = useAuth();
+  const pathname = usePathname();
   const [coachUid, setCoachUid] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<InviteCode | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -77,7 +103,7 @@ export default function CoachInvitePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-12">
+    <main className="min-h-screen bg-gray-50 px-4 py-12 pb-20">
       <div className="mx-auto max-w-lg">
         {/* Back button */}
         <Link href="/coach/dashboard" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-6">
@@ -218,6 +244,23 @@ export default function CoachInvitePage() {
           )}
         </div>
       </div>
+
+      <nav
+        className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      >
+        {NAV_ITEMS.map(item => {
+          const isActive = pathname === item.href;
+          return (
+            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
+              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </nav>
     </main>
   );
 }

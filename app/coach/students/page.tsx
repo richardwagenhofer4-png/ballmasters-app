@@ -45,12 +45,16 @@ function CalendarIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>;
 }
 
+function ChatIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
+}
+
 const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
-  { href: "/coach/students", label: "Students", Icon: StudentsIcon },
+  { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
   { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
-  { href: "/coach/invite", label: "Invite", Icon: InviteIcon },
+  { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
 function formatJoinDate(createdAt: unknown): string {
@@ -106,7 +110,7 @@ export default function StudentsListPage() {
         const list: Student[] = usersSnap.docs
           .map(d => ({
             id: d.id,
-            fullName: (d.data().fullName as string) ?? "Student",
+            fullName: (d.data().fullName as string) ?? "Athlete",
             email: (d.data().email as string) ?? "",
             avatarId: (d.data().avatarId as string) ?? "",
             joinedStr: formatJoinDate(d.data().createdAt),
@@ -187,7 +191,7 @@ export default function StudentsListPage() {
         </div>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-extrabold text-white leading-tight">Students</h1>
+            <h1 className="text-2xl font-extrabold text-white leading-tight">Athletes</h1>
             <p className="text-green-300 text-xs mt-0.5">{students.length} registered</p>
           </div>
           <Link href="/coach/invite">
@@ -208,10 +212,10 @@ export default function StudentsListPage() {
         {students.length === 0 ? (
           <div className="bg-white rounded-xl border-2 border-dashed border-gray-200 py-12 text-center px-4 mt-4">
             <StudentsIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-sm font-medium text-gray-500 mb-4">No students have joined yet</p>
+            <p className="text-sm font-medium text-gray-500 mb-4">No athletes have joined yet</p>
             <Link href="/coach/invite">
               <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
-                Invite students
+                Invite athletes
               </button>
             </Link>
           </div>
@@ -226,7 +230,7 @@ export default function StudentsListPage() {
                   type="text"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search students…"
+                  placeholder="Search athletes…"
                   className="w-full pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-200 rounded-xl focus:outline-none"
                   onFocus={e => (e.target.style.borderColor = "#001c48")}
                   onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
@@ -259,7 +263,7 @@ export default function StudentsListPage() {
             </div>
 
             {filtered.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No students match &ldquo;{search}&rdquo;</p>
+              <p className="text-sm text-gray-400 text-center py-8">No athletes match &ldquo;{search}&rdquo;</p>
             ) : viewMode === "list" ? (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 {displayed.map((s, i) => {

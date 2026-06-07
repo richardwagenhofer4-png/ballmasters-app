@@ -15,7 +15,7 @@ export interface UserProfile {
 }
 
 export async function saveUserProfile(
-  profile: Omit<UserProfile, "createdAt" | "school">
+  profile: Omit<UserProfile, "createdAt" | "school"> & { coachId?: string }
 ): Promise<void> {
   console.log("[saveUserProfile] called with:", {
     uid: profile.uid,
@@ -36,6 +36,9 @@ export async function saveUserProfile(
   };
   if (profile.parentEmail) {
     data.parentEmail = profile.parentEmail;
+  }
+  if (profile.coachId) {
+    data.coachId = profile.coachId;
   }
 
   console.log("[saveUserProfile] writing to Firestore path: users/" + profile.uid);

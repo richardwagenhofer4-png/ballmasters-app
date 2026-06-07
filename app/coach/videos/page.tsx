@@ -125,12 +125,16 @@ function CalendarIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>;
 }
 
+function ChatIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
+}
+
 const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
-  { href: "/coach/students", label: "Students", Icon: StudentsIcon },
+  { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
   { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
-  { href: "/coach/invite", label: "Invite", Icon: InviteIcon },
+  { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
 // ---------------------------------------------------------------------------
@@ -200,7 +204,7 @@ function CoachVideosPage() {
           studentsSnap.docs
             .map(d => ({
               id: d.id,
-              fullName: (d.data().fullName as string) ?? "Student",
+              fullName: (d.data().fullName as string) ?? "Athlete",
               email: (d.data().email as string) ?? "",
               avatarId: (d.data().avatarId as string) ?? "",
             }))
@@ -490,11 +494,11 @@ function CoachVideosPage() {
         <div className="flex gap-2">
           <select value={watchedFilter} onChange={e => setWatchedFilter(e.target.value as WatchedFilter)} className={selectClass}>
             <option value="all">All Watched</option>
-            <option value="fully_watched">{studentFilter ? "Student Watched" : "Fully Watched"}</option>
+            <option value="fully_watched">{studentFilter ? "Athlete Watched" : "Fully Watched"}</option>
             <option value="not_fully_watched">{studentFilter ? "Not Watched" : "Not Fully Watched"}</option>
           </select>
           <select value={studentFilter} onChange={e => setStudentFilter(e.target.value)} className={selectClass}>
-            <option value="">All Students</option>
+            <option value="">All Athletes</option>
             {students.map(s => <option key={s.id} value={s.id}>{s.fullName}</option>)}
           </select>
           <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className={selectClass}>
@@ -690,7 +694,7 @@ function CoachVideosPage() {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-400">No students assigned</p>
+                      <p className="text-xs text-gray-400">No athletes assigned</p>
                     )}
                   </div>
                   <div className="flex border-t border-gray-100">
@@ -785,7 +789,7 @@ function CoachVideosPage() {
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Assigned Students</label>
+                  <label className="text-sm font-medium text-gray-700">Assigned Athletes</label>
                   {editStudentIds.size > 0 && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.1)", color: "#001c48" }}>
                       {editStudentIds.size} selected
@@ -801,13 +805,13 @@ function CoachVideosPage() {
                       type="text"
                       value={editStudentSearch}
                       onChange={e => setEditStudentSearch(e.target.value)}
-                      placeholder="Search students…"
+                      placeholder="Search athletes…"
                       className="w-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent"
                     />
                   </div>
                   <div className="max-h-36 overflow-y-auto divide-y divide-gray-50">
                     {editFilteredStudents.length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-gray-400">No students found.</p>
+                      <p className="px-4 py-3 text-sm text-gray-400">No athletes found.</p>
                     ) : (
                       editFilteredStudents.map(s => {
                         const checked = editStudentIds.has(s.id);
@@ -839,7 +843,7 @@ function CoachVideosPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-700">Allow download</p>
-                  <p className="text-xs text-gray-400">Students can download this video</p>
+                  <p className="text-xs text-gray-400">Athletes can download this video</p>
                 </div>
                 <button
                   onClick={() => setEditDownloadAllowed(!editDownloadAllowed)}

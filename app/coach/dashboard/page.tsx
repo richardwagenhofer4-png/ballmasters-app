@@ -107,12 +107,20 @@ function CalendarIcon({ className }: { className?: string }) {
   );
 }
 
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
-  { href: "/coach/students", label: "Students", Icon: StudentsIcon },
+  { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
   { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
-  { href: "/coach/invite", label: "Invite", Icon: InviteIcon },
+  { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
 // ---------------------------------------------------------------------------
@@ -148,7 +156,7 @@ export default function CoachDashboard() {
 
         const studentDocs: StudentData[] = studentsSnap.docs.map(d => ({
           id: d.id,
-          fullName: (d.data().fullName as string) ?? "Student",
+          fullName: (d.data().fullName as string) ?? "Athlete",
           email: (d.data().email as string) ?? "",
         }));
 
@@ -260,7 +268,7 @@ export default function CoachDashboard() {
 
   const statCards = [
     {
-      label: "Students",
+      label: "Athletes",
       value: students.length,
       href: "/coach/students",
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" /></svg>,
@@ -357,7 +365,7 @@ export default function CoachDashboard() {
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>,
               },
               {
-                label: "Invite Students", href: "/coach/invite", bg: "#001c48",
+                label: "Invite Athletes", href: "/coach/invite", bg: "#001c48",
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" /></svg>,
               },
               {
@@ -394,7 +402,7 @@ export default function CoachDashboard() {
                       <p className="text-xs text-gray-400 mt-0.5">
                         {v.coachName && <span className="font-medium text-gray-500">{v.coachName} · </span>}
                         {formatDate(v.createdAt)}
-                        {v.assignedCount > 0 && <> · {v.assignedCount} student{v.assignedCount !== 1 ? "s" : ""}</>}
+                        {v.assignedCount > 0 && <> · {v.assignedCount} athlete{v.assignedCount !== 1 ? "s" : ""}</>}
                       </p>
                     </div>
                     {v.assignedCount > 0 && (
@@ -441,7 +449,7 @@ export default function CoachDashboard() {
                         border: copiedId === v.id ? "1px solid rgba(1,255,249,0.4)" : "1px solid transparent",
                       }}
                     >
-                      {copiedId === v.id ? "Copied!" : "Assign to Student"}
+                      {copiedId === v.id ? "Copied!" : "Assign to Athlete"}
                     </button>
                   </div>
                 </div>
@@ -465,16 +473,16 @@ export default function CoachDashboard() {
         {/* Students */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Students</h2>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Athletes</h2>
             {students.length > 0 && <span className="text-xs text-gray-400">{students.length} total</span>}
           </div>
 
           {students.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 py-8 text-center px-4">
-              <p className="text-sm text-gray-400 mb-4">No students have joined yet</p>
+              <p className="text-sm text-gray-400 mb-4">No athletes have joined yet</p>
               <Link href="/coach/invite">
                 <button className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition" style={{ backgroundColor: "#001c48" }}>
-                  Invite students
+                  Invite athletes
                 </button>
               </Link>
             </div>
@@ -488,7 +496,7 @@ export default function CoachDashboard() {
                   type="text"
                   value={studentSearch}
                   onChange={e => setStudentSearch(e.target.value)}
-                  placeholder="Search students…"
+                  placeholder="Search athletes…"
                   className="w-full pl-9 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-200 rounded-xl focus:outline-none"
                   onFocus={e => (e.target.style.borderColor = "#001c48")}
                   onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
@@ -496,7 +504,7 @@ export default function CoachDashboard() {
               </div>
 
               {filteredStudents.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No students match &ldquo;{studentSearch}&rdquo;</p>
+                <p className="text-sm text-gray-400 text-center py-6">No athletes match &ldquo;{studentSearch}&rdquo;</p>
               ) : (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                   {filteredStudents.map((s, i) => (
