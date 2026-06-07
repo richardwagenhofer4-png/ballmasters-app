@@ -1,5 +1,10 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, browserLocalPersistence, setPersistence } from "firebase/auth";
+import {
+  initializeAuth,
+  getAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -13,7 +18,20 @@ const firebaseConfig = {
 };
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
 
-setPersistence(auth, browserLocalPersistence).catch(() => {});
+// Initialize auth WITHOUT the iframe-based popup/redirect resolver.
+// The iframe resolver hangs for 30-60s on iOS standalone PWA mode.
+// The login page imports browserPopupRedirectResolver explicitly for Google sign-in.
+function makeAuth() {
+  try {
+    return initializeAuth(app, {
+      persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    });
+  } catch {
+    // initializeAuth throws if already initialized (e.g. hot reload) — fall back to getAuth
+    return getAuth(app);
+  }
+}
+
+export const auth = makeAuth();
+export const db = getFirestore(app);

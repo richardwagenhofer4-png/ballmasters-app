@@ -8,6 +8,7 @@ import {
   signInWithPopup,
   GoogleAuthProvider,
   onAuthStateChanged,
+  browserPopupRedirectResolver,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
@@ -104,7 +105,7 @@ export default function LoginPage() {
     setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      const credential = await signInWithPopup(auth, provider);
+      const credential = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
       await afterLogin(credential.user.uid);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
