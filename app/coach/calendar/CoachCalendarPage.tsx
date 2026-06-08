@@ -15,6 +15,7 @@ import {
   runTransaction,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
@@ -140,6 +141,371 @@ function todayDateStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+// ---------------------------------------------------------------------------
+// Batch Create Helpers & Modal
+// ---------------------------------------------------------------------------
+
+interface SessionDraft { date: string; startTime: string; endTime: string; }
+interface SlotRow { id: number; startTime: string; endTime: string; }
+
+const DAYS = [
+  { label: "Mon", day: 1 }, { label: "Tue", day: 2 }, { label: "Wed", day: 3 },
+  { label: "Thu", day: 4 }, { label: "Fri", day: 5 }, { label: "Sat", day: 6 }, { label: "Sun", day: 0 },
+];
+
+function dateStrToDate(s: string): Date { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+function dateToStr(d: Date): string { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function addDays(dateStr: string, n: number): string { const d = dateStrToDate(dateStr); d.setDate(d.getDate() + n); return dateToStr(d); }
+function formatDateLabel(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+interface BatchCreateModalProps {
+  onClose: () => void;
+  coachId: string;
+  coachName: string;
+  isAdmin: boolean;
+  coaches: { uid: string; name: string }[];
+  existingSessions: Session[];
+}
+
+function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, existingSessions }: BatchCreateModalProps) {
+  const [tab, setTab] = useState<"recurring" | "multislot" | "duplicate">("recurring");
+  const [selectedCoachId, setSelectedCoachId] = useState("");
+  const [selectedCoachName, setSelectedCoachName] = useState("");
+  const [type, setType] = useState<"individual" | "group">("individual");
+  const [capacity, setCapacity] = useState(5);
+  const [location, setLocation] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [recurStart, setRecurStart] = useState(todayDateStr());
+  const [recurEnd, setRecurEnd] = useState(addDays(todayDateStr(), 27));
+  const [recurDays, setRecurDays] = useState<number[]>([1, 3, 5]);
+  const [recurStartTime, setRecurStartTime] = useState(() => nextQuarterHour());
+  const [recurEndTime, setRecurEndTime] = useState(() => addOneHour(nextQuarterHour()));
+
+  const [multiDate, setMultiDate] = useState(todayDateStr());
+  const [slots, setSlots] = useState<SlotRow[]>([{ id: 1, startTime: nextQuarterHour(), endTime: addOneHour(nextQuarterHour()) }]);
+  const [nextSlotId, setNextSlotId] = useState(2);
+
+  const [dupSourceId, setDupSourceId] = useState("");
+  const [dupDates, setDupDates] = useState<string[]>([addDays(todayDateStr(), 1)]);
+
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [error, setError] = useState("");
+
+  const effectiveCoachId = (isAdmin && selectedCoachId) ? selectedCoachId : coachId;
+  const effectiveCoachName = (isAdmin && selectedCoachName) ? selectedCoachName : coachName;
+  const existingKeys = new Set(existingSessions.map(s => `${s.coachId}__${s.date}__${s.startTime}`));
+
+  function computeDrafts(): SessionDraft[] {
+    if (tab === "recurring") {
+      if (!recurStart || !recurEnd || recurDays.length === 0) return [];
+      const drafts: SessionDraft[] = [];
+      let cur = recurStart;
+      while (cur <= recurEnd) {
+        if (recurDays.includes(dateStrToDate(cur).getDay()))
+          drafts.push({ date: cur, startTime: recurStartTime, endTime: recurEndTime });
+        cur = addDays(cur, 1);
+      }
+      return drafts;
+    }
+    if (tab === "multislot") {
+      if (!multiDate) return [];
+      return slots.map(s => ({ date: multiDate, startTime: s.startTime, endTime: s.endTime }));
+    }
+    if (tab === "duplicate") {
+      const src = existingSessions.find(s => s.id === dupSourceId);
+      if (!src) return [];
+      return dupDates.filter(Boolean).map(date => ({ date, startTime: src.startTime, endTime: src.endTime }));
+    }
+    return [];
+  }
+
+  const drafts = computeDrafts();
+  const newDrafts = drafts.filter(d => !existingKeys.has(`${effectiveCoachId}__${d.date}__${d.startTime}`));
+  const skipCount = drafts.length - newDrafts.length;
+
+  async function handleCreate() {
+    if (newDrafts.length === 0) return;
+    setSaving(true);
+    setError("");
+    try {
+      const now = new Date().toISOString();
+      const maxCap = type === "individual" ? 1 : capacity;
+      const seenKeys = new Set<string>();
+      const deduped = newDrafts.filter(d => {
+        const k = `${effectiveCoachId}__${d.date}__${d.startTime}`;
+        if (seenKeys.has(k)) return false;
+        seenKeys.add(k);
+        return true;
+      });
+      const totalSkipped = drafts.length - deduped.length;
+      for (let i = 0; i < deduped.length; i += 500) {
+        const batch = writeBatch(db);
+        for (const d of deduped.slice(i, i + 500)) {
+          batch.set(doc(collection(db, "sessions")), {
+            title: generateSessionTitle(d.startTime, effectiveCoachName),
+            coachId: effectiveCoachId, coachName: effectiveCoachName, type,
+            maxCapacity: maxCap, date: d.date, startTime: d.startTime, endTime: d.endTime,
+            location: location.trim(), notes: notes.trim(),
+            bookedBy: [], waitlist: [], status: "available", createdAt: now, school: "",
+          });
+        }
+        await batch.commit();
+      }
+      setResult({ created: deduped.length, skipped: totalSkipped });
+    } catch (err) {
+      console.error("[batch create]", err);
+      setError("Failed to create sessions. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+        <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md p-8 text-center shadow-2xl">
+          <div className="h-14 w-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ backgroundColor: "#dcfce7" }}>
+            <svg className="h-7 w-7" style={{ color: "#16a34a" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">Sessions Created</h2>
+          <p className="text-sm text-gray-600 mb-1">Created <span className="font-semibold text-green-600">{result.created}</span> session{result.created !== 1 ? "s" : ""}</p>
+          {result.skipped > 0 && <p className="text-sm text-gray-400">Skipped <span className="font-semibold">{result.skipped}</span> duplicate{result.skipped !== 1 ? "s" : ""}</p>}
+          <button onClick={onClose} className="mt-6 w-full rounded-xl py-3 text-sm font-semibold text-white" style={{ backgroundColor: "#001c48" }}>Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={() => !saving && onClose()} />
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md flex flex-col" style={{ maxHeight: "92vh" }}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <h2 className="text-base font-bold text-gray-900">Batch Create Sessions</h2>
+          <button onClick={() => !saving && onClose()} className="text-gray-400 hover:text-gray-600">
+            <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+          </button>
+        </div>
+
+        <div className="flex border-b border-gray-100 px-2">
+          {(["recurring", "multislot", "duplicate"] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} className="flex-1 py-2.5 text-xs font-semibold border-b-2 transition"
+              style={{ borderBottomColor: tab === t ? "#001c48" : "transparent", color: tab === t ? "#001c48" : "#9ca3af" }}>
+              {t === "recurring" ? "Recurring" : t === "multislot" ? "Multi-Slot" : "Duplicate"}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+
+          {isAdmin && coaches.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Coach</label>
+              <select value={selectedCoachId} onChange={e => { const c = coaches.find(x => x.uid === e.target.value); setSelectedCoachId(e.target.value); setSelectedCoachName(c?.name ?? ""); }}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none">
+                <option value="">Select a coach…</option>
+                {coaches.map(c => <option key={c.uid} value={c.uid}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {tab === "recurring" && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <input type="date" value={recurStart} min={todayDateStr()} onChange={e => setRecurStart(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <input type="date" value={recurEnd} min={recurStart || todayDateStr()} onChange={e => setRecurEnd(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Repeat on</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {DAYS.map(({ label, day }) => {
+                    const on = recurDays.includes(day);
+                    return (
+                      <button key={day} onClick={() => setRecurDays(prev => on ? prev.filter(d => d !== day) : [...prev, day])}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg transition"
+                        style={{ backgroundColor: on ? "#001c48" : "#f3f4f6", color: on ? "white" : "#374151" }}>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                  <select value={recurStartTime} onChange={e => { setRecurStartTime(e.target.value); setRecurEndTime(addOneHour(e.target.value)); }}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none bg-white">
+                    {TIME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                  <select value={recurEndTime} onChange={e => setRecurEndTime(e.target.value)}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none bg-white">
+                    {TIME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+              </div>
+            </>
+          )}
+
+          {tab === "multislot" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input type="date" value={multiDate} min={todayDateStr()} onChange={e => setMultiDate(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Time Slots</label>
+                <div className="space-y-2">
+                  {slots.map(slot => (
+                    <div key={slot.id} className="flex items-center gap-2">
+                      <select value={slot.startTime} onChange={e => { const ns = e.target.value; setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, startTime: ns, endTime: addOneHour(ns) } : s)); }}
+                        className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-900 focus:outline-none bg-white">
+                        {TIME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <span className="text-xs text-gray-400">–</span>
+                      <select value={slot.endTime} onChange={e => setSlots(prev => prev.map(s => s.id === slot.id ? { ...s, endTime: e.target.value } : s))}
+                        className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-xs text-gray-900 focus:outline-none bg-white">
+                        {TIME_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {slots.length > 1 && (
+                        <button onClick={() => setSlots(prev => prev.filter(s => s.id !== slot.id))} className="text-gray-300 hover:text-red-400 transition shrink-0">
+                          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => {
+                  const last = slots[slots.length - 1];
+                  const ns = last ? addOneHour(last.endTime) : nextQuarterHour();
+                  const capped = ns > "22:00" ? "06:00" : ns;
+                  setSlots(prev => [...prev, { id: nextSlotId, startTime: capped, endTime: addOneHour(capped) }]);
+                  setNextSlotId(n => n + 1);
+                }} className="mt-2 text-xs font-semibold transition" style={{ color: "#001c48" }}>
+                  + Add slot
+                </button>
+              </div>
+            </>
+          )}
+
+          {tab === "duplicate" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Source Session</label>
+                <select value={dupSourceId} onChange={e => setDupSourceId(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none">
+                  <option value="">Pick a session to duplicate…</option>
+                  {existingSessions.map(s => (
+                    <option key={s.id} value={s.id}>{formatDateLabel(s.date)} · {formatTime(s.startTime)} — {s.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Target Dates</label>
+                <div className="space-y-2">
+                  {dupDates.map((date, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input type="date" value={date} min={todayDateStr()}
+                        onChange={e => setDupDates(prev => prev.map((d, i) => i === idx ? e.target.value : d))}
+                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:outline-none" />
+                      {dupDates.length > 1 && (
+                        <button onClick={() => setDupDates(prev => prev.filter((_, i) => i !== idx))} className="text-gray-300 hover:text-red-400 transition shrink-0">
+                          <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setDupDates(prev => [...prev, addDays(prev[prev.length - 1] || todayDateStr(), 7)])}
+                  className="mt-2 text-xs font-semibold transition" style={{ color: "#001c48" }}>
+                  + Add date
+                </button>
+              </div>
+            </>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Session Type</label>
+            <div className="flex gap-2">
+              <button onClick={() => setType("individual")} className="flex-1 py-2 text-sm font-semibold rounded-lg transition"
+                style={{ backgroundColor: type === "individual" ? "#001c48" : "#f3f4f6", color: type === "individual" ? "white" : "#374151" }}>
+                Individual
+              </button>
+              <button onClick={() => setType("group")} className="flex-1 py-2 text-sm font-semibold rounded-lg transition"
+                style={{ backgroundColor: type === "group" ? "#001c48" : "#f3f4f6", color: type === "group" ? "white" : "#374151" }}>
+                Group
+              </button>
+            </div>
+          </div>
+
+          {type === "group" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Max Capacity</label>
+              <input type="number" min={2} max={100} value={capacity} onChange={e => setCapacity(Math.max(2, parseInt(e.target.value, 10) || 2))}
+                className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none" />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+            <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Court 1, Main Gym"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Any details for athletes…"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 focus:outline-none resize-none" />
+          </div>
+
+          {drafts.length > 0 && (
+            <div className="rounded-xl px-4 py-3 text-sm" style={{ backgroundColor: "rgba(0,28,72,0.05)" }}>
+              <p className="font-semibold text-gray-800">
+                This will create <span style={{ color: "#001c48" }}>{newDrafts.length}</span> session{newDrafts.length !== 1 ? "s" : ""}
+                {skipCount > 0 && <span className="text-gray-400 font-normal"> · skip {skipCount} duplicate{skipCount !== 1 ? "s" : ""}</span>}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 pb-6 pt-3 flex gap-3 border-t border-gray-100">
+          <button onClick={onClose} disabled={saving}
+            className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
+            Cancel
+          </button>
+          <button onClick={handleCreate} disabled={saving || newDrafts.length === 0}
+            className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: "#001c48" }}>
+            {saving ? "Creating…" : `Create ${newDrafts.length > 0 ? newDrafts.length : ""} Session${newDrafts.length !== 1 ? "s" : ""}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 interface CreateSessionModalProps {
   onClose: () => void;
@@ -671,6 +1037,7 @@ export default function CoachCalendarPage() {
   const [athletes, setAthletes] = useState<{ uid: string; name: string }[]>([]);
   const [filterAthlete, setFilterAthlete] = useState("");
   const [filterType, setFilterType] = useState<"" | "individual" | "group">("");
+  const [showBatchCreate, setShowBatchCreate] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -955,6 +1322,16 @@ export default function CoachCalendarPage() {
               </svg>
             </button>
             <button
+              onClick={() => setShowBatchCreate(true)}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              style={{ backgroundColor: "rgba(255,255,255,0.10)" }}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5M3.75 6h16.5M3.75 18h16.5" />
+              </svg>
+              Batch
+            </button>
+            <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
               style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
@@ -1204,6 +1581,17 @@ export default function CoachCalendarPage() {
       </nav>
 
       {/* Modals */}
+      {showBatchCreate && (
+        <BatchCreateModal
+          onClose={() => setShowBatchCreate(false)}
+          coachId={coachId}
+          coachName={coachName}
+          isAdmin={isAdmin}
+          coaches={coaches}
+          existingSessions={sessions}
+        />
+      )}
+
       {showCreate && (
         <CreateSessionModal
           onClose={() => setShowCreate(false)}
