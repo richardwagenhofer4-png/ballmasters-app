@@ -96,6 +96,9 @@ export default function StudentCalendarPage() {
   const [activeTab, setActiveTab] = useState<"available" | "bookings" | "pending">("available");
   const [refreshing, setRefreshing] = useState(false);
   const [cancelPendingConfirmId, setCancelPendingConfirmId] = useState<string | null>(null);
+  const [confirmBookSession, setConfirmBookSession] = useState<Session | null>(null);
+  const [confirmingBook, setConfirmingBook] = useState(false);
+  const [successInfo, setSuccessInfo] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -221,8 +224,8 @@ export default function StudentCalendarPage() {
     return session.waitlist.findIndex(w => w.uid === uid) + 1;
   }
 
-  async function handleBook(session: Session) {
-    if (actionLoading === session.id) return;
+  async function handleBook(session: Session): Promise<"confirmed" | "pending_approval" | "waitlisted"> {
+    if (actionLoading === session.id) throw new Error("Already loading");
     setActionLoading(session.id);
     try {
       const now = new Date().toISOString();
@@ -304,8 +307,10 @@ export default function StudentCalendarPage() {
           return { ...s, waitlist: [...s.waitlist, { uid, name: studentName, email: studentEmail, joinedAt: now }] };
         }
       }));
+      return bookingStatus;
     } catch (err) {
       console.error("[book session]", err);
+      throw err;
     } finally {
       setActionLoading(null);
     }
@@ -391,6 +396,27 @@ export default function StudentCalendarPage() {
       console.error("[cancel booking]", err);
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function handleConfirmBook() {
+    if (!confirmBookSession || confirmingBook) return;
+    setConfirmingBook(true);
+    const session = confirmBookSession;
+    try {
+      const status = await handleBook(session);
+      setConfirmBookSession(null);
+      if (status === "confirmed") {
+        setSuccessInfo({ title: "Booked!", message: "Your session is confirmed. See it under My Bookings." });
+      } else if (status === "pending_approval") {
+        setSuccessInfo({ title: "Booked — Pending Approval", message: "Your spot is held. Your coach needs to approve it before it's confirmed. You'll see it under Pending." });
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      setConfirmBookSession(null);
+      setSuccessInfo({ title: "Couldn't Book", message: msg });
+    } finally {
+      setConfirmingBook(false);
     }
   }
 
@@ -653,7 +679,7 @@ export default function StudentCalendarPage() {
                       )
                     ) : !isFull ? (
                       <button
-                        onClick={() => handleBook(session)}
+                        onClick={() => setConfirmBookSession(session)}
                         disabled={actionLoading !== null}
                         className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
                         style={{ backgroundColor: "#001c48" }}
@@ -662,7 +688,7 @@ export default function StudentCalendarPage() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleBook(session)}
+                        onClick={() => { handleBook(session).catch(() => {}); }}
                         disabled={actionLoading !== null}
                         className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
                         style={{ backgroundColor: "#f59e0b" }}
@@ -824,6 +850,67 @@ export default function StudentCalendarPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Confirm Book Modal */}
+      {confirmBookSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Confirm Booking</h2>
+            <p className="text-sm text-gray-500 mb-1">{confirmBookSession.title}</p>
+            <p className="text-sm text-gray-500 mb-6">
+              {formatDisplayDate(confirmBookSession.date)} · {formatTime(confirmBookSession.startTime)}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmBookSession(null)}
+                disabled={confirmingBook}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmBook}
+                disabled={confirmingBook}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-70"
+                style={{ backgroundColor: confirmingBook ? "#0e7490" : "#01a2a6" }}
+              >
+                {confirmingBook ? "Booking…" : "Book Session"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success / Error Modal */}
+      {successInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl text-center">
+            <div
+              className="mx-auto mb-4 h-12 w-12 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: successInfo.title === "Couldn't Book" ? "#fee2e2" : "#ccfbf1" }}
+            >
+              {successInfo.title === "Couldn't Book" ? (
+                <svg className="h-6 w-6 text-red-500" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6" style={{ color: "#0e9f6e" }} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+            </div>
+            <h2 className="text-lg font-bold text-gray-900 mb-2">{successInfo.title}</h2>
+            <p className="text-sm text-gray-500 mb-6">{successInfo.message}</p>
+            <button
+              onClick={() => setSuccessInfo(null)}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white transition"
+              style={{ backgroundColor: "#01a2a6" }}
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
 
