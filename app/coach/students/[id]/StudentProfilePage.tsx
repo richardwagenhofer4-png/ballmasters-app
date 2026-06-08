@@ -162,10 +162,14 @@ export default function StudentProfilePage() {
           const coachesSnap = await getDocs(
             query(collection(db, "users"), where("role", "in", ["coach", "admin"]))
           );
-          const cList: CoachOption[] = coachesSnap.docs.map(d => ({
-            id: d.id,
-            name: (d.data().fullName as string) ?? "Unknown",
-          }));
+          const cList: CoachOption[] = coachesSnap.docs
+            .filter(d => {
+              const name = (d.data().fullName as string | undefined) ?? "";
+              if (!name.trim()) return false;
+              if (d.id === user.uid) return false; // exclude admin viewer from their own dropdown
+              return true;
+            })
+            .map(d => ({ id: d.id, name: d.data().fullName as string }));
           setCoaches(cList);
           if (currentCoachId) {
             const found = cList.find(c => c.id === currentCoachId);

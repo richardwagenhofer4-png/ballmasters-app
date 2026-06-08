@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
 
@@ -138,6 +138,12 @@ export default function CoachDashboard() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [studentSearch, setStudentSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [headCoachId, setHeadCoachId] = useState("");
+  const [headCoachList, setHeadCoachList] = useState<{ id: string; name: string }[]>([]);
+  const [selectedHeadCoach, setSelectedHeadCoach] = useState("");
+  const [savingHeadCoach, setSavingHeadCoach] = useState(false);
+  const [headCoachSaved, setHeadCoachSaved] = useState(false);
 
   const greeting = getGreeting();
 
@@ -152,7 +158,28 @@ export default function CoachDashboard() {
           getDocs(collection(db, "videos")),
         ]);
 
+        const viewerRole = profileSnap.data()?.role as string | undefined;
         setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? user.displayName ?? "Coach");
+
+        if (viewerRole === "admin") {
+          setIsAdmin(true);
+          const [coachesSnap, settingsSnap] = await Promise.all([
+            getDocs(query(collection(db, "users"), where("role", "in", ["coach", "admin"]))),
+            getDoc(doc(db, "settings", "general")),
+          ]);
+          const cList = coachesSnap.docs
+            .filter(d => {
+              const name = (d.data().fullName as string | undefined) ?? "";
+              if (!name.trim()) return false;
+              if (d.id === user.uid) return false;
+              return true;
+            })
+            .map(d => ({ id: d.id, name: d.data().fullName as string }));
+          setHeadCoachList(cList);
+          const currentHeadCoach = (settingsSnap.data()?.headCoachId as string) ?? "";
+          setHeadCoachId(currentHeadCoach);
+          setSelectedHeadCoach(currentHeadCoach);
+        }
 
         const studentDocs: StudentData[] = studentsSnap.docs.map(d => ({
           id: d.id,
@@ -252,6 +279,22 @@ export default function CoachDashboard() {
     await navigator.clipboard.writeText(url).catch(() => {});
     setCopiedId(videoId);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  async function handleSaveHeadCoach() {
+    if (!selectedHeadCoach || savingHeadCoach) return;
+    setSavingHeadCoach(true);
+    setHeadCoachSaved(false);
+    try {
+      await setDoc(doc(db, "settings", "general"), { headCoachId: selectedHeadCoach }, { merge: true });
+      setHeadCoachId(selectedHeadCoach);
+      setHeadCoachSaved(true);
+      setTimeout(() => setHeadCoachSaved(false), 3000);
+    } catch (err) {
+      console.error("[dashboard] save headCoachId error:", err);
+    } finally {
+      setSavingHeadCoach(false);
+    }
   }
 
   // ---- LOADING ----
@@ -354,6 +397,44 @@ export default function CoachDashboard() {
       {/* Content                                                              */}
       {/* ------------------------------------------------------------------ */}
       <div className="px-4 py-5 space-y-7">
+
+        {/* Head Coach (admin only) */}
+        {isAdmin && (
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-1">Head Coach</h2>
+            <p className="text-xs text-gray-500 mb-3">
+              Default coach for athletes with no assigned coach.{" "}
+              {headCoachId && headCoachList.find(c => c.id === headCoachId) && (
+                <span className="font-semibold text-gray-800">
+                  Currently: {headCoachList.find(c => c.id === headCoachId)!.name}
+                </span>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedHeadCoach}
+                onChange={e => setSelectedHeadCoach(e.target.value)}
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-400 transition"
+              >
+                <option value="">— Select a coach —</option>
+                {headCoachList.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleSaveHeadCoach}
+                disabled={savingHeadCoach || !selectedHeadCoach || selectedHeadCoach === headCoachId}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#001c48" }}
+              >
+                {savingHeadCoach ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {headCoachSaved && (
+              <p className="text-xs mt-2 font-medium" style={{ color: "#15803d" }}>Head coach saved.</p>
+            )}
+          </div>
+        )}
 
         {/* Quick Actions */}
         <div>

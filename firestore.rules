@@ -15,11 +15,9 @@ service cloud.firestore {
     match /users/{userId} {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
-      allow read: if isCoachOrAdmin();
-      allow update: if isAdmin();
-      // Athletes need to read their coach's profile (e.g. display name in messages)
-      allow read: if request.auth != null
-        && resource.data.role in ['coach', 'admin'];
+      allow read: if request.auth != null && resource.data.role in ['coach', 'admin'];
+      // Admins can read and update any user (e.g. assign a coach, set head coach)
+      allow read, update: if isAdmin();
     }
 
     match /inviteCodes/{code} {
@@ -140,6 +138,12 @@ service cloud.firestore {
           )
           && request.resource.data.senderId == request.auth.uid;
       }
+    }
+
+    // App-wide settings — readable by any authenticated user, writable only by admins
+    match /settings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
     }
 
   }
