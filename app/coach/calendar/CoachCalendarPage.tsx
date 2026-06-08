@@ -693,11 +693,13 @@ export default function CoachCalendarPage() {
         setCoachName(data?.fullName ?? data?.name ?? user.displayName ?? "Coach");
 
         if (userIsAdmin) {
-          const coachSnap = await getDocs(query(collection(db, "users"), where("role", "==", "coach")));
-          const coachList = coachSnap.docs.map(d => ({
-            uid: d.id,
-            name: (d.data().fullName as string) ?? (d.data().name as string) ?? "Coach",
-          }));
+          const coachSnap = await getDocs(query(collection(db, "users"), where("role", "in", ["coach", "admin"])));
+          const coachList = coachSnap.docs
+            .filter(d => {
+              const name = (d.data().fullName as string | undefined) ?? "";
+              return name.trim().length > 0;
+            })
+            .map(d => ({ uid: d.id, name: d.data().fullName as string }));
           setCoaches(coachList);
         }
 
