@@ -165,9 +165,7 @@ export default function StudentProfilePage() {
           const cList: CoachOption[] = coachesSnap.docs
             .filter(d => {
               const name = (d.data().fullName as string | undefined) ?? "";
-              if (!name.trim()) return false;
-              if (d.id === user.uid) return false; // exclude admin viewer from their own dropdown
-              return true;
+              return name.trim().length > 0;
             })
             .map(d => ({ id: d.id, name: d.data().fullName as string }));
           setCoaches(cList);

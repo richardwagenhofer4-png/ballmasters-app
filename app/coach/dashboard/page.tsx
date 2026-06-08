@@ -170,9 +170,7 @@ export default function CoachDashboard() {
           const cList = coachesSnap.docs
             .filter(d => {
               const name = (d.data().fullName as string | undefined) ?? "";
-              if (!name.trim()) return false;
-              if (d.id === user.uid) return false;
-              return true;
+              return name.trim().length > 0;
             })
             .map(d => ({ id: d.id, name: d.data().fullName as string }));
           setHeadCoachList(cList);
