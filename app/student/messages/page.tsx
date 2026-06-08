@@ -19,6 +19,23 @@ import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import { getOrCreateThread, markThreadRead, sendMessage, threadId as makeThreadId } from "@/lib/messaging";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatMsgTime(ts: { seconds: number } | null): string {
+  if (!ts) return "";
+  const d = new Date(ts.seconds * 1000);
+  const now = new Date();
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  if (isToday) return time;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " + time;
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -126,9 +143,14 @@ export default function StudentMessagesPage() {
         }
         setCoachId(cId);
 
-        // Get coach name
-        const coachSnap = await getDoc(doc(db, "users", cId));
-        const cName = coachSnap.data()?.fullName ?? coachSnap.data()?.name ?? "Coach";
+        // Get coach name — students may not have read permission for other user docs
+        let cName = "Coach";
+        try {
+          const coachSnap = await getDoc(doc(db, "users", cId));
+          cName = coachSnap.data()?.fullName ?? coachSnap.data()?.name ?? "Coach";
+        } catch {
+          // fall through with default
+        }
         setCoachName(cName);
 
         // Get or create thread
@@ -238,54 +260,69 @@ export default function StudentMessagesPage() {
         {coachName && (
           <p className="text-sm mt-0.5" style={{ color: "rgba(1,255,249,0.75)" }}>with {coachName}</p>
         )}
-        {!coachId && !loading && (
-          <p className="text-sm mt-0.5 text-gray-400">No coach found yet.</p>
-        )}
       </div>
 
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto pb-20 px-4 py-4 space-y-3 bg-gray-50">
-        {messages.length === 0 && (
+        {!tid && !loading ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ChatIcon className="h-12 w-12 text-gray-200 mb-4" />
-            <p className="text-sm font-medium text-gray-500">No messages yet.</p>
-            <p className="text-xs text-gray-400 mt-1">Send a message to your coach!</p>
+            <p className="text-sm font-semibold text-gray-700">No coach assigned yet</p>
+            <p className="text-xs text-gray-400 mt-1 max-w-xs leading-snug">
+              Ask your coach to connect with you. Once assigned, your conversation will appear here.
+            </p>
           </div>
-        )}
-
-        {messages.map((msg) => {
-          const isAthlete = msg.senderRole === "student";
-          return (
-            <div key={msg.id} className={`flex ${isAthlete ? "justify-end" : "justify-start"}`}>
-              <div
-                className="max-w-[75%] rounded-2xl px-4 py-2.5"
-                style={{
-                  backgroundColor: isAthlete ? "#001c48" : "#f3f4f6",
-                  color: isAthlete ? "white" : "#111827",
-                }}
-              >
-                {msg.text && (
-                  <p className="text-sm leading-snug whitespace-pre-wrap">{msg.text}</p>
-                )}
-                {msg.videoId && msg.videoTitle && (
-                  <Link href={`/student/videos/${msg.videoId}`}>
-                    <div
-                      className="flex items-center gap-2 mt-1.5 rounded-xl px-3 py-2"
-                      style={{ backgroundColor: isAthlete ? "rgba(255,255,255,0.12)" : "rgba(0,28,72,0.07)" }}
-                    >
-                      <svg className="h-4 w-4 shrink-0" style={{ color: isAthlete ? "#01fff9" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                      </svg>
-                      <span className="text-xs font-semibold truncate" style={{ color: isAthlete ? "#01fff9" : "#001c48" }}>
-                        {msg.videoTitle}
-                      </span>
-                    </div>
-                  </Link>
-                )}
+        ) : (
+          <>
+            {messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <ChatIcon className="h-12 w-12 text-gray-200 mb-4" />
+                <p className="text-sm font-medium text-gray-500">No messages yet.</p>
+                <p className="text-xs text-gray-400 mt-1">Send a message to your coach!</p>
               </div>
-            </div>
-          );
-        })}
+            )}
+
+            {messages.map((msg) => {
+              const isAthlete = msg.senderRole === "student";
+              return (
+                <div key={msg.id} className={`flex ${isAthlete ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className="max-w-[75%] rounded-2xl px-4 py-2.5"
+                    style={{
+                      backgroundColor: isAthlete ? "#001c48" : "#f3f4f6",
+                      color: isAthlete ? "white" : "#111827",
+                    }}
+                  >
+                    {msg.text && (
+                      <p className="text-sm leading-snug whitespace-pre-wrap">{msg.text}</p>
+                    )}
+                    {msg.videoId && msg.videoTitle && (
+                      <Link href={`/student/videos/${msg.videoId}`}>
+                        <div
+                          className="flex items-center gap-2 mt-1.5 rounded-xl px-3 py-2"
+                          style={{ backgroundColor: isAthlete ? "rgba(255,255,255,0.12)" : "rgba(0,28,72,0.07)" }}
+                        >
+                          <svg className="h-4 w-4 shrink-0" style={{ color: isAthlete ? "#01fff9" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
+                          </svg>
+                          <span className="text-xs font-semibold truncate" style={{ color: isAthlete ? "#01fff9" : "#001c48" }}>
+                            {msg.videoTitle}
+                          </span>
+                        </div>
+                      </Link>
+                    )}
+                    <p
+                      className="text-xs mt-1 leading-none text-right"
+                      style={{ opacity: 0.55 }}
+                    >
+                      {msg.createdAt ? formatMsgTime(msg.createdAt) : "Sending…"}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
         <div ref={messagesEndRef} />
       </div>
 

@@ -16,6 +16,10 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
       allow read: if isCoachOrAdmin();
+      allow update: if isAdmin();
+      // Athletes need to read their coach's profile (e.g. display name in messages)
+      allow read: if request.auth != null
+        && resource.data.role in ['coach', 'admin'];
     }
 
     match /inviteCodes/{code} {

@@ -64,6 +64,19 @@ function relativeTime(ts: { seconds: number } | null): string {
   return `${Math.floor(h / 24)}d`;
 }
 
+function formatMsgTime(ts: { seconds: number } | null): string {
+  if (!ts) return "";
+  const d = new Date(ts.seconds * 1000);
+  const now = new Date();
+  const isToday =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  if (isToday) return time;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " + time;
+}
+
 // ---------------------------------------------------------------------------
 // Nav Icons
 // ---------------------------------------------------------------------------
@@ -388,6 +401,12 @@ export default function CoachMessagesPage() {
                         </div>
                       </Link>
                     )}
+                    <p
+                      className="text-xs mt-1 leading-none text-right"
+                      style={{ opacity: 0.55 }}
+                    >
+                      {msg.createdAt ? formatMsgTime(msg.createdAt) : "Sending…"}
+                    </p>
                   </div>
                 </div>
               );

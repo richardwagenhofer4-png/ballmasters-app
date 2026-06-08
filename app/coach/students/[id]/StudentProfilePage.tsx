@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import type { Booking } from "@/lib/sessionTypes";
@@ -51,6 +51,12 @@ interface StudentDoc {
   fullName: string;
   email: string;
   avatarId?: string;
+  coachId?: string;
+}
+
+interface CoachOption {
+  id: string;
+  name: string;
 }
 
 interface VideoDoc {
@@ -116,6 +122,15 @@ export default function StudentProfilePage() {
   const [videos, setVideos] = useState<VideoDoc[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
 
+  // Admin-only coach assignment state
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [athleteCoachId, setAthleteCoachId] = useState<string | null>(null);
+  const [athleteCoachName, setAthleteCoachName] = useState("");
+  const [coaches, setCoaches] = useState<CoachOption[]>([]);
+  const [selectedCoachId, setSelectedCoachId] = useState("");
+  const [savingCoach, setSavingCoach] = useState(false);
+  const [coachSaveSuccess, setCoachSaveSuccess] = useState(false);
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
@@ -134,7 +149,29 @@ export default function StudentProfilePage() {
           return;
         }
 
-        setStudent(studentSnap.data() as StudentDoc);
+        const studentData = studentSnap.data() as StudentDoc;
+        setStudent(studentData);
+
+        // Admin-only: check viewer role and load coach list
+        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        if ((viewerSnap.data()?.role as string) === "admin") {
+          setIsAdmin(true);
+          const currentCoachId = studentData.coachId ?? null;
+          setAthleteCoachId(currentCoachId);
+          setSelectedCoachId(currentCoachId ?? "");
+          const coachesSnap = await getDocs(
+            query(collection(db, "users"), where("role", "in", ["coach", "admin"]))
+          );
+          const cList: CoachOption[] = coachesSnap.docs.map(d => ({
+            id: d.id,
+            name: (d.data().fullName as string) ?? "Unknown",
+          }));
+          setCoaches(cList);
+          if (currentCoachId) {
+            const found = cList.find(c => c.id === currentCoachId);
+            setAthleteCoachName(found?.name ?? currentCoachId);
+          }
+        }
 
         const videoList: VideoDoc[] = videosSnap.docs
           .map(d => ({
@@ -169,6 +206,24 @@ export default function StudentProfilePage() {
       }
     })();
   }, [authLoading, user, id, router]);
+
+  async function handleSaveCoach() {
+    if (!selectedCoachId || savingCoach) return;
+    setSavingCoach(true);
+    setCoachSaveSuccess(false);
+    try {
+      await setDoc(doc(db, "users", id), { coachId: selectedCoachId }, { merge: true });
+      setAthleteCoachId(selectedCoachId);
+      const found = coaches.find(c => c.id === selectedCoachId);
+      setAthleteCoachName(found?.name ?? selectedCoachId);
+      setCoachSaveSuccess(true);
+      setTimeout(() => setCoachSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error("[student-profile] save coachId error:", err);
+    } finally {
+      setSavingCoach(false);
+    }
+  }
 
   const assigned = videos.length;
   const watched = videos.filter(v => v.viewedBy.includes(id)).length;
@@ -247,6 +302,42 @@ export default function StudentProfilePage() {
       </div>
 
       <div className="px-4 py-4 space-y-5">
+
+        {/* Coach Assignment (admin only) */}
+        {isAdmin && (
+          <section className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Coach Assignment</h2>
+            <p className="text-xs text-gray-500 mb-3">
+              Assigned coach:{" "}
+              <span className="font-semibold text-gray-800">
+                {athleteCoachName || "No coach assigned"}
+              </span>
+            </p>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedCoachId}
+                onChange={e => setSelectedCoachId(e.target.value)}
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-400 transition"
+              >
+                <option value="">— Select a coach —</option>
+                {coaches.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleSaveCoach}
+                disabled={savingCoach || !selectedCoachId || selectedCoachId === athleteCoachId}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#001c48" }}
+              >
+                {savingCoach ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {coachSaveSuccess && (
+              <p className="text-xs mt-2 font-medium" style={{ color: "#15803d" }}>Coach assigned successfully.</p>
+            )}
+          </section>
+        )}
 
         {/* Videos */}
         <section>
