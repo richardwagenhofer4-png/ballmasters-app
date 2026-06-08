@@ -97,6 +97,7 @@ export default function StudentCalendarPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [cancelPendingConfirmId, setCancelPendingConfirmId] = useState<string | null>(null);
   const [confirmBookSession, setConfirmBookSession] = useState<Session | null>(null);
+  const [confirmWaitlistSession, setConfirmWaitlistSession] = useState<Session | null>(null);
   const [confirmingBook, setConfirmingBook] = useState(false);
   const [successInfo, setSuccessInfo] = useState<{ title: string; message: string } | null>(null);
 
@@ -255,18 +256,11 @@ export default function StudentCalendarPage() {
         if (data.bookedBy.some(b => b.uid === uid)) throw new Error("Already booked");
         if (data.waitlist.some(w => w.uid === uid)) throw new Error("Already on waitlist");
 
-        if (isLastMinute) {
-          if (data.bookedBy.length >= data.maxCapacity) throw new Error("Session full");
-          // Last-minute: hold the spot but mark as pending_approval
+        if (data.bookedBy.length < data.maxCapacity) {
           const newBookedBy = [...data.bookedBy, { uid, name: studentName, email: studentEmail, bookedAt: now }];
           const newStatus = newBookedBy.length >= data.maxCapacity ? "full" : "available";
           tx.update(sessionRef, { bookedBy: newBookedBy, status: newStatus });
-          bookingStatus = "pending_approval";
-        } else if (data.bookedBy.length < data.maxCapacity) {
-          const newBookedBy = [...data.bookedBy, { uid, name: studentName, email: studentEmail, bookedAt: now }];
-          const newStatus = newBookedBy.length >= data.maxCapacity ? "full" : "available";
-          tx.update(sessionRef, { bookedBy: newBookedBy, status: newStatus });
-          bookingStatus = "confirmed";
+          bookingStatus = isLastMinute ? "pending_approval" : "confirmed";
         } else {
           const newWaitlist = [...data.waitlist, { uid, name: studentName, email: studentEmail, joinedAt: now }];
           tx.update(sessionRef, { waitlist: newWaitlist });
@@ -415,6 +409,24 @@ export default function StudentCalendarPage() {
       const msg = err instanceof Error ? err.message : "Something went wrong.";
       setConfirmBookSession(null);
       setSuccessInfo({ title: "Couldn't Book", message: msg });
+    } finally {
+      setConfirmingBook(false);
+    }
+  }
+
+  async function handleConfirmWaitlist() {
+    if (!confirmWaitlistSession || confirmingBook) return;
+    setConfirmingBook(true);
+    const session = confirmWaitlistSession;
+    const expectedPos = session.waitlist.length + 1;
+    try {
+      await handleBook(session);
+      setConfirmWaitlistSession(null);
+      setSuccessInfo({ title: "You're on the Waitlist", message: `You're #${expectedPos} in line. We'll let you know if a spot opens up.` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Something went wrong.";
+      setConfirmWaitlistSession(null);
+      setSuccessInfo({ title: "Couldn't Join Waitlist", message: msg });
     } finally {
       setConfirmingBook(false);
     }
@@ -688,7 +700,7 @@ export default function StudentCalendarPage() {
                       </button>
                     ) : (
                       <button
-                        onClick={() => { handleBook(session).catch(() => {}); }}
+                        onClick={() => setConfirmWaitlistSession(session)}
                         disabled={actionLoading !== null}
                         className="w-full py-2 text-xs font-semibold rounded-lg text-white transition hover:opacity-90 disabled:opacity-50"
                         style={{ backgroundColor: "#f59e0b" }}
@@ -877,6 +889,37 @@ export default function StudentCalendarPage() {
                 style={{ backgroundColor: confirmingBook ? "#0e7490" : "#01a2a6" }}
               >
                 {confirmingBook ? "Booking…" : "Book Session"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Waitlist Modal */}
+      {confirmWaitlistSession && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Join the Waitlist?</h2>
+            <p className="text-sm text-gray-500 mb-1">{confirmWaitlistSession.title}</p>
+            <p className="text-sm text-gray-500 mb-3">
+              {formatDisplayDate(confirmWaitlistSession.date)} · {formatTime(confirmWaitlistSession.startTime)}
+            </p>
+            <p className="text-sm text-gray-500 mb-6">This session is full. You&apos;ll be notified if a spot opens up.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmWaitlistSession(null)}
+                disabled={confirmingBook}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmWaitlist}
+                disabled={confirmingBook}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-70"
+                style={{ backgroundColor: confirmingBook ? "#b45309" : "#f59e0b", color: "#1c1917" }}
+              >
+                {confirmingBook ? "Joining…" : "Join Waitlist"}
               </button>
             </div>
           </div>
