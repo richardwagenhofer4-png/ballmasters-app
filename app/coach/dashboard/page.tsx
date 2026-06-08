@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
 
@@ -139,11 +139,6 @@ export default function CoachDashboard() {
   const [studentSearch, setStudentSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [headCoachId, setHeadCoachId] = useState("");
-  const [headCoachList, setHeadCoachList] = useState<{ id: string; name: string }[]>([]);
-  const [selectedHeadCoach, setSelectedHeadCoach] = useState("");
-  const [savingHeadCoach, setSavingHeadCoach] = useState(false);
-  const [headCoachSaved, setHeadCoachSaved] = useState(false);
 
   const greeting = getGreeting();
 
@@ -163,20 +158,6 @@ export default function CoachDashboard() {
 
         if (viewerRole === "admin") {
           setIsAdmin(true);
-          const [coachesSnap, settingsSnap] = await Promise.all([
-            getDocs(query(collection(db, "users"), where("role", "in", ["coach", "admin"]))),
-            getDoc(doc(db, "settings", "general")),
-          ]);
-          const cList = coachesSnap.docs
-            .filter(d => {
-              const name = (d.data().fullName as string | undefined) ?? "";
-              return name.trim().length > 0;
-            })
-            .map(d => ({ id: d.id, name: d.data().fullName as string }));
-          setHeadCoachList(cList);
-          const currentHeadCoach = (settingsSnap.data()?.headCoachId as string) ?? "";
-          setHeadCoachId(currentHeadCoach);
-          setSelectedHeadCoach(currentHeadCoach);
         }
 
         const studentDocs: StudentData[] = studentsSnap.docs.map(d => ({
@@ -277,22 +258,6 @@ export default function CoachDashboard() {
     await navigator.clipboard.writeText(url).catch(() => {});
     setCopiedId(videoId);
     setTimeout(() => setCopiedId(null), 2000);
-  }
-
-  async function handleSaveHeadCoach() {
-    if (!selectedHeadCoach || savingHeadCoach) return;
-    setSavingHeadCoach(true);
-    setHeadCoachSaved(false);
-    try {
-      await setDoc(doc(db, "settings", "general"), { headCoachId: selectedHeadCoach }, { merge: true });
-      setHeadCoachId(selectedHeadCoach);
-      setHeadCoachSaved(true);
-      setTimeout(() => setHeadCoachSaved(false), 3000);
-    } catch (err) {
-      console.error("[dashboard] save headCoachId error:", err);
-    } finally {
-      setSavingHeadCoach(false);
-    }
   }
 
   // ---- LOADING ----
@@ -396,42 +361,29 @@ export default function CoachDashboard() {
       {/* ------------------------------------------------------------------ */}
       <div className="px-4 py-5 space-y-7">
 
-        {/* Head Coach (admin only) */}
+        {/* Manage Coaches (admin only) */}
         {isAdmin && (
-          <div className="bg-white rounded-xl border border-gray-200 px-4 py-4">
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-1">Head Coach</h2>
-            <p className="text-xs text-gray-500 mb-3">
-              Default coach for athletes with no assigned coach.{" "}
-              {headCoachId && headCoachList.find(c => c.id === headCoachId) && (
-                <span className="font-semibold text-gray-800">
-                  Currently: {headCoachList.find(c => c.id === headCoachId)!.name}
-                </span>
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedHeadCoach}
-                onChange={e => setSelectedHeadCoach(e.target.value)}
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-400 transition"
+          <Link href="/coach/coaches">
+            <div
+              className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 px-4 py-3.5 hover:bg-gray-50 transition active:bg-gray-100"
+            >
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ backgroundColor: "rgba(0,28,72,0.08)" }}
               >
-                <option value="">— Select a coach —</option>
-                {headCoachList.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={handleSaveHeadCoach}
-                disabled={savingHeadCoach || !selectedHeadCoach || selectedHeadCoach === headCoachId}
-                className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
-                style={{ backgroundColor: "#001c48" }}
-              >
-                {savingHeadCoach ? "Saving…" : "Save"}
-              </button>
+                <svg className="h-5 w-5" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M4.5 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM14.25 8.625a3.375 3.375 0 116.75 0 3.375 3.375 0 01-6.75 0zM1.5 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM17.25 19.128l-.001.144a2.25 2.25 0 01-.233.96 10.088 10.088 0 005.06-1.01.75.75 0 00.42-.643 4.875 4.875 0 00-6.957-4.611 8.586 8.586 0 011.71 5.157v.003z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900">Manage Coaches</p>
+                <p className="text-xs text-gray-400 mt-0.5">Invite, assign head coach, delete accounts</p>
+              </div>
+              <svg className="h-4 w-4 text-gray-300 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+              </svg>
             </div>
-            {headCoachSaved && (
-              <p className="text-xs mt-2 font-medium" style={{ color: "#15803d" }}>Head coach saved.</p>
-            )}
-          </div>
+          </Link>
         )}
 
         {/* Quick Actions */}
