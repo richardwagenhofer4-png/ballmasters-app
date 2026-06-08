@@ -668,6 +668,9 @@ export default function CoachCalendarPage() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "available" | "booked" | "pending">("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [athletes, setAthletes] = useState<{ uid: string; name: string }[]>([]);
+  const [filterAthlete, setFilterAthlete] = useState("");
+  const [filterType, setFilterType] = useState<"" | "individual" | "group">("");
 
   useEffect(() => {
     if (authLoading) return;
@@ -702,6 +705,14 @@ export default function CoachCalendarPage() {
             .map(d => ({ uid: d.id, name: d.data().fullName as string }));
           setCoaches(coachList);
         }
+
+        // Load athletes for filter dropdown (all coaches + admins can filter by athlete)
+        const athletesSnap = await getDocs(query(collection(db, "users"), where("role", "==", "student")));
+        const athleteList = athletesSnap.docs
+          .filter(d => (d.data().fullName as string | undefined)?.trim())
+          .map(d => ({ uid: d.id, name: d.data().fullName as string }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setAthletes(athleteList);
 
         const today = new Date();
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -874,19 +885,27 @@ export default function CoachCalendarPage() {
     }
   }
 
-  // Tab-filtered session lists (selectedDate applies on top)
+  // Tab-filtered session lists (selectedDate and user filters apply on top)
   const baseSessions = selectedDate ? sessions.filter(s => s.date === selectedDate) : sessions;
 
-  const allTabSessions = baseSessions;
-  const availableTabSessions = baseSessions.filter(s => {
+  const filteredBase = baseSessions.filter(s => {
+    if (filterType && s.type !== filterType) return false;
+    if (filterAthlete &&
+        !s.bookedBy.some(b => b.uid === filterAthlete) &&
+        !s.waitlist.some(w => w.uid === filterAthlete)) return false;
+    return true;
+  });
+
+  const allTabSessions = filteredBase;
+  const availableTabSessions = filteredBase.filter(s => {
     const confirmed = confirmedBookedCount(s, bookings);
     const pending = bookings.filter(b => b.sessionId === s.id && b.status === "pending_approval").length;
     return confirmed === 0 && pending === 0;
   });
-  const bookedTabSessions = baseSessions.filter(s =>
+  const bookedTabSessions = filteredBase.filter(s =>
     confirmedBookedCount(s, bookings) > 0
   );
-  const pendingTabSessions = baseSessions.filter(s =>
+  const pendingTabSessions = filteredBase.filter(s =>
     bookings.some(b => b.sessionId === s.id && b.status === "pending_approval")
   );
 
@@ -1047,6 +1066,38 @@ export default function CoachCalendarPage() {
             </button>
           );
         })}
+      </div>
+
+      {/* Filters */}
+      <div className="px-4 pt-3 pb-2 flex gap-2 bg-white border-b border-gray-100">
+        <select
+          value={filterAthlete}
+          onChange={e => setFilterAthlete(e.target.value)}
+          className="flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none"
+          style={filterAthlete ? { borderColor: "#001c48", color: "#001c48", backgroundColor: "rgba(0,28,72,0.04)" } : undefined}
+        >
+          <option value="">All Athletes</option>
+          {athletes.map(a => <option key={a.uid} value={a.uid}>{a.name}</option>)}
+        </select>
+        <select
+          value={filterType}
+          onChange={e => setFilterType(e.target.value as "" | "individual" | "group")}
+          className="flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none"
+          style={filterType ? { borderColor: "#001c48", color: "#001c48", backgroundColor: "rgba(0,28,72,0.04)" } : undefined}
+        >
+          <option value="">All Types</option>
+          <option value="individual">Individual</option>
+          <option value="group">Group</option>
+        </select>
+        {(filterAthlete || filterType) && (
+          <button
+            onClick={() => { setFilterAthlete(""); setFilterType(""); }}
+            className="shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition"
+            style={{ backgroundColor: "#001c48", color: "#01fff9" }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {/* Session list */}
