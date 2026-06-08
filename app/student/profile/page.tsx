@@ -8,6 +8,7 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { clearAuthCookies } from "@/lib/cookies";
+import { useRef } from "react";
 import InitialsAvatar, { AVATAR_OPTIONS } from "@/components/InitialsAvatar";
 
 function HomeIcon({ className }: { className?: string }) {
@@ -43,6 +44,12 @@ export default function StudentProfilePage() {
   const [email, setEmail] = useState("");
   const [avatarId, setAvatarId] = useState<string | null>(null);
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
@@ -64,6 +71,28 @@ export default function StudentProfilePage() {
     await signOut(auth);
     clearAuthCookies();
     router.push("/login");
+  }
+
+  async function handleDeleteAccount() {
+    if (!user || deletingAccount) return;
+    setDeletingAccount(true);
+    setDeleteError("");
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ targetUid: user.uid }),
+      });
+      const data = await res.json() as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Deletion failed");
+      await signOut(auth);
+      clearAuthCookies();
+      router.push("/login?deleted=1");
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Something went wrong.");
+      setDeletingAccount(false);
+    }
   }
 
   if (authLoading) {
@@ -150,7 +179,66 @@ export default function StudentProfilePage() {
             Sign out
           </button>
         </div>
+
+        <div>
+          <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Danger Zone</p>
+          <button
+            onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); setDeleteError(""); setTimeout(() => deleteInputRef.current?.focus(), 50); }}
+            className="w-full flex items-center gap-3 bg-white rounded-xl border border-red-200 px-4 py-3.5 text-sm font-medium text-red-600 hover:bg-red-50 transition"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete My Account
+          </button>
+        </div>
       </div>
+
+      {/* Delete Account Confirm Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <svg className="h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900">Delete Your Account?</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              This permanently deletes your account, your messages, and removes you from your videos and sessions. <span className="font-semibold">This cannot be undone.</span>
+            </p>
+            <p className="text-xs font-semibold text-gray-500 mb-2">Type <span className="text-red-600 font-bold">DELETE</span> to confirm</p>
+            <input
+              ref={deleteInputRef}
+              type="text"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-red-400 mb-4 transition"
+            />
+            {deleteError && <p className="text-xs text-red-600 mb-3">{deleteError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingAccount}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== "DELETE" || deletingAccount}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#dc2626" }}
+              >
+                {deletingAccount ? "Deleting…" : "Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
