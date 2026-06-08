@@ -16,7 +16,7 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
       allow read, update, delete: if request.auth != null && request.auth.uid == userId;
       allow read: if request.auth != null && resource.data.role in ['coach', 'admin'];
-      // Admins can read and update any user (e.g. assign a coach, set head coach)
+      allow read: if isCoachOrAdmin();
       allow read, update: if isAdmin();
     }
 
