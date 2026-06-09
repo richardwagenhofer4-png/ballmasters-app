@@ -555,7 +555,7 @@ export default function VideoPlayerPage() {
       {/* Comments */}
       <div className="bg-white">
         {uid && userName && (
-          <CommentsSection videoId={id} uid={uid} authorName={userName} role="student" />
+          <CommentsSection videoId={id} uid={uid} authorName={userName} role="student" videoCoachId={meta?.coachId} />
         )}
       </div>
 

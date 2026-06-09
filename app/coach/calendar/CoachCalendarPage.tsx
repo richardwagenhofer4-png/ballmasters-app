@@ -20,6 +20,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import type { Session, Booking, BookedEntry, WaitlistEntry } from "@/lib/sessionTypes";
+import { createNotification, useNotifications } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -1053,6 +1054,7 @@ export default function CoachCalendarPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
+  const { newComment, newMessage } = useNotifications(uid || null);
   const [coachId, setCoachId] = useState("");
   const [coachName, setCoachName] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1255,6 +1257,16 @@ export default function CoachCalendarPage() {
         if (updatedSession) {
           await updateDoc(doc(db, "sessions", booking.sessionId), { status: newSessionStatus });
         }
+
+        const session = sessions.find(s => s.id === booking.sessionId);
+        createNotification({
+          recipientId: booking.studentId,
+          type: "booking_approved",
+          title: "Booking confirmed",
+          body: message.trim() || (session ? `Your session on ${session.date} has been confirmed.` : undefined),
+          link: "/student/calendar",
+          meta: { sessionId: booking.sessionId },
+        }).catch(console.error);
       } else {
         console.error("[approve] ✗ no matching pending_approval booking found in Firestore — cannot update");
       }
@@ -1279,6 +1291,15 @@ export default function CoachCalendarPage() {
         }
       }
       setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "declined" } : b));
+
+      createNotification({
+        recipientId: booking.studentId,
+        type: "booking_declined",
+        title: "Booking declined",
+        body: "Your session request was declined.",
+        link: "/student/calendar",
+        meta: { sessionId: booking.sessionId },
+      }).catch(console.error);
     } catch (err) {
       console.error("[decline booking]", err);
     }
@@ -1603,9 +1624,17 @@ export default function CoachCalendarPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
+          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
             </Link>
           );

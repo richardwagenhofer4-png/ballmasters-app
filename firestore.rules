@@ -146,5 +146,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // In-app notifications — each user can only read/update their own; server-side writes allowed
+    match /notifications/{notifId} {
+      allow read, update: if request.auth != null
+        && resource.data.recipientId == request.auth.uid;
+      // Allow create if caller is authenticated (coach/system writes to student, and vice versa)
+      allow create: if request.auth != null;
+    }
+
   }
 }

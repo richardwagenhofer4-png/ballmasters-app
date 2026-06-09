@@ -17,6 +17,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import { getOrCreateThread, markThreadRead, sendMessage, threadId as makeThreadId } from "@/lib/messaging";
+import { markNotificationsRead, useNotifications } from "@/lib/notifications";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,6 +101,7 @@ export default function StudentMessagesPage() {
   const [tid, setTid] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [unreadForAthlete, setUnreadForAthlete] = useState(0);
+  const { newVideo, bookingUpdate } = useNotifications(uid);
 
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
@@ -192,6 +194,7 @@ export default function StudentMessagesPage() {
       setMessages(msgs);
       // Mark read when new messages arrive
       await markThreadRead(tid, "student").catch(() => {});
+      if (uid) markNotificationsRead(uid, "new_message").catch(console.error);
     });
     return unsub;
   }, [tid]);
@@ -212,7 +215,7 @@ export default function StudentMessagesPage() {
     if (!inputText.trim() && !pendingVideo) return;
     setSending(true);
     try {
-      await sendMessage(tid, uid, "student", inputText.trim(), pendingVideo ? { videoId: pendingVideo.id, videoTitle: pendingVideo.title } : null);
+      await sendMessage(tid, uid, "student", inputText.trim(), pendingVideo ? { videoId: pendingVideo.id, videoTitle: pendingVideo.title } : null, athleteName);
       setInputText("");
       setPendingVideo(null);
       if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -430,13 +433,18 @@ export default function StudentMessagesPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const isMessages = item.href === "/student/messages";
+          const badge =
+            item.href === "/student/messages" ? unreadForAthlete :
+            item.href === "/student/videos" ? newVideo :
+            item.href === "/student/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">
                 <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
-                {isMessages && unreadForAthlete > 0 && (
-                  <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 absolute -top-0.5 -right-0.5" />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
                 )}
               </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>

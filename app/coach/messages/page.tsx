@@ -14,6 +14,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { markThreadRead, sendMessage } from "@/lib/messaging";
+import { markNotificationsRead, useNotifications } from "@/lib/notifications";
 import InitialsAvatar from "@/components/InitialsAvatar";
 
 // ---------------------------------------------------------------------------
@@ -109,6 +110,7 @@ export default function CoachMessagesPage() {
   const [uid, setUid] = useState<string | null>(null);
   const [threads, setThreads] = useState<ThreadDoc[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
+  const { newComment } = useNotifications(uid);
 
   // Conversation view state
   const [view, setView] = useState<"list" | "thread">("list");
@@ -207,6 +209,7 @@ export default function CoachMessagesPage() {
     }
     // Mark read on open
     await markThreadRead(thread.id, "coach").catch(() => {});
+    if (uid) markNotificationsRead(uid, "new_message").catch(console.error);
   }
 
   function backToList() {
@@ -225,7 +228,8 @@ export default function CoachMessagesPage() {
         uid,
         "coach",
         inputText.trim(),
-        pendingVideo ? { videoId: pendingVideo.id, videoTitle: pendingVideo.title } : null
+        pendingVideo ? { videoId: pendingVideo.id, videoTitle: pendingVideo.title } : null,
+        activeThread.coachName
       );
       setInputText("");
       setPendingVideo(null);
@@ -518,17 +522,19 @@ export default function CoachMessagesPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const isMessages = item.href === "/coach/messages";
+          const badge =
+            item.href === "/coach/messages" ? totalUnread :
+            item.href === "/coach/videos" ? newComment : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">
                 <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
-                {isMessages && totalUnread > 0 && (
+                {badge > 0 && (
                   <span
                     className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full text-white px-0.5"
                     style={{ backgroundColor: "#001c48", fontSize: "9px", fontWeight: 700 }}
                   >
-                    {totalUnread > 9 ? "9+" : totalUnread}
+                    {badge > 9 ? "9+" : badge}
                   </span>
                 )}
               </div>

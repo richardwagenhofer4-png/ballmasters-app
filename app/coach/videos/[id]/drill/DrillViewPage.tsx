@@ -124,7 +124,7 @@ export default function DrillViewPage() {
           );
           const all = studentsSnap.docs.map(d => ({
             id: d.id,
-            fullName: (d.data().fullName as string) ?? "Student",
+            fullName: (d.data().fullName as string) ?? "Athlete",
             email: (d.data().email as string) ?? "",
           }));
           setAllStudents(all);
@@ -135,7 +135,7 @@ export default function DrillViewPage() {
           );
           setAllStudents(studentsSnap.docs.map(d => ({
             id: d.id,
-            fullName: (d.data().fullName as string) ?? "Student",
+            fullName: (d.data().fullName as string) ?? "Athlete",
             email: (d.data().email as string) ?? "",
           })));
         }
@@ -254,7 +254,7 @@ export default function DrillViewPage() {
 
   const studentPanel = (maxH: string, extraStyle?: React.CSSProperties) => (
     <div style={{ position: "relative", lineHeight: 0, flex: 1, ...extraStyle }}>
-      <LabelBar text="Student Attempt" side="student" />
+      <LabelBar text="Athlete Attempt" side="student" />
       <video
         ref={studentRef}
         src={studentVideoUrl}
@@ -302,7 +302,7 @@ export default function DrillViewPage() {
                 borderBottom: activeTab === tab ? "2px solid #4ade80" : "2px solid transparent",
               }}
             >
-              {tab === "coach" ? "Coach Demo" : "Student Attempt"}
+              {tab === "coach" ? "Coach Demo" : "Athlete Attempt"}
             </button>
           ))}
         </div>
@@ -371,9 +371,9 @@ export default function DrillViewPage() {
 
         {/* Students */}
         <div className="bg-gray-900 border-t border-gray-800 px-5 py-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assigned Students</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assigned Athletes</p>
           {students.length === 0 ? (
-            <p className="text-sm text-gray-500">No students assigned yet.</p>
+            <p className="text-sm text-gray-500">No athletes assigned yet.</p>
           ) : (
             <div className="space-y-2">
               {students.map(s => (
@@ -437,7 +437,7 @@ export default function DrillViewPage() {
               {/* Students */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Assigned Students</label>
+                  <label className="text-sm font-medium text-gray-700">Assigned Athletes</label>
                   {editStudentIds.size > 0 && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ backgroundColor: "rgba(1,255,249,0.1)", color: "#001c48" }}>
                       {editStudentIds.size} selected
@@ -453,13 +453,13 @@ export default function DrillViewPage() {
                       type="text"
                       value={editStudentSearch}
                       onChange={e => setEditStudentSearch(e.target.value)}
-                      placeholder="Search students…"
+                      placeholder="Search athletes…"
                       className="w-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent"
                     />
                   </div>
                   <div className="max-h-40 overflow-y-auto divide-y divide-gray-50">
                     {editFilteredStudents.length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-gray-400">No students found.</p>
+                      <p className="px-4 py-3 text-sm text-gray-400">No athletes found.</p>
                     ) : (
                       editFilteredStudents.map(s => {
                         const checked = editStudentIds.has(s.id);

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { collection, onSnapshot, addDoc, query, orderBy, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import InitialsAvatar from "@/components/InitialsAvatar";
+import { createNotification } from "@/lib/notifications";
 
 export interface Comment {
   id: string;
@@ -20,6 +21,8 @@ interface Props {
   uid: string;
   authorName: string;
   role: "coach" | "student";
+  videoCoachId?: string;
+  videoStudentIds?: string[];
 }
 
 function timeAgo(iso: string): string {
@@ -32,7 +35,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-export default function CommentsSection({ videoId, uid, authorName, role }: Props) {
+export default function CommentsSection({ videoId, uid, authorName, role, videoCoachId, videoStudentIds }: Props) {
   const isCoach = role === "coach";
   const [comments, setComments] = useState<Comment[]>([]);
   const [text, setText] = useState("");
@@ -104,6 +107,28 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
       });
       if (parentId === null) setText("");
       else { setReplyText(""); setReplyTo(null); }
+
+      // Notify the other party
+      const notifBody = txt.trim().slice(0, 120);
+      if (role === "coach" && videoStudentIds?.length) {
+        for (const sid of videoStudentIds) {
+          createNotification({
+            recipientId: sid,
+            type: "new_comment",
+            title: `${authorName} left a coaching note`,
+            body: notifBody,
+            link: `/student/videos/${videoId}`,
+          }).catch(console.error);
+        }
+      } else if (role === "student" && videoCoachId) {
+        createNotification({
+          recipientId: videoCoachId,
+          type: "new_comment",
+          title: `New comment from ${authorName}`,
+          body: notifBody,
+          link: `/coach/videos/${videoId}/annotate`,
+        }).catch(console.error);
+      }
     } finally {
       setSubmitting(false);
     }

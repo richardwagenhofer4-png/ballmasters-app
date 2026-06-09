@@ -1,5 +1,80 @@
+import { useEffect, useState } from "react";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  where,
+  writeBatch,
+} from "firebase/firestore";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+
+// ---------------------------------------------------------------------------
+// In-app notification system
+// ---------------------------------------------------------------------------
+
+export interface AppNotification {
+  id: string;
+  recipientId: string;
+  type: "new_video" | "new_message" | "booking_approved" | "booking_declined" | "new_comment";
+  title: string;
+  body?: string;
+  link: string;
+  read: boolean;
+  createdAt: { seconds: number; nanoseconds: number } | null;
+  meta?: Record<string, unknown>;
+}
+
+export async function createNotification(
+  payload: Omit<AppNotification, "id" | "read" | "createdAt">
+): Promise<void> {
+  await addDoc(collection(db, "notifications"), {
+    ...payload,
+    read: false,
+    createdAt: serverTimestamp(),
+  });
+}
+
+// Requires composite index: recipientId ASC + read ASC + createdAt DESC
+export function useNotifications(uid: string | null) {
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(
+      collection(db, "notifications"),
+      where("recipientId", "==", uid),
+      where("read", "==", false),
+      orderBy("createdAt", "desc")
+    );
+    return onSnapshot(q, (snap) => {
+      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification)));
+    }, (err) => console.error("[useNotifications]", err));
+  }, [uid]);
+
+  return {
+    notifications,
+    unreadCount: notifications.length,
+    newVideo: notifications.filter(n => n.type === "new_video").length,
+    newMessage: notifications.filter(n => n.type === "new_message").length,
+    bookingUpdate: notifications.filter(n => n.type === "booking_approved" || n.type === "booking_declined").length,
+    newComment: notifications.filter(n => n.type === "new_comment").length,
+  };
+}
+
+export async function markNotificationsRead(uid: string, type?: AppNotification["type"]): Promise<void> {
+  const snap = await getDocs(
+    query(collection(db, "notifications"), where("recipientId", "==", uid), where("read", "==", false))
+  );
+  const toMark = type ? snap.docs.filter(d => d.data().type === type) : snap.docs;
+  if (!toMark.length) return;
+  const batch = writeBatch(db);
+  for (const d of toMark) batch.update(d.ref, { read: true });
+  await batch.commit();
+}
 
 async function getMessagingModule() {
   const { getMessaging, getToken, isSupported } = await import("firebase/messaging");

@@ -833,7 +833,7 @@ export default function AnnotatePage() {
               onChange={e => setPauseOnPlay(e.target.checked)}
               className="rounded"
             />
-            Pause student on play
+            Pause athlete on play
           </label>
           <div className="flex-1" />
           <span className="text-xs text-gray-500 font-mono">{fmt(currentTime)}</span>
@@ -992,6 +992,8 @@ export default function AnnotatePage() {
             uid={uid}
             authorName={video.coachName}
             role="coach"
+            videoCoachId={video.coachId}
+            videoStudentIds={video.studentIds}
           />
         )}
       </div>
@@ -1081,7 +1083,7 @@ export default function AnnotatePage() {
                   cursor: "pointer",
                 }}
               >
-                Preview as Student
+                Preview as Athlete
               </button>
               <Link
                 href="/coach/videos"
@@ -1149,7 +1151,7 @@ export default function AnnotatePage() {
             </button>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
-              <span style={{ fontSize: "14px", fontWeight: "bold", color: "white" }}>Student Preview</span>
+              <span style={{ fontSize: "14px", fontWeight: "bold", color: "white" }}>Athlete Preview</span>
             </div>
             <div style={{ width: 120 }} />
           </div>

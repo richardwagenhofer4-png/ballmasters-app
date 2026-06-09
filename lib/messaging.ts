@@ -8,6 +8,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { createNotification } from "@/lib/notifications";
 
 export function threadId(coachId: string, athleteId: string): string {
   return `${coachId}__${athleteId}`;
@@ -45,7 +46,8 @@ export async function sendMessage(
   senderId: string,
   senderRole: "coach" | "student",
   text: string,
-  videoRef?: { videoId: string; videoTitle: string } | null
+  videoRef?: { videoId: string; videoTitle: string } | null,
+  senderName?: string
 ): Promise<void> {
   await addDoc(collection(db, "threads", tid, "messages"), {
     senderId,
@@ -62,6 +64,19 @@ export async function sendMessage(
     lastAt: serverTimestamp(),
     [unreadField]: increment(1),
   });
+
+  if (senderName) {
+    const parts = tid.split("__");
+    const recipientId = senderRole === "coach" ? parts[1] : parts[0];
+    const body = text.trim() || (videoRef ? `Shared video: ${videoRef.videoTitle}` : undefined);
+    createNotification({
+      recipientId,
+      type: "new_message",
+      title: `Message from ${senderName}`,
+      body,
+      link: senderRole === "coach" ? "/student/messages" : "/coach/messages",
+    }).catch(console.error);
+  }
 }
 
 export async function markThreadRead(tid: string, role: "coach" | "student"): Promise<void> {

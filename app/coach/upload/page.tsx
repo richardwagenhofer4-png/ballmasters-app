@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { sendVideoNotification } from "@/lib/notifications";
+import { createNotification, sendVideoNotification } from "@/lib/notifications";
 
 const MAX_BYTES = 500 * 1024 * 1024;
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mov"];
@@ -226,7 +226,7 @@ export default function UploadPage() {
       if (!file) { setError("Please select a video file."); return; }
     } else {
       if (!coachFile) { setError("Please select the Coach Demo video."); return; }
-      if (!studentFile) { setError("Please select the Student Attempt video."); return; }
+      if (!studentFile) { setError("Please select the Athlete Attempt video."); return; }
     }
 
     const user = auth.currentUser;
@@ -274,6 +274,9 @@ export default function UploadPage() {
         const assignedIds = Array.from(selectedIds);
         if (assignedIds.length > 0) {
           sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
+          for (const sid of assignedIds) {
+            createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: title.trim(), link: `/student/videos/${saved.id}` }).catch(console.error);
+          }
         }
       } else {
         // Drill comparison — get two presigned URLs in parallel, then upload
@@ -327,6 +330,9 @@ export default function UploadPage() {
         const assignedIds = Array.from(selectedIds);
         if (assignedIds.length > 0) {
           sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
+          for (const sid of assignedIds) {
+            createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: title.trim(), link: `/student/videos/${saved.id}` }).catch(console.error);
+          }
         }
       }
 
@@ -373,8 +379,8 @@ export default function UploadPage() {
           <p className="text-gray-500 text-sm mb-8">
             <span className="font-semibold text-gray-700">{title}</span> has been saved and
             {selectedIds.size > 0
-              ? ` shared with ${selectedIds.size} student${selectedIds.size > 1 ? "s" : ""}.`
-              : " is ready to assign to students."}
+              ? ` shared with ${selectedIds.size} athlete${selectedIds.size > 1 ? "s" : ""}.`
+              : " is ready to assign to athletes."}
           </p>
           <div className="flex gap-3">
             <button
@@ -410,7 +416,7 @@ export default function UploadPage() {
           <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: "#001c48" }}>
             Upload Video
           </h1>
-          <p className="mt-1 text-gray-500 text-sm">Share coaching footage with your students</p>
+          <p className="mt-1 text-gray-500 text-sm">Share coaching footage with your athletes</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
@@ -481,7 +487,7 @@ export default function UploadPage() {
                   onDragLeave={() => setIsDraggingCoach(false)}
                 />
                 <DropZone
-                  label="Student Attempt"
+                  label="Athlete Attempt"
                   file={studentFile}
                   fileError={studentFileError}
                   isDragging={isDraggingStudent}
@@ -576,7 +582,7 @@ export default function UploadPage() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">
-                Assign to students{" "}
+                Assign to athletes{" "}
                 <span className="text-gray-400 font-normal">(optional)</span>
               </span>
               {selectedIds.size > 0 && (
@@ -592,10 +598,10 @@ export default function UploadPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                 </svg>
-                Loading students…
+                Loading athletes…
               </div>
             ) : students.length === 0 ? (
-              <p className="text-sm text-gray-400 py-2">No students have registered yet.</p>
+              <p className="text-sm text-gray-400 py-2">No athletes have registered yet.</p>
             ) : (
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <div className="border-b border-gray-200 px-3 py-2 flex items-center gap-2">
@@ -606,14 +612,14 @@ export default function UploadPage() {
                     type="text"
                     value={studentSearch}
                     onChange={(e) => setStudentSearch(e.target.value)}
-                    placeholder="Search students…"
+                    placeholder="Search athletes…"
                     disabled={isWorking}
                     className="w-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none bg-transparent disabled:opacity-60"
                   />
                 </div>
                 <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
                   {filteredStudents.length === 0 ? (
-                    <p className="px-4 py-3 text-sm text-gray-400">No students match your search.</p>
+                    <p className="px-4 py-3 text-sm text-gray-400">No athletes match your search.</p>
                   ) : (
                     filteredStudents.map((s) => {
                       const checked = selectedIds.has(s.id);
@@ -653,7 +659,7 @@ export default function UploadPage() {
           )}
           {status === "uploading" && mode === "drill_comparison" && (
             <div className="space-y-3">
-              {([["Coach Demo", coachProgress], ["Student Attempt", studentProgress]] as [string, number][]).map(([label, pct]) => (
+              {([["Coach Demo", coachProgress], ["Athlete Attempt", studentProgress]] as [string, number][]).map(([label, pct]) => (
                 <div key={label}>
                   <div className="flex justify-between text-xs text-gray-500 mb-1">
                     <span>{label}</span>

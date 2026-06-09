@@ -9,7 +9,7 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
-import { sendVideoNotification } from "@/lib/notifications";
+import { createNotification, markNotificationsRead, sendVideoNotification, useNotifications } from "@/lib/notifications";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -148,6 +148,7 @@ function CoachVideosPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
+  const { newComment, newMessage } = useNotifications(uid);
   const [videos, setVideos] = useState<Video[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [videoNeedsReply, setVideoNeedsReply] = useState<Map<string, boolean>>(new Map());
@@ -182,6 +183,7 @@ function CoachVideosPage() {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
+      markNotificationsRead(user.uid, "new_comment").catch(console.error);
       try {
         const [videosSnap, studentsSnap] = await Promise.all([
           getDocs(collection(db, "videos")),
@@ -362,6 +364,9 @@ function CoachVideosPage() {
       const wasPublishedNow = editStatus === "published" && editingVideo.status !== "published";
       if (wasPublishedNow && updated.studentIds.length > 0) {
         sendVideoNotification(updated.studentIds, updated.title, editingVideo.id).catch(console.error);
+        for (const sid of updated.studentIds) {
+          createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: updated.title, link: `/student/videos/${editingVideo.id}` }).catch(console.error);
+        }
       }
       setEditingVideo(null);
     } catch (err) {
@@ -907,9 +912,17 @@ function CoachVideosPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
+          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
             </Link>
           );

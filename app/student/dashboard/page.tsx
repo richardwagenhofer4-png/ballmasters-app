@@ -7,7 +7,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
-import { requestNotificationPermission } from "@/lib/notifications";
+import { requestNotificationPermission, useNotifications, markNotificationsRead } from "@/lib/notifications";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -55,14 +55,6 @@ function VideoMetaRows({ v, studentName, uid, avatarId, size, abbreviate }: {
   );
 }
 
-interface CoachActivity {
-  id: string;
-  videoId: string;
-  videoTitle: string;
-  authorName: string;
-  text: string;
-  createdAt: string;
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -157,8 +149,8 @@ export default function StudentDashboard() {
   const [studentName, setStudentName] = useState("");
   const [avatarId, setAvatarId] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
-  const [activity, setActivity] = useState<CoachActivity[]>([]);
   const [showNotifBanner, setShowNotifBanner] = useState(false);
+  const { notifications, newVideo, newMessage, bookingUpdate } = useNotifications(uid);
   const [notifEnabling, setNotifEnabling] = useState(false);
 
   const greeting = getGreeting();
@@ -198,30 +190,6 @@ export default function StudentDashboard() {
 
         setVideos(videoDocs);
         setLoading(false);
-
-        // Load coach comments in background
-        if (videoDocs.length > 0) {
-          const commentSnaps = await Promise.all(
-            videoDocs.map(v => getDocs(collection(db, "videos", v.id, "comments")))
-          );
-          const coachComments: CoachActivity[] = [];
-          commentSnaps.forEach((snap, i) => {
-            snap.docs.forEach(d => {
-              if ((d.data().role as string) === "coach") {
-                coachComments.push({
-                  id: d.id,
-                  videoId: videoDocs[i].id,
-                  videoTitle: videoDocs[i].title,
-                  authorName: (d.data().authorName as string) ?? "Coach",
-                  text: (d.data().text as string) ?? "",
-                  createdAt: (d.data().createdAt as string) ?? "",
-                });
-              }
-            });
-          });
-          coachComments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setActivity(coachComments.slice(0, 6));
-        }
       } catch (err) {
         console.error("[student/dashboard]", err);
         setLoading(false);
@@ -521,51 +489,45 @@ export default function StudentDashboard() {
           )}
         </div>
 
-        {/* Coach Activity */}
+        {/* Activity */}
         <div>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Recent Coach Feedback</h2>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Activity</h2>
 
-          {activity.length === 0 ? (
+          {notifications.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 py-8 text-center px-4">
               <svg className="h-8 w-8 text-gray-200 mx-auto mb-2" viewBox="0 0 24 24" fill="currentColor">
-                <path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" />
+                <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
               </svg>
-              <p className="text-sm text-gray-400">No coach feedback yet.</p>
-              <p className="text-xs text-gray-400 mt-0.5">Comments will appear here once your coach responds.</p>
+              <p className="text-sm text-gray-400">You&apos;re all caught up!</p>
+              <p className="text-xs text-gray-400 mt-0.5">New videos, messages, and updates will appear here.</p>
             </div>
           ) : (
-            <div className="space-y-2.5">
-              {activity.map(item => (
-                <Link key={item.id} href={`/student/videos/${item.videoId}`}>
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 flex gap-3 hover:shadow-sm active:opacity-90 transition">
-                    {/* Coach avatar */}
-                    <div
-                      className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold"
-                      style={{ backgroundColor: "#dbeafe", color: "#001c48" }}
-                    >
-                      {item.authorName.charAt(0).toUpperCase()}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                        <span className="text-xs font-semibold text-gray-800">{item.authorName}</span>
-                        <span
-                          className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                          style={{ backgroundColor: "#001c48", color: "#01fff9" }}
-                        >
-                          Coach
-                        </span>
-                        <span className="text-xs text-gray-400 ml-auto">{timeAgo(item.createdAt)}</span>
+            <div className="space-y-2">
+              {notifications.slice(0, 6).map(n => {
+                const ts = n.createdAt;
+                const diff = ts ? Date.now() - ts.seconds * 1000 : 0;
+                const m = Math.floor(diff / 60000);
+                const ago = m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
+                return (
+                  <Link key={n.id} href={n.link}>
+                    <div className="bg-white rounded-xl border border-gray-200 p-3.5 flex gap-3 hover:shadow-sm active:opacity-90 transition">
+                      <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(1,255,249,0.12)" }}>
+                        {n.type === "new_video" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>}
+                        {n.type === "new_message" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>}
+                        {n.type === "new_comment" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>}
+                        {(n.type === "booking_approved" || n.type === "booking_declined") && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>}
                       </div>
-                      <p className="text-xs text-gray-500 mb-1 truncate">
-                        on <span className="font-medium text-gray-700">{item.videoTitle}</span>
-                      </p>
-                      <p className="text-sm text-gray-700 leading-snug line-clamp-2">{item.text}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-900 leading-snug">{n.title}</p>
+                          <span className="text-xs text-gray-400 shrink-0">{ago}</span>
+                        </div>
+                        {n.body && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>}
+                      </div>
                     </div>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
@@ -580,9 +542,17 @@ export default function StudentDashboard() {
       >
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
+          const badge = item.href === "/student/videos" ? newVideo : item.href === "/student/messages" ? newMessage : item.href === "/student/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>
                 {item.label}
               </span>
