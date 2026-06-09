@@ -92,6 +92,10 @@ function generateSessionTitle(startTime: string, coachName: string): string {
   return `${timeOfDay} Session with Coach ${firstName}`;
 }
 
+function timesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
+  return aStart < bEnd && aEnd > bStart;
+}
+
 // confirmedBooked excludes pending_approval entries so capacity reflects only approved bookings
 function confirmedBookedCount(session: Session, bookings: Booking[]): number {
   const pending = bookings.filter(b => b.sessionId === session.id && b.status === "pending_approval").length;
@@ -199,8 +203,6 @@ function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, exist
 
   const effectiveCoachId = (isAdmin && selectedCoachId) ? selectedCoachId : coachId;
   const effectiveCoachName = (isAdmin && selectedCoachName) ? selectedCoachName : coachName;
-  const existingKeys = new Set(existingSessions.map(s => `${s.coachId}__${s.date}__${s.startTime}`));
-
   function computeDrafts(): SessionDraft[] {
     if (tab === "recurring") {
       if (!recurStart || !recurEnd || recurDays.length === 0) return [];
@@ -226,7 +228,13 @@ function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, exist
   }
 
   const drafts = computeDrafts();
-  const newDrafts = drafts.filter(d => !existingKeys.has(`${effectiveCoachId}__${d.date}__${d.startTime}`));
+  // Filter against existing sessions using overlap, not exact-time match
+  const newDrafts = drafts.filter(d => {
+    const sameCoachDay = existingSessions.filter(
+      s => s.coachId === effectiveCoachId && s.date === d.date && s.status !== "cancelled"
+    );
+    return !sameCoachDay.some(s => timesOverlap(d.startTime, d.endTime, s.startTime, s.endTime));
+  });
   const skipCount = drafts.length - newDrafts.length;
 
   async function handleCreate() {
@@ -236,17 +244,18 @@ function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, exist
     try {
       const now = new Date().toISOString();
       const maxCap = type === "individual" ? 1 : capacity;
-      const seenKeys = new Set<string>();
-      const deduped = newDrafts.filter(d => {
-        const k = `${effectiveCoachId}__${d.date}__${d.startTime}`;
-        if (seenKeys.has(k)) return false;
-        seenKeys.add(k);
-        return true;
-      });
-      const totalSkipped = drafts.length - deduped.length;
-      for (let i = 0; i < deduped.length; i += 500) {
+      // Dedupe within batch using overlap (e.g. recurring that generates two overlapping slots)
+      const accepted: SessionDraft[] = [];
+      for (const d of newDrafts) {
+        const hasInternalOverlap = accepted.some(
+          a => a.date === d.date && timesOverlap(d.startTime, d.endTime, a.startTime, a.endTime)
+        );
+        if (!hasInternalOverlap) accepted.push(d);
+      }
+      const totalSkipped = drafts.length - accepted.length;
+      for (let i = 0; i < accepted.length; i += 500) {
         const batch = writeBatch(db);
-        for (const d of deduped.slice(i, i + 500)) {
+        for (const d of accepted.slice(i, i + 500)) {
           batch.set(doc(collection(db, "sessions")), {
             title: generateSessionTitle(d.startTime, effectiveCoachName),
             coachId: effectiveCoachId, coachName: effectiveCoachName, type,
@@ -257,7 +266,7 @@ function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, exist
         }
         await batch.commit();
       }
-      setResult({ created: deduped.length, skipped: totalSkipped });
+      setResult({ created: accepted.length, skipped: totalSkipped });
     } catch (err) {
       console.error("[batch create]", err);
       setError("Failed to create sessions. Please try again.");
@@ -509,7 +518,6 @@ function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, exist
 
 interface CreateSessionModalProps {
   onClose: () => void;
-  onCreated: (s: Session) => void;
   coachId: string;
   coachName: string;
   isAdmin: boolean;
@@ -517,7 +525,7 @@ interface CreateSessionModalProps {
   existingSessions: Session[];
 }
 
-function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, coaches, existingSessions }: CreateSessionModalProps) {
+function CreateSessionModal({ onClose, coachId, coachName, isAdmin, coaches, existingSessions }: CreateSessionModalProps) {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState(() => nextQuarterHour());
   const [endTime, setEndTime] = useState(() => addOneHour(nextQuarterHour()));
@@ -546,12 +554,16 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
       const now = new Date().toISOString();
       const effectiveCoachId = (isAdmin && selectedCoachId) ? selectedCoachId : coachId;
       const effectiveCoachName = (isAdmin && selectedCoachName) ? selectedCoachName : coachName;
-      const isDuplicate = existingSessions.some(
-        s => s.coachId === effectiveCoachId && s.date === date && s.startTime === startTime && s.status !== "cancelled"
+      // Fresh read to catch any sessions created since this modal opened
+      const freshSnap = await getDocs(
+        query(collection(db, "sessions"), where("coachId", "==", effectiveCoachId), where("date", "==", date))
       );
-      if (isDuplicate) {
-        setError("A session already exists for this coach at this date and time.");
-        setSaving(false);
+      const freshSessions = freshSnap.docs
+        .map(d => d.data() as { startTime: string; endTime: string; status: string })
+        .filter(s => s.status !== "cancelled");
+      const overlap = freshSessions.find(s => timesOverlap(startTime, endTime, s.startTime, s.endTime));
+      if (overlap) {
+        setError(`This overlaps an existing session for this coach (existing: ${formatTime(overlap.startTime)}–${formatTime(overlap.endTime)}). Please pick a non-overlapping time.`);
         return;
       }
       const data = {
@@ -571,8 +583,7 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
         createdAt: now,
         school: "",
       };
-      const ref = await addDoc(collection(db, "sessions"), data);
-      onCreated({ id: ref.id, ...data });
+      await addDoc(collection(db, "sessions"), data);
       onClose();
     } catch (err) {
       console.error("[create session]", err);
@@ -1616,7 +1627,6 @@ export default function CoachCalendarPage() {
       {showCreate && (
         <CreateSessionModal
           onClose={() => setShowCreate(false)}
-          onCreated={s => setSessions(prev => [...prev, s].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)))}
           coachId={coachId}
           coachName={coachName}
           isAdmin={isAdmin}
