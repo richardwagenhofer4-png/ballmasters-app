@@ -177,8 +177,8 @@ interface BatchCreateModalProps {
 
 function BatchCreateModal({ onClose, coachId, coachName, isAdmin, coaches, existingSessions }: BatchCreateModalProps) {
   const [tab, setTab] = useState<"recurring" | "multislot" | "duplicate">("recurring");
-  const [selectedCoachId, setSelectedCoachId] = useState("");
-  const [selectedCoachName, setSelectedCoachName] = useState("");
+  const [selectedCoachId, setSelectedCoachId] = useState(coachId);
+  const [selectedCoachName, setSelectedCoachName] = useState(coachName);
   const [type, setType] = useState<"individual" | "group">("individual");
   const [capacity, setCapacity] = useState(5);
   const [location, setLocation] = useState("");
@@ -535,8 +535,8 @@ function CreateSessionModal({ onClose, coachId, coachName, isAdmin, coaches, exi
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [selectedCoachId, setSelectedCoachId] = useState("");
-  const [selectedCoachName, setSelectedCoachName] = useState("");
+  const [selectedCoachId, setSelectedCoachId] = useState(coachId);
+  const [selectedCoachName, setSelectedCoachName] = useState(coachName);
 
   async function handleSubmit() {
     if (!date || !startTime || !endTime) {
