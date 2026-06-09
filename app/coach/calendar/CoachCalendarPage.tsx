@@ -514,9 +514,10 @@ interface CreateSessionModalProps {
   coachName: string;
   isAdmin: boolean;
   coaches: { uid: string; name: string }[];
+  existingSessions: Session[];
 }
 
-function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, coaches }: CreateSessionModalProps) {
+function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, coaches, existingSessions }: CreateSessionModalProps) {
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState(() => nextQuarterHour());
   const [endTime, setEndTime] = useState(() => addOneHour(nextQuarterHour()));
@@ -545,6 +546,14 @@ function CreateSessionModal({ onClose, onCreated, coachId, coachName, isAdmin, c
       const now = new Date().toISOString();
       const effectiveCoachId = (isAdmin && selectedCoachId) ? selectedCoachId : coachId;
       const effectiveCoachName = (isAdmin && selectedCoachName) ? selectedCoachName : coachName;
+      const isDuplicate = existingSessions.some(
+        s => s.coachId === effectiveCoachId && s.date === date && s.startTime === startTime && s.status !== "cancelled"
+      );
+      if (isDuplicate) {
+        setError("A session already exists for this coach at this date and time.");
+        setSaving(false);
+        return;
+      }
       const data = {
         title: generateSessionTitle(startTime, effectiveCoachName),
         coachId: effectiveCoachId,
@@ -764,6 +773,7 @@ interface SessionDetailModalProps {
 function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings, onApproveBooking, onDeclineBooking }: SessionDetailModalProps) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
   const [promoting, setPromoting] = useState<string | null>(null);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [decliningId, setDecliningId] = useState<string | null>(null);
@@ -775,12 +785,22 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
 
   async function handleCancelSession() {
     setCancelling(true);
+    setCancelError("");
     try {
-      await updateDoc(doc(db, "sessions", session.id), { status: "cancelled" });
+      const batch = writeBatch(db);
+      batch.update(doc(db, "sessions", session.id), { status: "cancelled" });
+      const activeBookings = bookings.filter(
+        b => b.sessionId === session.id && b.status !== "cancelled" && b.status !== "declined"
+      );
+      for (const b of activeBookings) {
+        batch.update(doc(db, "bookings", b.id), { status: "cancelled" });
+      }
+      await batch.commit();
       onCancelled(session.id);
       onClose();
     } catch (err) {
       console.error("[cancel session]", err);
+      setCancelError("Failed to cancel session. Please try again.");
     } finally {
       setCancelling(false);
     }
@@ -979,9 +999,10 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
           {confirmCancel ? (
             <div className="space-y-2">
               <p className="text-sm text-red-700 font-medium text-center">Cancel this session for all athletes?</p>
+              {cancelError && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2 text-center">{cancelError}</p>}
               <div className="flex gap-2">
                 <button
-                  onClick={() => setConfirmCancel(false)}
+                  onClick={() => { setConfirmCancel(false); setCancelError(""); }}
                   disabled={cancelling}
                   className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700"
                 >
@@ -998,7 +1019,7 @@ function SessionDetailModal({ session, onClose, onCancelled, onUpdated, bookings
             </div>
           ) : (
             <button
-              onClick={() => setConfirmCancel(true)}
+              onClick={() => { setConfirmCancel(true); setCancelError(""); }}
               className="w-full rounded-lg border border-red-200 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
             >
               Cancel Session
@@ -1600,6 +1621,7 @@ export default function CoachCalendarPage() {
           coachName={coachName}
           isAdmin={isAdmin}
           coaches={coaches}
+          existingSessions={sessions}
         />
       )}
 
