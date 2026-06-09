@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { collection, onSnapshot, addDoc, query, orderBy } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, query, orderBy, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import InitialsAvatar from "@/components/InitialsAvatar";
 
 export interface Comment {
   id: string;
@@ -39,8 +40,10 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
   const [replyText, setReplyText] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [newIds, setNewIds] = useState<Set<string>>(new Set());
+  const [avatarCache, setAvatarCache] = useState<Record<string, string>>({});
   const seenIdsRef = useRef<Set<string>>(new Set());
   const initialLoadRef = useRef(false);
+  const fetchedIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const q = query(
@@ -69,6 +72,23 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
     });
     return unsub;
   }, [videoId, isCoach]);
+
+  // Fetch avatarId for any author not yet cached — one read per unique user, never per comment
+  useEffect(() => {
+    if (comments.length === 0) return;
+    const uncached = [...new Set(comments.map(c => c.authorId))].filter(
+      id => !fetchedIdsRef.current.has(id)
+    );
+    if (uncached.length === 0) return;
+    uncached.forEach(id => fetchedIdsRef.current.add(id));
+    Promise.all(uncached.map(id => getDoc(doc(db, "users", id)))).then(snaps => {
+      const updates: Record<string, string> = {};
+      for (const snap of snaps) {
+        if (snap.exists()) updates[snap.id] = (snap.data().avatarId as string) ?? "";
+      }
+      setAvatarCache(prev => ({ ...prev, ...updates }));
+    });
+  }, [comments]);
 
   async function submitComment(parentId: string | null, txt: string) {
     if (!txt.trim() || submitting) return;
@@ -117,54 +137,67 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
                   className="py-3 transition-colors"
                   style={isNew ? { backgroundColor: "#fefce8", marginLeft: -16, marginRight: -16, paddingLeft: 16, paddingRight: 16 } : {}}
                 >
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-xs font-semibold text-gray-800">{c.authorName}</span>
-                    {c.role === "coach" && (
-                      <span
-                        className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                        style={{ backgroundColor: "#001c48", color: "#01fff9" }}
-                      >
-                        Coach
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400 ml-auto">{timeAgo(c.createdAt)}</span>
-                  </div>
-                  <p className="text-sm text-gray-700 leading-snug">{c.text}</p>
-                  {isCoach && (
-                    <button
-                      onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}
-                      className="mt-1.5 text-xs text-gray-400 hover:text-gray-600 transition"
-                    >
-                      {replyTo === c.id ? "Cancel" : "↩ Reply"}
-                    </button>
-                  )}
-                  {replyTo === c.id && (
-                    <div className="mt-2 flex gap-2">
-                      <input
-                        autoFocus
-                        value={replyText}
-                        onChange={e => setReplyText(e.target.value)}
-                        onKeyDown={e => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault();
-                            submitComment(c.id, replyText);
-                          }
-                        }}
-                        placeholder="Write a reply…"
-                        className="flex-1 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none"
-                        onFocus={e => (e.target.style.borderColor = "#001c48")}
-                        onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
+                  <div className="flex gap-2.5">
+                    <div className="shrink-0 pt-0.5">
+                      <InitialsAvatar
+                        name={c.authorName}
+                        id={c.authorId}
+                        size={32}
+                        variant={c.role === "coach" ? "coach" : "student"}
+                        avatarId={avatarCache[c.authorId] || undefined}
                       />
-                      <button
-                        onClick={() => submitComment(c.id, replyText)}
-                        disabled={!replyText.trim() || submitting}
-                        className="text-sm font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition"
-                        style={{ backgroundColor: "#001c48" }}
-                      >
-                        Reply
-                      </button>
                     </div>
-                  )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="text-xs font-semibold text-gray-800">{c.authorName}</span>
+                        {c.role === "coach" && (
+                          <span
+                            className="text-xs font-medium px-1.5 py-0.5 rounded-full"
+                            style={{ backgroundColor: "#001c48", color: "#01fff9" }}
+                          >
+                            Coach
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400 ml-auto">{timeAgo(c.createdAt)}</span>
+                      </div>
+                      <p className="text-sm text-gray-700 leading-snug">{c.text}</p>
+                      {isCoach && (
+                        <button
+                          onClick={() => setReplyTo(replyTo === c.id ? null : c.id)}
+                          className="mt-1.5 text-xs text-gray-400 hover:text-gray-600 transition"
+                        >
+                          {replyTo === c.id ? "Cancel" : "↩ Reply"}
+                        </button>
+                      )}
+                      {replyTo === c.id && (
+                        <div className="mt-2 flex gap-2">
+                          <input
+                            autoFocus
+                            value={replyText}
+                            onChange={e => setReplyText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                submitComment(c.id, replyText);
+                              }
+                            }}
+                            placeholder="Write a reply…"
+                            className="flex-1 text-sm text-gray-900 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none"
+                            onFocus={e => (e.target.style.borderColor = "#001c48")}
+                            onBlur={e => (e.target.style.borderColor = "#e5e7eb")}
+                          />
+                          <button
+                            onClick={() => submitComment(c.id, replyText)}
+                            disabled={!replyText.trim() || submitting}
+                            className="text-sm font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition"
+                            style={{ backgroundColor: "#001c48" }}
+                          >
+                            Reply
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Replies */}
@@ -173,22 +206,35 @@ export default function CommentsSection({ videoId, uid, authorName, role }: Prop
                   return (
                     <div
                       key={r.id}
-                      className="py-2.5 pl-3 border-l-2 border-gray-100 ml-5 transition-colors"
+                      className="py-2.5 pl-3 border-l-2 border-gray-100 ml-10 transition-colors"
                       style={isReplyNew ? { backgroundColor: "#fefce8" } : {}}
                     >
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-xs font-semibold text-gray-800">{r.authorName}</span>
-                        {r.role === "coach" && (
-                          <span
-                            className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                            style={{ backgroundColor: "#001c48", color: "#01fff9" }}
-                          >
-                            Coach
-                          </span>
-                        )}
-                        <span className="text-xs text-gray-400 ml-auto">{timeAgo(r.createdAt)}</span>
+                      <div className="flex gap-2">
+                        <div className="shrink-0 pt-0.5">
+                          <InitialsAvatar
+                            name={r.authorName}
+                            id={r.authorId}
+                            size={26}
+                            variant={r.role === "coach" ? "coach" : "student"}
+                            avatarId={avatarCache[r.authorId] || undefined}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-xs font-semibold text-gray-800">{r.authorName}</span>
+                            {r.role === "coach" && (
+                              <span
+                                className="text-xs font-medium px-1.5 py-0.5 rounded-full"
+                                style={{ backgroundColor: "#001c48", color: "#01fff9" }}
+                              >
+                                Coach
+                              </span>
+                            )}
+                            <span className="text-xs text-gray-400 ml-auto">{timeAgo(r.createdAt)}</span>
+                          </div>
+                          <p className="text-sm text-gray-700 leading-snug">{r.text}</p>
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-700 leading-snug">{r.text}</p>
                     </div>
                   );
                 })}
