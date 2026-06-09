@@ -149,7 +149,7 @@ function CoachVideosPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
-  const { newComment, newMessage } = useNotificationCounts();
+  const { newComment, newMessage, bookingUpdate } = useNotificationCounts();
   const [videos, setVideos] = useState<Video[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [videoNeedsReply, setVideoNeedsReply] = useState<Map<string, boolean>>(new Map());
@@ -912,7 +912,7 @@ function CoachVideosPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : 0;
+          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : item.href === "/coach/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
               <div className="relative">

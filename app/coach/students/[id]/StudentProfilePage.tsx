@@ -116,7 +116,7 @@ export default function StudentProfilePage() {
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
   const [viewMode, setViewMode] = useViewMode("student-profile");
-  const { newComment, newMessage } = useNotificationCounts();
+  const { newComment, newMessage, bookingUpdate } = useNotificationCounts();
 
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -599,7 +599,8 @@ export default function StudentProfilePage() {
             (item.href === "/coach/students" && pathname.startsWith("/coach/students"));
           const badge =
             item.href === "/coach/videos" ? newComment :
-            item.href === "/coach/messages" ? newMessage : 0;
+            item.href === "/coach/messages" ? newMessage :
+            item.href === "/coach/calendar" ? bookingUpdate : 0;
           return (
             <Link
               key={item.href}

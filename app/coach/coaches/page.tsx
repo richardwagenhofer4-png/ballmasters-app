@@ -65,7 +65,7 @@ export default function CoachesPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
-  const { newComment, newMessage } = useNotificationCounts();
+  const { newComment, newMessage, bookingUpdate } = useNotificationCounts();
 
   const [loading, setLoading] = useState(true);
   const [viewerUid, setViewerUid] = useState("");
@@ -456,7 +456,8 @@ export default function CoachesPage() {
           const isActive = pathname === item.href;
           const badge =
             item.href === "/coach/videos" ? newComment :
-            item.href === "/coach/messages" ? newMessage : 0;
+            item.href === "/coach/messages" ? newMessage :
+            item.href === "/coach/calendar" ? bookingUpdate : 0;
           return (
             <Link
               key={item.href}

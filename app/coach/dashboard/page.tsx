@@ -141,7 +141,7 @@ export default function CoachDashboard() {
   const [studentSearch, setStudentSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const { notifications, newComment, newMessage, markRead } = useNotificationCounts();
+  const { notifications, newComment, newMessage, bookingUpdate, markRead } = useNotificationCounts();
 
   const greeting = getGreeting();
 
@@ -629,7 +629,7 @@ export default function CoachDashboard() {
       >
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : 0;
+          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : item.href === "/coach/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
               <div className="relative">

@@ -1055,7 +1055,12 @@ export default function CoachCalendarPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
-  const { newComment, newMessage } = useNotificationCounts();
+  const { newComment, newMessage, bookingUpdate, notifications, markRead } = useNotificationCounts();
+
+  useEffect(() => {
+    const toMark = notifications.filter(n => n.type === "booking").map(n => n.id);
+    markRead(toMark);
+  }, [notifications, markRead]);
   const [coachId, setCoachId] = useState("");
   const [coachName, setCoachName] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -1625,7 +1630,7 @@ export default function CoachCalendarPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : 0;
+          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : item.href === "/coach/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">

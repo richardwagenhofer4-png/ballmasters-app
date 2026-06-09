@@ -240,9 +240,7 @@ export default function StudentCalendarPage() {
     setActionLoading(session.id);
     try {
       const now = new Date().toISOString();
-      const sessionStart = new Date(`${session.date}T${session.startTime}:00`);
-      const isLastMinute = (sessionStart.getTime() - Date.now()) < 24 * 60 * 60 * 1000;
-      let bookingStatus: "confirmed" | "waitlisted" | "pending_approval" = "confirmed";
+      let bookingStatus: "confirmed" | "waitlisted" | "pending_approval" = "pending_approval";
 
       // Guard: check for existing active booking doc before transacting
       const existingQ = query(
@@ -270,7 +268,7 @@ export default function StudentCalendarPage() {
           const newBookedBy = [...data.bookedBy, { uid, name: studentName, email: studentEmail, bookedAt: now }];
           const newStatus = newBookedBy.length >= data.maxCapacity ? "full" : "available";
           tx.update(sessionRef, { bookedBy: newBookedBy, status: newStatus });
-          bookingStatus = isLastMinute ? "pending_approval" : "confirmed";
+          bookingStatus = "pending_approval";
         } else {
           const newWaitlist = [...data.waitlist, { uid, name: studentName, email: studentEmail, joinedAt: now }];
           tx.update(sessionRef, { waitlist: newWaitlist });
@@ -302,13 +300,10 @@ export default function StudentCalendarPage() {
         reminderSent: false,
       });
 
-      const notifTitle = (bookingStatus as string) === "pending_approval"
-        ? `Booking request from ${studentName}`
-        : `New booking from ${studentName}`;
       createNotification({
         recipientId: session.coachId,
         type: "booking",
-        title: notifTitle,
+        title: `Booking request from ${studentName}`,
         body: `${session.date} at ${session.startTime}`,
         link: "/coach/calendar",
         meta: { sessionId: session.id },
@@ -338,6 +333,7 @@ export default function StudentCalendarPage() {
       const now = new Date().toISOString();
       const wasBooked = booking.status === "confirmed" || booking.status === "pending_approval";
       let promotedUid: string | null = null;
+      let promotedName: string | null = null;
 
       await runTransaction(db, async (tx) => {
         const sessionRef = doc(db, "sessions", session.id);
@@ -352,6 +348,7 @@ export default function StudentCalendarPage() {
           if (newWaitlist.length > 0) {
             const promoted = newWaitlist[0];
             promotedUid = promoted.uid;
+            promotedName = promoted.name;
             newWaitlist = newWaitlist.slice(1);
             const promotedBookedBy = [...newBookedBy, {
               uid: promoted.uid, name: promoted.name, email: promoted.email, bookedAt: now,
@@ -385,7 +382,15 @@ export default function StudentCalendarPage() {
         );
         const promotedSnap = await getDocs(promotedQ);
         if (!promotedSnap.empty) {
-          await updateDoc(doc(db, "bookings", promotedSnap.docs[0].id), { status: "confirmed" });
+          await updateDoc(doc(db, "bookings", promotedSnap.docs[0].id), { status: "pending_approval" });
+          createNotification({
+            recipientId: session.coachId,
+            type: "booking",
+            title: `Booking request from ${promotedName || "Athlete"}`,
+            body: `${session.date} at ${session.startTime} (from waitlist)`,
+            link: "/coach/calendar",
+            meta: { sessionId: session.id },
+          }).catch(console.error);
         }
       }
 
@@ -422,10 +427,8 @@ export default function StudentCalendarPage() {
     try {
       const status = await handleBook(session);
       setConfirmBookSession(null);
-      if (status === "confirmed") {
-        setSuccessInfo({ title: "Booked!", message: "Your session is confirmed. See it under My Bookings." });
-      } else if (status === "pending_approval") {
-        setSuccessInfo({ title: "Booked — Pending Approval", message: "Your spot is held. Your coach needs to approve it before it's confirmed. You'll see it under Pending." });
+      if (status === "pending_approval") {
+        setSuccessInfo({ title: "Booked — Pending Approval", message: "Your coach needs to approve it before it's confirmed. You'll see it under Pending." });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Something went wrong.";
