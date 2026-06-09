@@ -14,7 +14,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { markThreadRead, sendMessage } from "@/lib/messaging";
-import { markNotificationsRead, useNotifications } from "@/lib/notifications";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 import InitialsAvatar from "@/components/InitialsAvatar";
 
 // ---------------------------------------------------------------------------
@@ -109,8 +109,7 @@ export default function CoachMessagesPage() {
 
   const [uid, setUid] = useState<string | null>(null);
   const [threads, setThreads] = useState<ThreadDoc[]>([]);
-  const [totalUnread, setTotalUnread] = useState(0);
-  const { newComment } = useNotifications(uid);
+  const { newComment, newMessage, notifications, markRead } = useNotificationCounts();
 
   // Conversation view state
   const [view, setView] = useState<"list" | "thread">("list");
@@ -162,7 +161,6 @@ export default function CoachMessagesPage() {
         unreadForAthlete: (d.data().unreadForAthlete as number) ?? 0,
       }));
       setThreads(list);
-      setTotalUnread(list.reduce((s, t) => s + t.unreadForCoach, 0));
     });
     return unsub;
   }, [uid]);
@@ -209,7 +207,6 @@ export default function CoachMessagesPage() {
     }
     // Mark read on open
     await markThreadRead(thread.id, "coach").catch(() => {});
-    if (uid) markNotificationsRead(uid, "new_message").catch(console.error);
   }
 
   function backToList() {
@@ -217,6 +214,15 @@ export default function CoachMessagesPage() {
     setActiveThread(null);
     setMessages([]);
   }
+
+  // Mark new_message notifications read for the active thread
+  useEffect(() => {
+    if (!activeThread) return;
+    const toMark = notifications
+      .filter(n => n.type === "new_message" && (n.meta?.threadId as string | undefined) === activeThread.id)
+      .map(n => n.id);
+    if (toMark.length > 0) markRead(toMark);
+  }, [activeThread, notifications, markRead]);
 
   async function handleSend() {
     if (!activeThread || !uid || sending) return;
@@ -523,7 +529,7 @@ export default function CoachMessagesPage() {
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
           const badge =
-            item.href === "/coach/messages" ? totalUnread :
+            item.href === "/coach/messages" ? newMessage :
             item.href === "/coach/videos" ? newComment : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>

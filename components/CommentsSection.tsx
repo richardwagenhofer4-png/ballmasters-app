@@ -118,6 +118,7 @@ export default function CommentsSection({ videoId, uid, authorName, role, videoC
             title: `${authorName} left a coaching note`,
             body: notifBody,
             link: `/student/videos/${videoId}`,
+            meta: { videoId },
           }).catch(console.error);
         }
       } else if (role === "student" && videoCoachId) {
@@ -127,6 +128,7 @@ export default function CommentsSection({ videoId, uid, authorName, role, videoC
           title: `New comment from ${authorName}`,
           body: notifBody,
           link: `/coach/videos/${videoId}/annotate`,
+          meta: { videoId },
         }).catch(console.error);
       }
     } finally {

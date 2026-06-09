@@ -275,7 +275,7 @@ export default function UploadPage() {
         if (assignedIds.length > 0) {
           sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
           for (const sid of assignedIds) {
-            createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: title.trim(), link: `/student/videos/${saved.id}` }).catch(console.error);
+            createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: title.trim(), link: `/student/videos/${saved.id}`, meta: { videoId: saved.id } }).catch(console.error);
           }
         }
       } else {
@@ -331,7 +331,7 @@ export default function UploadPage() {
         if (assignedIds.length > 0) {
           sendVideoNotification(assignedIds, title.trim(), saved.id).catch(console.error);
           for (const sid of assignedIds) {
-            createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: title.trim(), link: `/student/videos/${saved.id}` }).catch(console.error);
+            createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: title.trim(), link: `/student/videos/${saved.id}`, meta: { videoId: saved.id } }).catch(console.error);
           }
         }
       }

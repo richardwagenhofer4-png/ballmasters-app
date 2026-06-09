@@ -20,7 +20,8 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import type { Session, Booking, BookedEntry, WaitlistEntry } from "@/lib/sessionTypes";
-import { createNotification, useNotifications } from "@/lib/notifications";
+import { createNotification } from "@/lib/notifications";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -1054,7 +1055,7 @@ export default function CoachCalendarPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState("");
-  const { newComment, newMessage } = useNotifications(uid || null);
+  const { newComment, newMessage } = useNotificationCounts();
   const [coachId, setCoachId] = useState("");
   const [coachName, setCoachName] = useState("");
   const [sessions, setSessions] = useState<Session[]>([]);

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 function HomeIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M11.47 3.841a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.061l-1.97-1.97V6a.75.75 0 00-.75-.75h-1.5a.75.75 0 00-.75.75v1.78L13.5 5.409a3 3 0 00-3 0L2.19 11.47a.75.75 0 001.061 1.06l8.219-8.69z" /><path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" /></svg>;
@@ -33,6 +34,7 @@ const NAV_ITEMS = [
 
 export default function SettingsPage() {
   const pathname = usePathname();
+  const { newComment, newMessage } = useNotificationCounts();
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
@@ -62,9 +64,19 @@ export default function SettingsPage() {
       >
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
+          const badge =
+            item.href === "/coach/videos" ? newComment :
+            item.href === "/coach/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>
                 {item.label}
               </span>

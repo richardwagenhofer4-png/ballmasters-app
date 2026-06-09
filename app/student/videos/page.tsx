@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 interface Video {
   id: string;
@@ -83,6 +84,7 @@ export default function StudentVideosPage() {
   const router = useRouter();
   const pathname = usePathname();
   const [viewMode, setViewMode] = useViewMode("student-videos");
+  const { newVideo, newMessage, bookingUpdate } = useNotificationCounts();
   const [videos, setVideos] = useState<Video[]>([]);
   const [uid, setUid] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
@@ -255,9 +257,20 @@ export default function StudentVideosPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
+          const badge =
+            item.href === "/student/videos" ? newVideo :
+            item.href === "/student/messages" ? newMessage :
+            item.href === "/student/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
             </Link>
           );

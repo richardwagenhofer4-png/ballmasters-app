@@ -5,9 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   collection,
-  doc,
   getDoc,
   getDocs,
+  doc,
   onSnapshot,
   orderBy,
   query,
@@ -17,7 +17,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import { getOrCreateThread, markThreadRead, sendMessage, threadId as makeThreadId } from "@/lib/messaging";
-import { markNotificationsRead, useNotifications } from "@/lib/notifications";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,8 +100,7 @@ export default function StudentMessagesPage() {
   const [coachName, setCoachName] = useState("");
   const [tid, setTid] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [unreadForAthlete, setUnreadForAthlete] = useState(0);
-  const { newVideo, bookingUpdate } = useNotifications(uid);
+  const { newVideo, newMessage, bookingUpdate, notifications, markRead } = useNotificationCounts();
 
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
@@ -194,21 +193,18 @@ export default function StudentMessagesPage() {
       setMessages(msgs);
       // Mark read when new messages arrive
       await markThreadRead(tid, "student").catch(() => {});
-      if (uid) markNotificationsRead(uid, "new_message").catch(console.error);
     });
     return unsub;
   }, [tid]);
 
-  // Real-time unread badge for this thread
+  // Mark new_message notifications read for this thread when tid is set
   useEffect(() => {
     if (!tid) return;
-    const unsub = onSnapshot(doc(db, "threads", tid), (snap) => {
-      if (snap.exists()) {
-        setUnreadForAthlete((snap.data().unreadForAthlete as number) ?? 0);
-      }
-    });
-    return unsub;
-  }, [tid]);
+    const toMark = notifications
+      .filter(n => n.type === "new_message" && (n.meta?.threadId as string | undefined) === tid)
+      .map(n => n.id);
+    if (toMark.length > 0) markRead(toMark);
+  }, [tid, notifications, markRead]);
 
   async function handleSend() {
     if (!tid || !uid || sending) return;
@@ -434,7 +430,7 @@ export default function StudentMessagesPage() {
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
           const badge =
-            item.href === "/student/messages" ? unreadForAthlete :
+            item.href === "/student/messages" ? newMessage :
             item.href === "/student/videos" ? newVideo :
             item.href === "/student/calendar" ? bookingUpdate : 0;
           return (

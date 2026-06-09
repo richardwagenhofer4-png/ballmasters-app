@@ -7,7 +7,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
-import { useNotifications } from "@/lib/notifications";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -141,7 +141,7 @@ export default function CoachDashboard() {
   const [studentSearch, setStudentSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const { notifications, newComment, newMessage } = useNotifications(uid);
+  const { notifications, newComment, newMessage, markRead } = useNotificationCounts();
 
   const greeting = getGreeting();
 
@@ -421,6 +421,38 @@ export default function CoachDashboard() {
           </div>
         </div>
 
+        {/* Activity */}
+        {notifications.length > 0 && (
+          <div>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Activity</h2>
+            <div className="space-y-2">
+              {notifications.slice(0, 5).map(n => {
+                const ts = n.createdAt;
+                const diff = ts ? Date.now() - ts.seconds * 1000 : 0;
+                const m = Math.floor(diff / 60000);
+                const ago = m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
+                return (
+                  <div key={n.id} className="cursor-pointer" onClick={() => { markRead([n.id]); router.push(n.link); }}>
+                    <div className="bg-white rounded-xl border border-gray-200 p-3.5 flex gap-3 hover:shadow-sm active:opacity-90 transition">
+                      <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(0,28,72,0.06)" }}>
+                        {n.type === "new_comment" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>}
+                        {n.type === "new_message" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-900 leading-snug">{n.title}</p>
+                          <span className="text-xs text-gray-400 shrink-0">{ago}</span>
+                        </div>
+                        {n.body && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Recent Videos */}
         {videos.length > 0 ? (
           <div>
@@ -502,38 +534,6 @@ export default function CoachDashboard() {
                 Upload your first video
               </button>
             </Link>
-          </div>
-        )}
-
-        {/* Activity */}
-        {notifications.length > 0 && (
-          <div>
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Activity</h2>
-            <div className="space-y-2">
-              {notifications.slice(0, 5).map(n => {
-                const ts = n.createdAt;
-                const diff = ts ? Date.now() - ts.seconds * 1000 : 0;
-                const m = Math.floor(diff / 60000);
-                const ago = m < 1 ? "just now" : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m / 60)}h ago` : `${Math.floor(m / 1440)}d ago`;
-                return (
-                  <Link key={n.id} href={n.link}>
-                    <div className="bg-white rounded-xl border border-gray-200 p-3.5 flex gap-3 hover:shadow-sm active:opacity-90 transition">
-                      <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: "rgba(0,28,72,0.06)" }}>
-                        {n.type === "new_comment" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>}
-                        {n.type === "new_message" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-semibold text-gray-900 leading-snug">{n.title}</p>
-                          <span className="text-xs text-gray-400 shrink-0">{ago}</span>
-                        </div>
-                        {n.body && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{n.body}</p>}
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
           </div>
         )}
 

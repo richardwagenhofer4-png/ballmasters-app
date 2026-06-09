@@ -18,6 +18,8 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import type { Session, Booking } from "@/lib/sessionTypes";
+import { createNotification } from "@/lib/notifications";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -87,6 +89,7 @@ export default function StudentCalendarPage() {
   const [uid, setUid] = useState("");
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
+  const { newVideo, newMessage, bookingUpdate, markRead, notifications } = useNotificationCounts();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -194,6 +197,13 @@ export default function StudentCalendarPage() {
     }
   }
 
+  useEffect(() => {
+    const toMark = notifications
+      .filter(n => n.type === "booking_approved" || n.type === "booking_declined" || n.type === "booking")
+      .map(n => n.id);
+    markRead(toMark);
+  }, [notifications, markRead]);
+
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
@@ -291,6 +301,18 @@ export default function StudentCalendarPage() {
         createdAt: now,
         reminderSent: false,
       });
+
+      const notifTitle = (bookingStatus as string) === "pending_approval"
+        ? `Booking request from ${studentName}`
+        : `New booking from ${studentName}`;
+      createNotification({
+        recipientId: session.coachId,
+        type: "booking",
+        title: notifTitle,
+        body: `${session.date} at ${session.startTime}`,
+        link: "/coach/calendar",
+        meta: { sessionId: session.id },
+      }).catch(console.error);
 
       setSessions(prev => prev.map(s => {
         if (s.id !== session.id) return s;
@@ -961,9 +983,20 @@ export default function StudentCalendarPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
+          const badge =
+            item.href === "/student/videos" ? newVideo :
+            item.href === "/student/messages" ? newMessage :
+            item.href === "/student/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
-              <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
             </Link>
           );

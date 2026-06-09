@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import { renderAnnotations, type AnnotationFrame } from "@/lib/annotations";
 import CommentsSection from "@/components/CommentsSection";
 import DrillComparisonPlayer from "@/components/DrillComparisonPlayer";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 const REACTIONS = [
   { emoji: "👍", label: "Good" },
@@ -65,6 +66,7 @@ export default function VideoPlayerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const pathname = usePathname();
+  const { newVideo, newMessage, bookingUpdate, notifications, markRead } = useNotificationCounts();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastPausedAt = useRef<number | null>(null);
@@ -213,6 +215,15 @@ export default function VideoPlayerPage() {
       reactionsUnsubRef.current?.();
     };
   }, []);
+
+  // Mark new_video notifications for this video as read when the page opens
+  useEffect(() => {
+    if (!id) return;
+    const toMark = notifications
+      .filter(n => n.type === "new_video" && (n.meta?.videoId as string | undefined) === id)
+      .map(n => n.id);
+    if (toMark.length > 0) markRead(toMark);
+  }, [id, notifications, markRead]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -564,9 +575,20 @@ export default function VideoPlayerPage() {
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href || (item.href === "/student/videos" && pathname.startsWith("/student/videos"));
+          const badge =
+            item.href === "/student/videos" ? newVideo :
+            item.href === "/student/messages" ? newMessage :
+            item.href === "/student/calendar" ? bookingUpdate : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
-              <span className={isActive ? "" : "text-gray-500"}>{item.icon}</span>
+              <div className="relative">
+                <span className={isActive ? "" : "text-gray-500"}>{item.icon}</span>
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
               <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
             </Link>
           );

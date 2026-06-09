@@ -75,6 +75,7 @@ export async function sendMessage(
       title: `Message from ${senderName}`,
       body,
       link: senderRole === "coach" ? "/student/messages" : "/coach/messages",
+      meta: { threadId: tid },
     }).catch(console.error);
   }
 }

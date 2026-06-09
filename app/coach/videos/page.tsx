@@ -9,7 +9,8 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
-import { createNotification, markNotificationsRead, sendVideoNotification, useNotifications } from "@/lib/notifications";
+import { createNotification, sendVideoNotification } from "@/lib/notifications";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -148,7 +149,7 @@ function CoachVideosPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
-  const { newComment, newMessage } = useNotifications(uid);
+  const { newComment, newMessage } = useNotificationCounts();
   const [videos, setVideos] = useState<Video[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [videoNeedsReply, setVideoNeedsReply] = useState<Map<string, boolean>>(new Map());
@@ -183,7 +184,6 @@ function CoachVideosPage() {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
-      markNotificationsRead(user.uid, "new_comment").catch(console.error);
       try {
         const [videosSnap, studentsSnap] = await Promise.all([
           getDocs(collection(db, "videos")),
@@ -365,7 +365,7 @@ function CoachVideosPage() {
       if (wasPublishedNow && updated.studentIds.length > 0) {
         sendVideoNotification(updated.studentIds, updated.title, editingVideo.id).catch(console.error);
         for (const sid of updated.studentIds) {
-          createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: updated.title, link: `/student/videos/${editingVideo.id}` }).catch(console.error);
+          createNotification({ recipientId: sid, type: "new_video", title: "New video from your coach", body: updated.title, link: `/student/videos/${editingVideo.id}`, meta: { videoId: editingVideo.id } }).catch(console.error);
         }
       }
       setEditingVideo(null);

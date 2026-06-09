@@ -8,6 +8,7 @@ import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/fi
 import { auth, db } from "@/lib/firebase";
 import CommentsSection from "@/components/CommentsSection";
 import { renderAnnotations, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
+import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 export type { DrawingType, Drawing, AnnotationFrame };
 export { renderAnnotations };
@@ -59,6 +60,7 @@ const TOOLS: { type: DrawingType; label: string; icon: string }[] = [
 export default function AnnotatePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { notifications, markRead } = useNotificationCounts();
 
   const [uid, setUid] = useState<string | null>(null);
   const [video, setVideo] = useState<VideoDoc | null>(null);
@@ -107,6 +109,15 @@ export default function AnnotatePage() {
   const previewPausedAtRef = useRef<number | null>(null);
 
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
+
+  // Mark new_comment notifications for this video as read when the page opens
+  useEffect(() => {
+    if (!id) return;
+    const toMark = notifications
+      .filter(n => n.type === "new_comment" && (n.meta?.videoId as string | undefined) === id)
+      .map(n => n.id);
+    if (toMark.length > 0) markRead(toMark);
+  }, [id, notifications, markRead]);
 
   // ── Auth + data load ────────────────────────────────────────────────────────
   useEffect(() => {
