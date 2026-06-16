@@ -20,6 +20,7 @@ interface VideoDoc {
   studentIds: string[];
   downloadAllowed: boolean;
   transcript?: Transcript;
+  transcriptionSkippedReason?: string;
 }
 
 function formatTime(s: number): string {
@@ -130,6 +131,10 @@ export default function ClipsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+      if (data.transcriptionSkippedReason) {
+        setVideo((v) => v ? { ...v, transcriptionSkippedReason: data.transcriptionSkippedReason } : v);
+        return;
+      }
       setTranscript(data.transcript);
 
       // Auto-detect cut points from transcript
@@ -401,7 +406,7 @@ export default function ClipsPage() {
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white shrink-0">
             <h2 className="text-sm font-semibold text-gray-700">Transcript</h2>
-            {!transcript && !transcribing && (
+            {!transcript && !transcribing && video?.transcriptionSkippedReason !== "under13_privacy" && (
               <button
                 onClick={handleTranscribe}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white transition"
@@ -425,7 +430,18 @@ export default function ClipsPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto px-4 py-3">
-            {!transcript && !transcribing && (
+            {!transcript && !transcribing && video?.transcriptionSkippedReason === "under13_privacy" && (
+              <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+                <svg className="h-10 w-10 mb-3 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                </svg>
+                <p className="text-sm font-medium text-gray-700 mb-1">Transcription unavailable</p>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Transcription is turned off for videos that include athletes under 13, to protect their privacy.
+                </p>
+              </div>
+            )}
+            {!transcript && !transcribing && !video?.transcriptionSkippedReason && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <svg className="h-10 w-10 mb-3 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />

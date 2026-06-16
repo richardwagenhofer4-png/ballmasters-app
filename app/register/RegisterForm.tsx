@@ -15,6 +15,7 @@ import { saveUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
 import { validateInviteCode, recordCodeUsage } from "@/lib/inviteCodes";
 import { validateCoachInvite, useCoachInvite } from "@/lib/coachInvites";
+import { getAge, isUnder13 } from "@/lib/age";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -72,6 +73,7 @@ export default function RegisterForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [age, setAge] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [role, setRole] = useState<Role>(coachInviteToken ? "coach" : "");
   const [inviteCode, setInviteCode] = useState(codeFromUrl);
@@ -79,7 +81,12 @@ export default function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const isMinor = age !== "" && parseInt(age, 10) < 13;
+  // Students use dateOfBirth; coaches use the integer age field.
+  const isStudentPath = !coachInviteToken;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const isMinor = isStudentPath
+    ? (dateOfBirth !== "" && isUnder13(dateOfBirth))
+    : (age !== "" && parseInt(age, 10) < 13);
 
   function validate(): string {
     if (!fullName.trim()) return "Please enter your full name.";
@@ -87,8 +94,15 @@ export default function RegisterForm() {
     if (!password) return "Please enter a password.";
     if (password.length < 6) return "Password must be at least 6 characters.";
     if (password !== confirmPassword) return "Passwords do not match.";
-    if (!age || parseInt(age, 10) < 1 || parseInt(age, 10) > 120)
-      return "Please enter a valid age.";
+    if (isStudentPath) {
+      if (!dateOfBirth) return "Please enter the athlete's date of birth.";
+      const dobAge = getAge(dateOfBirth);
+      if (dobAge === null || dobAge < 3 || dobAge > 100)
+        return "Please enter a valid date of birth (athlete must be between 3 and 100 years old).";
+    } else {
+      if (!age || parseInt(age, 10) < 1 || parseInt(age, 10) > 120)
+        return "Please enter a valid age.";
+    }
     if (isMinor && !parentEmail.trim())
       return "A parent or guardian email is required for users under 13.";
     if (!role) return "Please select a role.";
@@ -117,7 +131,7 @@ export default function RegisterForm() {
     setError("");
     setLoading(true);
     try {
-      const ageNum = parseInt(age, 10);
+      const ageNum = isStudentPath ? (getAge(dateOfBirth) ?? 0) : parseInt(age, 10);
       const code = inviteCode.trim().toUpperCase();
 
       // Validate invite token / code BEFORE creating the account to avoid orphan accounts
@@ -154,6 +168,7 @@ export default function RegisterForm() {
         fullName: fullName.trim(),
         role: role as "student" | "coach",
         age: ageNum,
+        ...(isStudentPath ? { dateOfBirth } : {}),
         ...(ageNum < 13 && parentEmail ? { parentEmail } : {}),
         ...(coachId ? { coachId } : {}),
       });
@@ -181,6 +196,21 @@ export default function RegisterForm() {
 
   async function handleGoogleSignUp() {
     if (!role) { setError("Please select a role before continuing with Google."); return; }
+    if (isStudentPath) {
+      if (!dateOfBirth) {
+        setError("Please enter the athlete's date of birth before continuing with Google.");
+        return;
+      }
+      const dobAge = getAge(dateOfBirth);
+      if (dobAge === null || dobAge < 3 || dobAge > 100) {
+        setError("Please enter a valid date of birth (athlete must be between 3 and 100 years old).");
+        return;
+      }
+      if (isMinor && !parentEmail.trim()) {
+        setError("A parent or guardian email is required for users under 13.");
+        return;
+      }
+    }
     setError("");
     setGoogleLoading(true);
     try {
@@ -211,12 +241,15 @@ export default function RegisterForm() {
         }
       }
 
+      const googleDobAge = isStudentPath ? getAge(dateOfBirth) : null;
       await saveUserProfile({
         uid: credential.user.uid,
         email: credential.user.email ?? "",
         fullName: credential.user.displayName ?? "",
         role: role as "student" | "coach",
-        age: null,
+        age: googleDobAge,
+        ...(isStudentPath && dateOfBirth ? { dateOfBirth } : {}),
+        ...(isStudentPath && isMinor && parentEmail ? { parentEmail } : {}),
         ...(coachIdGoogle ? { coachId: coachIdGoogle } : {}),
       });
 
@@ -327,13 +360,32 @@ export default function RegisterForm() {
                 className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
             </div>
 
-            {/* Age */}
-            <div>
-              <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">Age</label>
-              <input id="age" type="number" min={1} max={120} required value={age}
-                onChange={(e) => setAge(e.target.value)} placeholder="Your age"
-                className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
-            </div>
+            {/* Date of birth (students) / Age (coaches) */}
+            {isStudentPath ? (
+              <div>
+                <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-1">
+                  Athlete&rsquo;s date of birth
+                </label>
+                <input
+                  id="dateOfBirth"
+                  type="date"
+                  required
+                  max={todayStr}
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className={inputClass}
+                  onFocus={inputFocus}
+                  onBlur={inputBlur}
+                />
+              </div>
+            ) : (
+              <div>
+                <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                <input id="age" type="number" min={1} max={120} required value={age}
+                  onChange={(e) => setAge(e.target.value)} placeholder="Your age"
+                  className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+              </div>
+            )}
 
             {/* Parent email — COPPA */}
             {isMinor && (

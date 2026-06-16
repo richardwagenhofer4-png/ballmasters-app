@@ -3,6 +3,7 @@ export const maxDuration = 300;
 
 import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc, updateFirestoreDoc } from "@/lib/firebaseServer";
+import { isUnder13 } from "@/lib/age";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import OpenAI from "openai";
 import { createReadStream, createWriteStream, unlink } from "fs";
@@ -23,6 +24,10 @@ const r2 = new S3Client({
 });
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+// Interim safeguard until Zero Data Retention is active with OpenAI.
+// Set to true once ZDR is confirmed to relax the gate.
+const UNDER13_TRANSCRIPTION_ENABLED = false;
 
 interface TranscriptSegment { id: number; start: number; end: number; text: string; }
 interface TranscriptWord { word: string; start: number; end: number; }
@@ -46,6 +51,28 @@ export async function POST(request: NextRequest) {
     const video = await getFirestoreDoc("videos", videoId, idToken);
     if (!video || video.coachId !== uid) {
       return Response.json({ error: "Not found or forbidden" }, { status: 404 });
+    }
+
+    // Under-13 privacy gate: skip transcription if any assigned athlete is under 13.
+    if (!UNDER13_TRANSCRIPTION_ENABLED) {
+      const studentIds: string[] = (video.studentIds as string[]) ?? [];
+      if (studentIds.length > 0) {
+        const profiles = await Promise.all(
+          studentIds.map((sid) => getFirestoreDoc("users", sid, idToken))
+        );
+        const hasUnder13 = profiles.some(
+          (p) => p && isUnder13(p.dateOfBirth as string | null)
+        );
+        if (hasUnder13) {
+          await updateFirestoreDoc(
+            "videos",
+            videoId,
+            { transcriptionSkippedReason: "under13_privacy" },
+            idToken
+          );
+          return Response.json({ transcriptionSkippedReason: "under13_privacy" });
+        }
+      }
     }
 
     // Stream video from R2 to a temp file (avoids loading into memory)
