@@ -207,7 +207,6 @@ export default function AnnotatePage() {
     const px = clientX - rect.left;
     const py = clientY - rect.top;
     const cr = videoRef.current ? getContentRect(videoRef.current) : null;
-    console.log("[DRAW] contentRect", JSON.stringify(getContentRect(videoRef.current!)), "videoWH", videoRef.current?.videoWidth, videoRef.current?.videoHeight, "clientWH", videoRef.current?.clientWidth, videoRef.current?.clientHeight);
     if (cr) {
       return {
         x: Math.max(0, Math.min(1, (px - cr.offsetX) / cr.width)),
@@ -552,8 +551,11 @@ export default function AnnotatePage() {
     const pcanvas = previewCanvasRef.current;
     if (!pvid || !pcanvas) return;
     const syncSize = () => {
-      pcanvas.width = pvid.clientWidth;
-      pcanvas.height = pvid.clientHeight;
+      const dpr = window.devicePixelRatio || 1;
+      pcanvas.width = pvid.clientWidth * dpr;
+      pcanvas.height = pvid.clientHeight * dpr;
+      pcanvas.style.width = pvid.clientWidth + "px";
+      pcanvas.style.height = pvid.clientHeight + "px";
     };
     const obs = new ResizeObserver(syncSize);
     obs.observe(pvid);
@@ -601,17 +603,18 @@ export default function AnnotatePage() {
 
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, pvid.clientWidth, pvid.clientHeight);
       if (ann) {
         const cr = getContentRect(pvid);
-        console.log("[PREVIEW] contentRect", JSON.stringify(getContentRect(pvid)), "videoWH", pvid?.videoWidth, pvid?.videoHeight, "clientWH", pvid?.clientWidth, pvid?.clientHeight);
         if (cr) {
           ctx.save();
           ctx.translate(cr.offsetX, cr.offsetY);
           renderAnnotations(ctx, ann.drawings, cr.width, cr.height);
           ctx.restore();
         } else {
-          renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+          renderAnnotations(ctx, ann.drawings, pvid.clientWidth, pvid.clientHeight);
         }
       }
     }
@@ -652,7 +655,9 @@ export default function AnnotatePage() {
     const ann = annotationsRef.current.find(a => Math.abs(a.timestamp - t) < 0.5);
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
-      ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
+      const dpr = window.devicePixelRatio || 1;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, pvid.clientWidth, pvid.clientHeight);
       if (ann) {
         const cr = getContentRect(pvid);
         if (cr) {
@@ -661,7 +666,7 @@ export default function AnnotatePage() {
           renderAnnotations(ctx, ann.drawings, cr.width, cr.height);
           ctx.restore();
         } else {
-          renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+          renderAnnotations(ctx, ann.drawings, pvid.clientWidth, pvid.clientHeight);
         }
       }
     }
@@ -1233,14 +1238,15 @@ export default function AnnotatePage() {
             <div style={{ width: 120 }} />
           </div>
 
-          {/* Preview video + canvas */}
-          <div style={{ flex: 1, position: "relative", lineHeight: 0, overflow: "hidden" }}>
+          {/* Preview video + canvas — same sizing constraints as the main draw player */}
+          <div style={{ position: "relative", lineHeight: 0, flexShrink: 0 }}>
             {videoUrl && (
               <video
                 ref={previewVideoRef}
                 src={videoUrl}
                 controls
-                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                className="w-full"
+                style={{ maxHeight: "75vh", display: "block" }}
                 playsInline
                 onTimeUpdate={handlePreviewTimeUpdate}
                 onPlay={handlePreviewPlay}
@@ -1252,9 +1258,8 @@ export default function AnnotatePage() {
               ref={previewCanvasRef}
               style={{
                 position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
+                top: 0,
+                left: 0,
                 pointerEvents: "none",
               }}
             />
