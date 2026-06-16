@@ -6,7 +6,7 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { renderAnnotations, type AnnotationFrame } from "@/lib/annotations";
+import { renderAnnotations, getContentRect, type AnnotationFrame } from "@/lib/annotations";
 import CommentsSection from "@/components/CommentsSection";
 import DrillComparisonPlayer from "@/components/DrillComparisonPlayer";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
@@ -250,7 +250,15 @@ export default function VideoPlayerPage() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
     if (activeAnnotation) {
-      renderAnnotations(ctx, activeAnnotation.drawings, cssW, cssH);
+      const cr = getContentRect(video);
+      if (cr) {
+        ctx.save();
+        ctx.translate(cr.offsetX, cr.offsetY);
+        renderAnnotations(ctx, activeAnnotation.drawings, cr.width, cr.height);
+        ctx.restore();
+      } else {
+        renderAnnotations(ctx, activeAnnotation.drawings, cssW, cssH);
+      }
     }
   }, [activeAnnotation, canvasSize]);
 

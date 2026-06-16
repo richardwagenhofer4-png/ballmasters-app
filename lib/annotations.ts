@@ -1,5 +1,38 @@
 export type DrawingType = "arrow" | "line" | "circle" | "freehand" | "text";
 
+/**
+ * Returns the actual rendered footage rectangle inside a video element that
+ * uses object-fit: contain (the browser default). Coordinates are in CSS
+ * pixels relative to the element's top-left corner.
+ * Returns null if the video hasn't loaded its intrinsic dimensions yet.
+ */
+export function getContentRect(
+  video: HTMLVideoElement
+): { offsetX: number; offsetY: number; width: number; height: number } | null {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const cw = video.clientWidth;
+  const ch = video.clientHeight;
+  if (!vw || !vh || !cw || !ch) return null;
+  const videoAspect = vw / vh;
+  const elementAspect = cw / ch;
+  let width: number, height: number, offsetX: number, offsetY: number;
+  if (videoAspect > elementAspect) {
+    // Video wider than element box → letterbox bars top and bottom
+    width = cw;
+    height = cw / videoAspect;
+    offsetX = 0;
+    offsetY = (ch - height) / 2;
+  } else {
+    // Video taller than element box → pillarbox bars left and right
+    height = ch;
+    width = ch * videoAspect;
+    offsetX = (cw - width) / 2;
+    offsetY = 0;
+  }
+  return { offsetX, offsetY, width, height };
+}
+
 export interface Drawing {
   id: string;
   type: DrawingType;

@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import CommentsSection from "@/components/CommentsSection";
-import { renderAnnotations, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
+import { renderAnnotations, getContentRect, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 export type { DrawingType, Drawing, AnnotationFrame };
@@ -187,7 +187,15 @@ export default function AnnotatePage() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, video.clientWidth, video.clientHeight);
     const all = liveDrawing ? [...drawings, liveDrawing] : drawings;
-    renderAnnotations(ctx, all, video.clientWidth, video.clientHeight);
+    const cr = getContentRect(video);
+    if (cr) {
+      ctx.save();
+      ctx.translate(cr.offsetX, cr.offsetY);
+      renderAnnotations(ctx, all, cr.width, cr.height);
+      ctx.restore();
+    } else {
+      renderAnnotations(ctx, all, video.clientWidth, video.clientHeight);
+    }
   }, [drawings, liveDrawing]);
 
   // ── Canvas pointer helpers ──────────────────────────────────────────────────
@@ -196,9 +204,18 @@ export default function AnnotatePage() {
     const rect = canvas.getBoundingClientRect();
     const clientX = "touches" in e ? (e.touches[0]?.clientX ?? 0) : e.clientX;
     const clientY = "touches" in e ? (e.touches[0]?.clientY ?? 0) : e.clientY;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const cr = videoRef.current ? getContentRect(videoRef.current) : null;
+    if (cr) {
+      return {
+        x: Math.max(0, Math.min(1, (px - cr.offsetX) / cr.width)),
+        y: Math.max(0, Math.min(1, (py - cr.offsetY) / cr.height)),
+      };
+    }
     return {
-      x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
-      y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)),
+      x: Math.max(0, Math.min(1, px / rect.width)),
+      y: Math.max(0, Math.min(1, py / rect.height)),
     };
   }
 
@@ -261,19 +278,31 @@ export default function AnnotatePage() {
     const rect = canvas.getBoundingClientRect();
     let pos: { x: number; y: number };
     if ("changedTouches" in e) {
-      pos = {
-        x: Math.max(0, Math.min(1, (e.changedTouches[0].clientX - rect.left) / rect.width)),
-        y: Math.max(0, Math.min(1, (e.changedTouches[0].clientY - rect.top) / rect.height)),
-      };
+      const px = e.changedTouches[0].clientX - rect.left;
+      const py = e.changedTouches[0].clientY - rect.top;
+      const cr = videoRef.current ? getContentRect(videoRef.current) : null;
+      if (cr) {
+        pos = {
+          x: Math.max(0, Math.min(1, (px - cr.offsetX) / cr.width)),
+          y: Math.max(0, Math.min(1, (py - cr.offsetY) / cr.height)),
+        };
+      } else {
+        pos = {
+          x: Math.max(0, Math.min(1, px / rect.width)),
+          y: Math.max(0, Math.min(1, py / rect.height)),
+        };
+      }
     } else {
       pos = getPos(e as React.MouseEvent);
     }
     const start = drawStartRef.current!;
     drawStartRef.current = null;
 
-    const canvasW = videoRef.current?.clientWidth ?? 1;
+    const video = videoRef.current;
+    const cr = video ? getContentRect(video) : null;
+    const contentW = cr ? cr.width : (video?.clientWidth ?? 1);
     const baseStroke = tool === "freehand" ? 2.5 : 3.5;
-    const d: Drawing = { id: Date.now().toString(), type: tool, color, strokeWidth: baseStroke / canvasW };
+    const d: Drawing = { id: Date.now().toString(), type: tool, color, strokeWidth: baseStroke / contentW };
 
     if (tool === "arrow" || tool === "line") {
       if (Math.hypot(pos.x - start.x, pos.y - start.y) < 0.01) { setLiveDrawing(null); return; }
@@ -301,11 +330,13 @@ export default function AnnotatePage() {
 
   function confirmText() {
     if (textValue.trim()) {
-      const canvasW = videoRef.current?.clientWidth ?? 1;
+      const video = videoRef.current;
+      const cr = video ? getContentRect(video) : null;
+      const contentW = cr ? cr.width : (video?.clientWidth ?? 1);
       setDrawings(prev => [...prev, {
         id: Date.now().toString(),
         type: "text", color,
-        strokeWidth: 3.5 / canvasW,
+        strokeWidth: 3.5 / contentW,
         tx: textInput.x, ty: textInput.y,
         label: textValue.trim(),
       }]);
@@ -570,7 +601,17 @@ export default function AnnotatePage() {
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
       ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
-      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+      if (ann) {
+        const cr = getContentRect(pvid);
+        if (cr) {
+          ctx.save();
+          ctx.translate(cr.offsetX, cr.offsetY);
+          renderAnnotations(ctx, ann.drawings, cr.width, cr.height);
+          ctx.restore();
+        } else {
+          renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+        }
+      }
     }
 
     if (ann?.pauseOnPlay && !pvid.paused && previewPausedAtRef.current !== ann.timestamp) {
@@ -610,7 +651,17 @@ export default function AnnotatePage() {
     const ctx = pcanvas.getContext("2d");
     if (ctx) {
       ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
-      if (ann) renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+      if (ann) {
+        const cr = getContentRect(pvid);
+        if (cr) {
+          ctx.save();
+          ctx.translate(cr.offsetX, cr.offsetY);
+          renderAnnotations(ctx, ann.drawings, cr.width, cr.height);
+          ctx.restore();
+        } else {
+          renderAnnotations(ctx, ann.drawings, pcanvas.width, pcanvas.height);
+        }
+      }
     }
     if (!pvid.paused && previewModeAudioRef.current && voiceover) {
       const offset = t - voiceover.startTime;
@@ -626,6 +677,19 @@ export default function AnnotatePage() {
   const atSavedFrame = annotations.some(
     a => Math.abs((videoRef.current?.currentTime ?? currentTime) - a.timestamp) < 0.5
   );
+
+  // Convert content-rect-normalized coords back to element-box percentages for overlay positioning
+  const textOverlayPos = (() => {
+    const video = videoRef.current;
+    const cr = video ? getContentRect(video) : null;
+    if (cr && video) {
+      return {
+        left: `${((textInput.x * cr.width + cr.offsetX) / video.clientWidth) * 100}%`,
+        top: `${((textInput.y * cr.height + cr.offsetY) / video.clientHeight) * 100}%`,
+      };
+    }
+    return { left: `${textInput.x * 100}%`, top: `${textInput.y * 100}%` };
+  })();
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -680,7 +744,7 @@ export default function AnnotatePage() {
             src={videoUrl}
             controls
             className="w-full"
-            style={{ maxHeight: "65vh", display: "block" }}
+            style={{ maxHeight: "75vh", display: "block" }}
             playsInline
             onTimeUpdate={() => setCurrentTime(videoRef.current?.currentTime ?? 0)}
             onPlay={() => setIsPaused(false)}
@@ -719,8 +783,8 @@ export default function AnnotatePage() {
             autoFocus
             style={{
               position: "absolute",
-              left: `${textInput.x * 100}%`,
-              top: `${textInput.y * 100}%`,
+              left: textOverlayPos.left,
+              top: textOverlayPos.top,
               transform: "translate(4px, -100%)",
               background: "transparent",
               border: "none",
