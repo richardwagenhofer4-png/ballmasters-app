@@ -410,7 +410,7 @@ export default function CoachDashboard() {
             ].map(action => (
               <Link key={action.href} href={action.href}>
                 <div
-                  className="rounded-xl p-4 flex flex-col items-center gap-2 active:opacity-80 transition shadow-sm"
+                  className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 active:opacity-80 transition shadow-sm h-full"
                   style={{ backgroundColor: action.bg }}
                 >
                   {action.icon}

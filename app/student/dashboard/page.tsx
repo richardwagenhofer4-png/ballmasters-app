@@ -362,7 +362,7 @@ export default function StudentDashboard() {
               },
             ].map(action => (
               <Link key={action.href} href={action.href}>
-                <div className="rounded-xl p-4 flex flex-col items-center gap-2 active:opacity-80 transition shadow-sm" style={{ backgroundColor: "#001c48" }}>
+                <div className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 active:opacity-80 transition shadow-sm h-full" style={{ backgroundColor: "#001c48" }}>
                   {action.icon}
                   <span className="text-xs font-semibold text-white text-center leading-tight">{action.label}</span>
                 </div>
