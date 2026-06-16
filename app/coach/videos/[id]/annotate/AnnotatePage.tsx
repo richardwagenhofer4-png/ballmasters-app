@@ -207,6 +207,7 @@ export default function AnnotatePage() {
     const px = clientX - rect.left;
     const py = clientY - rect.top;
     const cr = videoRef.current ? getContentRect(videoRef.current) : null;
+    console.log("[DRAW] contentRect", JSON.stringify(getContentRect(videoRef.current!)), "videoWH", videoRef.current?.videoWidth, videoRef.current?.videoHeight, "clientWH", videoRef.current?.clientWidth, videoRef.current?.clientHeight);
     if (cr) {
       return {
         x: Math.max(0, Math.min(1, (px - cr.offsetX) / cr.width)),
@@ -603,6 +604,7 @@ export default function AnnotatePage() {
       ctx.clearRect(0, 0, pcanvas.width, pcanvas.height);
       if (ann) {
         const cr = getContentRect(pvid);
+        console.log("[PREVIEW] contentRect", JSON.stringify(getContentRect(pvid)), "videoWH", pvid?.videoWidth, pvid?.videoHeight, "clientWH", pvid?.clientWidth, pvid?.clientHeight);
         if (cr) {
           ctx.save();
           ctx.translate(cr.offsetX, cr.offsetY);
