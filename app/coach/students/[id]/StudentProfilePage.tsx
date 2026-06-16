@@ -53,6 +53,9 @@ interface StudentDoc {
   email: string;
   avatarId?: string;
   coachId?: string;
+  guardianManaged?: boolean;
+  guardianName?: string;
+  guardianEmail?: string;
 }
 
 interface CoachOption {
@@ -310,6 +313,17 @@ export default function StudentProfilePage() {
           <div>
             <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
             <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
+            {student.guardianManaged && (
+              <span
+                className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
+                style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#01fff9" }}
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                </svg>
+                Guardian-managed account
+              </span>
+            )}
           </div>
         </div>
 
@@ -380,6 +394,36 @@ export default function StudentProfilePage() {
                 Delete This Athlete
               </button>
             </div>
+          </section>
+        )}
+
+        {/* Guardian contact — shown when account is guardian-managed */}
+        {student.guardianManaged && (
+          <section className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Guardian Contact</h2>
+            {student.guardianName && (
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm text-gray-800">{student.guardianName}</span>
+              </div>
+            )}
+            {student.guardianEmail && (
+              <div className="flex items-center gap-2">
+                <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M1.5 8.67v8.58a3 3 0 003 3h15a3 3 0 003-3V8.67l-8.928 5.493a3 3 0 01-3.144 0L1.5 8.67z" />
+                  <path d="M22.5 6.908V6.75a3 3 0 00-3-3h-15a3 3 0 00-3 3v.158l9.714 5.978a1.5 1.5 0 001.572 0L22.5 6.908z" />
+                </svg>
+                <a
+                  href={`mailto:${student.guardianEmail}`}
+                  className="text-sm text-gray-800 hover:underline"
+                  style={{ color: "#001c48" }}
+                >
+                  {student.guardianEmail}
+                </a>
+              </div>
+            )}
           </section>
         )}
 

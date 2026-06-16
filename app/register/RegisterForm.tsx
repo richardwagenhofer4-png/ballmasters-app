@@ -10,12 +10,12 @@ import {
   GoogleAuthProvider,
 } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp } from "firebase/firestore";
 import { saveUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
 import { validateInviteCode, recordCodeUsage } from "@/lib/inviteCodes";
 import { validateCoachInvite, useCoachInvite } from "@/lib/coachInvites";
-import { getAge, isUnder13 } from "@/lib/age";
+import { getAge } from "@/lib/age";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -68,43 +68,66 @@ export default function RegisterForm() {
   const codeIsLocked = codeFromUrl.length === 8;
   const coachInviteToken = searchParams.get("coachInvite") ?? "";
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  // Shared fields
+  const [fullName, setFullName] = useState("");       // athlete name for all cases
+  const [email, setEmail] = useState("");             // athlete email (13+) or guardian email (under-13)
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [age, setAge] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [parentEmail, setParentEmail] = useState("");
   const [role, setRole] = useState<Role>(coachInviteToken ? "coach" : "");
   const [inviteCode, setInviteCode] = useState(codeFromUrl);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  // Students use dateOfBirth; coaches use the integer age field.
+  // Student-path-only fields
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [guardianName, setGuardianName] = useState("");
+  const [guardianConsentChecked, setGuardianConsentChecked] = useState(false);
+
+  // Coach-path-only fields
+  const [age, setAge] = useState("");
+
   const isStudentPath = !coachInviteToken;
   const todayStr = new Date().toISOString().slice(0, 10);
-  const isMinor = isStudentPath
-    ? (dateOfBirth !== "" && isUnder13(dateOfBirth))
-    : (age !== "" && parseInt(age, 10) < 13);
+  const athleteAge = dateOfBirth ? getAge(dateOfBirth) : null;
+  const isMinor = isStudentPath && athleteAge !== null && athleteAge < 13;
 
   function validate(): string {
-    if (!fullName.trim()) return "Please enter your full name.";
-    if (!email.trim()) return "Please enter your email address.";
-    if (!password) return "Please enter a password.";
-    if (password.length < 6) return "Password must be at least 6 characters.";
-    if (password !== confirmPassword) return "Passwords do not match.";
-    if (isStudentPath) {
-      if (!dateOfBirth) return "Please enter the athlete's date of birth.";
-      const dobAge = getAge(dateOfBirth);
-      if (dobAge === null || dobAge < 3 || dobAge > 100)
-        return "Please enter a valid date of birth (athlete must be between 3 and 100 years old).";
-    } else {
-      if (!age || parseInt(age, 10) < 1 || parseInt(age, 10) > 120)
-        return "Please enter a valid age.";
+    // ── Coach path ──
+    if (!isStudentPath) {
+      if (!fullName.trim()) return "Please enter your full name.";
+      if (!email.trim()) return "Please enter your email address.";
+      if (!password) return "Please enter a password.";
+      if (password.length < 6) return "Password must be at least 6 characters.";
+      if (password !== confirmPassword) return "Passwords do not match.";
+      if (!age || parseInt(age, 10) < 1 || parseInt(age, 10) > 120) return "Please enter a valid age.";
+      if (!role) return "Please select a role.";
+      if (!coachInviteToken && !inviteCode.trim()) return "An invite code is required to register.";
+      return "";
     }
-    if (isMinor && !parentEmail.trim())
-      return "A parent or guardian email is required for users under 13.";
+
+    // ── Student path ──
+    if (!dateOfBirth) return "Please enter the athlete's date of birth.";
+    if (athleteAge === null || athleteAge < 3 || athleteAge > 100)
+      return "Please enter a valid date of birth (athlete must be between 3 and 100 years old).";
+
+    if (isMinor) {
+      if (!fullName.trim()) return "Please enter the athlete's full name.";
+      if (!guardianName.trim()) return "Please enter the parent or guardian's full name.";
+      if (!email.trim()) return "Please enter the parent or guardian's email address.";
+      if (!password) return "Please enter a password.";
+      if (password.length < 6) return "Password must be at least 6 characters.";
+      if (password !== confirmPassword) return "Passwords do not match.";
+      if (!guardianConsentChecked)
+        return "You must check the consent box to create an account for an athlete under 13.";
+    } else {
+      if (!fullName.trim()) return "Please enter your full name.";
+      if (!email.trim()) return "Please enter your email address.";
+      if (!password) return "Please enter a password.";
+      if (password.length < 6) return "Password must be at least 6 characters.";
+      if (password !== confirmPassword) return "Passwords do not match.";
+    }
+
     if (!role) return "Please select a role.";
     if (!coachInviteToken && !inviteCode.trim()) return "An invite code is required to register.";
     return "";
@@ -115,7 +138,7 @@ export default function RegisterForm() {
       setError("An invite code is required to register. Please use the link your coach gave you.");
       return false;
     }
-    if (!inviteCode.trim()) return true; // coach invite path — no student code needed
+    if (!inviteCode.trim()) return true;
     const result = await validateInviteCode(inviteCode.trim());
     if (!result.valid) {
       setError(result.error ?? "That invite code is invalid. Please check the code or use the link your coach gave you.");
@@ -131,10 +154,9 @@ export default function RegisterForm() {
     setError("");
     setLoading(true);
     try {
-      const ageNum = isStudentPath ? (getAge(dateOfBirth) ?? 0) : parseInt(age, 10);
+      const ageNum = isStudentPath ? (athleteAge ?? 0) : parseInt(age, 10);
       const code = inviteCode.trim().toUpperCase();
 
-      // Validate invite token / code BEFORE creating the account to avoid orphan accounts
       if (coachInviteToken) {
         const result = await validateCoachInvite(coachInviteToken);
         if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
@@ -143,13 +165,16 @@ export default function RegisterForm() {
         if (!valid) return;
       }
 
-      console.log("[register] creating Firebase Auth account for:", email);
-      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      // For under-13: email is guardian's email (account login belongs to guardian).
+      // For 13+: email is athlete's own email.
+      const loginEmail = email;
+      console.log("[register] creating Firebase Auth account for:", loginEmail);
+      const credential = await createUserWithEmailAndPassword(auth, loginEmail, password);
       console.log("[register] Auth account created, uid:", credential.user.uid);
 
+      // displayName is always the athlete's name
       await updateProfile(credential.user, { displayName: fullName.trim() });
 
-      // Look up coachId from invite code for students
       let coachId: string | undefined;
       if (role === "student" && code) {
         try {
@@ -164,12 +189,18 @@ export default function RegisterForm() {
 
       await saveUserProfile({
         uid: credential.user.uid,
-        email: credential.user.email ?? email,
+        email: credential.user.email ?? loginEmail,
         fullName: fullName.trim(),
         role: role as "student" | "coach",
         age: ageNum,
         ...(isStudentPath ? { dateOfBirth } : {}),
-        ...(ageNum < 13 && parentEmail ? { parentEmail } : {}),
+        ...(isMinor ? {
+          guardianManaged: true,
+          guardianName: guardianName.trim(),
+          guardianEmail: loginEmail,
+          guardianConsentAt: serverTimestamp(),
+          guardianConsentVersion: "v1",
+        } : {}),
         ...(coachId ? { coachId } : {}),
       });
 
@@ -201,13 +232,8 @@ export default function RegisterForm() {
         setError("Please enter the athlete's date of birth before continuing with Google.");
         return;
       }
-      const dobAge = getAge(dateOfBirth);
-      if (dobAge === null || dobAge < 3 || dobAge > 100) {
+      if (athleteAge === null || athleteAge < 3 || athleteAge > 100) {
         setError("Please enter a valid date of birth (athlete must be between 3 and 100 years old).");
-        return;
-      }
-      if (isMinor && !parentEmail.trim()) {
-        setError("A parent or guardian email is required for users under 13.");
         return;
       }
     }
@@ -228,7 +254,6 @@ export default function RegisterForm() {
       const credential = await signInWithPopup(auth, googleProvider);
       console.log("[register/google] signed in, uid:", credential.user.uid);
 
-      // Look up coachId from invite code for students (Google sign-up)
       let coachIdGoogle: string | undefined;
       if (role === "student" && code) {
         try {
@@ -241,15 +266,13 @@ export default function RegisterForm() {
         }
       }
 
-      const googleDobAge = isStudentPath ? getAge(dateOfBirth) : null;
       await saveUserProfile({
         uid: credential.user.uid,
         email: credential.user.email ?? "",
         fullName: credential.user.displayName ?? "",
         role: role as "student" | "coach",
-        age: googleDobAge,
+        age: isStudentPath ? (athleteAge ?? null) : null,
         ...(isStudentPath && dateOfBirth ? { dateOfBirth } : {}),
-        ...(isStudentPath && isMinor && parentEmail ? { parentEmail } : {}),
         ...(coachIdGoogle ? { coachId: coachIdGoogle } : {}),
       });
 
@@ -314,7 +337,7 @@ export default function RegisterForm() {
             </div>
           )}
 
-          {/* Invite code banner — shown when arriving from a link */}
+          {/* Invite code banner */}
           {codeIsLocked && (
             <div
               className="mb-5 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium"
@@ -328,147 +351,282 @@ export default function RegisterForm() {
           )}
 
           <form onSubmit={handleRegister} className="space-y-4">
-            {/* Full name */}
-            <div>
-              <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
-              <input id="fullName" type="text" autoComplete="name" required value={fullName}
-                onChange={(e) => setFullName(e.target.value)} placeholder="Jane Smith"
-                className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
-            </div>
 
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
-              <input id="email" type="email" autoComplete="email" required value={email}
-                onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
-                className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
-            </div>
-
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input id="password" type="password" autoComplete="new-password" required value={password}
-                onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters"
-                className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
-            </div>
-
-            {/* Confirm password */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
-              <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
-                className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
-            </div>
-
-            {/* Date of birth (students) / Age (coaches) */}
             {isStudentPath ? (
-              <div>
-                <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-1">
-                  Athlete&rsquo;s date of birth
-                </label>
-                <input
-                  id="dateOfBirth"
-                  type="date"
-                  required
-                  max={todayStr}
-                  value={dateOfBirth}
-                  onChange={(e) => setDateOfBirth(e.target.value)}
-                  className={inputClass}
-                  onFocus={inputFocus}
-                  onBlur={inputBlur}
-                />
-              </div>
-            ) : (
-              <div>
-                <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">Age</label>
-                <input id="age" type="number" min={1} max={120} required value={age}
-                  onChange={(e) => setAge(e.target.value)} placeholder="Your age"
-                  className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
-              </div>
-            )}
+              <>
+                {/* ── Student path ─────────────────────────────────────── */}
 
-            {/* Parent email — COPPA */}
-            {isMinor && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
-                <p className="text-xs text-amber-800 font-medium">
-                  Because you are under 13, a parent or guardian must provide consent (COPPA).
-                </p>
+                {/* DOB comes first — drives the guardian vs. self-registration split */}
                 <div>
-                  <label htmlFor="parentEmail" className="block text-sm font-medium text-gray-700 mb-1">
-                    Parent / Guardian email
+                  <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-1">
+                    Athlete&rsquo;s date of birth
                   </label>
-                  <input id="parentEmail" type="email" autoComplete="off" required={isMinor}
-                    value={parentEmail} onChange={(e) => setParentEmail(e.target.value)}
-                    placeholder="parent@example.com"
-                    className={`${inputClass} bg-white`} onFocus={inputFocus} onBlur={inputBlur} />
+                  <input
+                    id="dateOfBirth"
+                    type="date"
+                    required
+                    max={todayStr}
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className={inputClass}
+                    onFocus={inputFocus}
+                    onBlur={inputBlur}
+                  />
                 </div>
-              </div>
-            )}
 
-            {/* Role selection — hidden when registering via coach invite */}
-            {!coachInviteToken && (
-              <div>
-                <span className="block text-sm font-medium text-gray-700 mb-2">I am a…</span>
-                <div className="grid grid-cols-1 gap-3">
-                  <button type="button" onClick={() => setRole("student")}
-                    className="flex items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-sm font-semibold transition"
-                    style={{
-                      borderColor: role === "student" ? "#001c48" : "#e5e7eb",
-                      backgroundColor: role === "student" ? "rgba(1,255,249,0.08)" : "white",
-                      color: role === "student" ? "#001c48" : "#6b7280",
-                    }}>
-                    <span className="text-2xl">🎓</span>
-                    <span>Student</span>
-                  </button>
-                </div>
-              </div>
-            )}
+                {isMinor ? (
+                  /* ── Under-13: guardian-created account mode ─────────── */
+                  <>
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3.5">
+                      <div className="flex items-start gap-2.5">
+                        <svg className="h-5 w-5 shrink-0 mt-0.5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-semibold text-amber-900">Guardian-managed account required</p>
+                          <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
+                            Because this athlete is under 13, a parent or guardian must create and manage this account (COPPA). The guardian&rsquo;s email becomes the account login.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-            {/* Invite code */}
-            <div>
-              <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-700 mb-1">
-                Invite code{!coachInviteToken && !codeIsLocked && (
-                  <span className="text-red-500 ml-1 font-normal">*</span>
+                    {/* Athlete full name */}
+                    <div>
+                      <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Athlete&rsquo;s full name
+                      </label>
+                      <input id="fullName" type="text" autoComplete="off" required value={fullName}
+                        onChange={(e) => setFullName(e.target.value)} placeholder="Athlete's name"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    {/* Guardian full name */}
+                    <div>
+                      <label htmlFor="guardianName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Parent / Guardian full name
+                      </label>
+                      <input id="guardianName" type="text" autoComplete="name" required value={guardianName}
+                        onChange={(e) => setGuardianName(e.target.value)} placeholder="Guardian's name"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    {/* Guardian email — this IS the account login email */}
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                        Parent / Guardian email
+                      </label>
+                      <p className="text-xs text-gray-400 mb-1.5">This will be the account login email.</p>
+                      <input id="email" type="email" autoComplete="email" required value={email}
+                        onChange={(e) => setEmail(e.target.value)} placeholder="guardian@example.com"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                      <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                      <input id="password" type="password" autoComplete="new-password" required value={password}
+                        onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    {/* Confirm password */}
+                    <div>
+                      <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+                      <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    {/* Mandatory consent checkbox */}
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3.5">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={guardianConsentChecked}
+                          onChange={(e) => setGuardianConsentChecked(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300"
+                          style={{ accentColor: "#001c48" }}
+                        />
+                        <span className="text-xs text-gray-700 leading-relaxed">
+                          I am the parent or legal guardian of this athlete, and I consent to the{" "}
+                          <Link href="/terms" className="underline font-medium" style={{ color: "#001c48" }}>
+                            Terms of Service
+                          </Link>
+                          ,{" "}
+                          <Link href="/privacy" className="underline font-medium" style={{ color: "#001c48" }}>
+                            Privacy Policy
+                          </Link>
+                          , and the AI analysis described in the{" "}
+                          <Link href="/privacy#ai-disclosure" className="underline font-medium" style={{ color: "#001c48" }}>
+                            AI Disclosure
+                          </Link>
+                          , on behalf of my child.
+                        </span>
+                      </label>
+                    </div>
+                  </>
+                ) : (
+                  /* ── 13+: self-registration ──────────────────────────── */
+                  <>
+                    <div>
+                      <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
+                      <input id="fullName" type="text" autoComplete="name" required value={fullName}
+                        onChange={(e) => setFullName(e.target.value)} placeholder="Jane Smith"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+                      <input id="email" type="email" autoComplete="email" required value={email}
+                        onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    <div>
+                      <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                      <input id="password" type="password" autoComplete="new-password" required value={password}
+                        onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+
+                    <div>
+                      <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+                      <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
+                        className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                    </div>
+                  </>
                 )}
-              </label>
-              <input
-                id="inviteCode"
-                type="text"
-                value={inviteCode}
-                onChange={(e) => !codeIsLocked && setInviteCode(e.target.value.toUpperCase())}
-                readOnly={codeIsLocked}
-                placeholder="e.g. AB12CD34"
-                maxLength={8}
-                className={`${inputClass} font-mono tracking-widest uppercase ${codeIsLocked ? "bg-gray-50 text-gray-500 cursor-not-allowed" : ""}`}
-                onFocus={codeIsLocked ? undefined : inputFocus}
-                onBlur={codeIsLocked ? undefined : inputBlur}
-              />
-              {codeIsLocked && (
-                <p className="mt-1 text-xs text-gray-400">Code applied from your invite link</p>
-              )}
-            </div>
+
+                {/* Role selection */}
+                <div>
+                  <span className="block text-sm font-medium text-gray-700 mb-2">I am a…</span>
+                  <div className="grid grid-cols-1 gap-3">
+                    <button type="button" onClick={() => setRole("student")}
+                      className="flex items-center gap-3 rounded-xl border-2 px-4 py-3.5 text-sm font-semibold transition"
+                      style={{
+                        borderColor: role === "student" ? "#001c48" : "#e5e7eb",
+                        backgroundColor: role === "student" ? "rgba(1,255,249,0.08)" : "white",
+                        color: role === "student" ? "#001c48" : "#6b7280",
+                      }}>
+                      <span className="text-2xl">🎓</span>
+                      <span>Student</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Invite code */}
+                <div>
+                  <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-700 mb-1">
+                    Invite code{!codeIsLocked && <span className="text-red-500 ml-1 font-normal">*</span>}
+                  </label>
+                  <input
+                    id="inviteCode"
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => !codeIsLocked && setInviteCode(e.target.value.toUpperCase())}
+                    readOnly={codeIsLocked}
+                    placeholder="e.g. AB12CD34"
+                    maxLength={8}
+                    className={`${inputClass} font-mono tracking-widest uppercase ${codeIsLocked ? "bg-gray-50 text-gray-500 cursor-not-allowed" : ""}`}
+                    onFocus={codeIsLocked ? undefined : inputFocus}
+                    onBlur={codeIsLocked ? undefined : inputBlur}
+                  />
+                  {codeIsLocked && (
+                    <p className="mt-1 text-xs text-gray-400">Code applied from your invite link</p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* ── Coach path (unchanged) ────────────────────────────── */}
+
+                <div>
+                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
+                  <input id="fullName" type="text" autoComplete="name" required value={fullName}
+                    onChange={(e) => setFullName(e.target.value)} placeholder="Jane Smith"
+                    className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                </div>
+
+                <div>
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">Email address</label>
+                  <input id="email" type="email" autoComplete="email" required value={email}
+                    onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
+                    className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                </div>
+
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                  <input id="password" type="password" autoComplete="new-password" required value={password}
+                    onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters"
+                    className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                </div>
+
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">Confirm password</label>
+                  <input id="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••"
+                    className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                </div>
+
+                <div>
+                  <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                  <input id="age" type="number" min={1} max={120} required value={age}
+                    onChange={(e) => setAge(e.target.value)} placeholder="Your age"
+                    className={inputClass} onFocus={inputFocus} onBlur={inputBlur} />
+                </div>
+
+                {/* Invite code */}
+                <div>
+                  <label htmlFor="inviteCode" className="block text-sm font-medium text-gray-700 mb-1">
+                    Invite code
+                  </label>
+                  <input
+                    id="inviteCode"
+                    type="text"
+                    value={inviteCode}
+                    onChange={(e) => !codeIsLocked && setInviteCode(e.target.value.toUpperCase())}
+                    readOnly={codeIsLocked}
+                    placeholder="e.g. AB12CD34"
+                    maxLength={8}
+                    className={`${inputClass} font-mono tracking-widest uppercase ${codeIsLocked ? "bg-gray-50 text-gray-500 cursor-not-allowed" : ""}`}
+                    onFocus={codeIsLocked ? undefined : inputFocus}
+                    onBlur={codeIsLocked ? undefined : inputBlur}
+                  />
+                  {codeIsLocked && (
+                    <p className="mt-1 text-xs text-gray-400">Code applied from your invite link</p>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Submit */}
             <button type="submit" disabled={loading}
               className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 active:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed mt-2"
               style={{ backgroundColor: "#001c48" }}>
-              {loading ? <span className="flex items-center justify-center gap-2"><Spinner />Creating account…</span> : "Create account"}
+              {loading
+                ? <span className="flex items-center justify-center gap-2"><Spinner />Creating account…</span>
+                : isMinor ? "Create account for athlete" : "Create account"}
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-gray-200" />
-            <span className="text-xs text-gray-400 font-medium">or sign up with</span>
-            <div className="h-px flex-1 bg-gray-200" />
-          </div>
+          {/* Google sign-up — not available for under-13 guardian accounts */}
+          {!isMinor && (
+            <>
+              <div className="my-5 flex items-center gap-3">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-xs text-gray-400 font-medium">or sign up with</span>
+                <div className="h-px flex-1 bg-gray-200" />
+              </div>
 
-          {/* Google sign-up */}
-          <button type="button" onClick={handleGoogleSignUp} disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition disabled:opacity-60 disabled:cursor-not-allowed">
-            {googleLoading ? <Spinner /> : <GoogleIcon />}
-            Continue with Google
-          </button>
+              <button type="button" onClick={handleGoogleSignUp} disabled={googleLoading}
+                className="w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition disabled:opacity-60 disabled:cursor-not-allowed">
+                {googleLoading ? <Spinner /> : <GoogleIcon />}
+                Continue with Google
+              </button>
+            </>
+          )}
 
           {/* Login link */}
           <p className="mt-6 text-center text-sm text-gray-500">
