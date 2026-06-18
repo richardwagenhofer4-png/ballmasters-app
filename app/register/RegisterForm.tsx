@@ -84,6 +84,9 @@ export default function RegisterForm() {
   const [guardianName, setGuardianName] = useState("");
   const [guardianConsentChecked, setGuardianConsentChecked] = useState(false);
 
+  // Universal — required for all registrants
+  const [termsConsentChecked, setTermsConsentChecked] = useState(false);
+
   // Coach-path-only fields
   const [age, setAge] = useState("");
 
@@ -93,6 +96,9 @@ export default function RegisterForm() {
   const isMinor = isStudentPath && athleteAge !== null && athleteAge < 13;
 
   function validate(): string {
+    if (!termsConsentChecked)
+      return "Please agree to the Terms of Service, Privacy Policy, and AI Disclosure to continue.";
+
     // ── Coach path ──
     if (!isStudentPath) {
       if (!fullName.trim()) return "Please enter your full name.";
@@ -193,6 +199,8 @@ export default function RegisterForm() {
         fullName: fullName.trim(),
         role: role as "student" | "coach",
         age: ageNum,
+        termsConsentAt: serverTimestamp(),
+        termsConsentVersion: "v1",
         ...(isStudentPath ? { dateOfBirth } : {}),
         ...(isMinor ? {
           guardianManaged: true,
@@ -227,6 +235,10 @@ export default function RegisterForm() {
 
   async function handleGoogleSignUp() {
     if (!role) { setError("Please select a role before continuing with Google."); return; }
+    if (!termsConsentChecked) {
+      setError("Please agree to the Terms of Service, Privacy Policy, and AI Disclosure to continue.");
+      return;
+    }
     if (isStudentPath) {
       if (!dateOfBirth) {
         setError("Please enter the athlete's date of birth before continuing with Google.");
@@ -272,6 +284,8 @@ export default function RegisterForm() {
         fullName: credential.user.displayName ?? "",
         role: role as "student" | "coach",
         age: isStudentPath ? (athleteAge ?? null) : null,
+        termsConsentAt: serverTimestamp(),
+        termsConsentVersion: "v1",
         ...(isStudentPath && dateOfBirth ? { dateOfBirth } : {}),
         ...(coachIdGoogle ? { coachId: coachIdGoogle } : {}),
       });
@@ -600,6 +614,34 @@ export default function RegisterForm() {
                 </div>
               </>
             )}
+
+            {/* Universal terms consent — required for all registrants */}
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3.5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={termsConsentChecked}
+                  onChange={(e) => setTermsConsentChecked(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300"
+                  style={{ accentColor: "#001c48" }}
+                />
+                <span className="text-xs text-gray-700 leading-relaxed">
+                  I agree to the{" "}
+                  <Link href="/terms" className="underline font-medium" style={{ color: "#001c48" }}>
+                    Terms of Service
+                  </Link>
+                  ,{" "}
+                  <Link href="/privacy" className="underline font-medium" style={{ color: "#001c48" }}>
+                    Privacy Policy
+                  </Link>
+                  , and{" "}
+                  <Link href="/privacy#ai-disclosure" className="underline font-medium" style={{ color: "#001c48" }}>
+                    AI Disclosure
+                  </Link>
+                  .
+                </span>
+              </label>
+            </div>
 
             {/* Submit */}
             <button type="submit" disabled={loading}

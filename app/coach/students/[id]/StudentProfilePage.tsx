@@ -201,17 +201,13 @@ export default function StudentProfilePage() {
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         setVideos(videoList);
 
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         const bookingsSnap = await getDocs(query(
           collection(db, "bookings"),
           where("studentId", "==", id),
           where("status", "==", "confirmed"),
         ));
         const bookingList: Booking[] = bookingsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }))
-          .filter(b => b.date >= todayStr)
-          .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }));
         setBookings(bookingList);
       } catch (err) {
         console.error("[student-profile]", err);
@@ -263,6 +259,15 @@ export default function StudentProfilePage() {
   const watched = videos.filter(v => v.viewedBy.includes(id)).length;
   const watchRate = assigned > 0 ? Math.round((watched / assigned) * 100) : 0;
 
+  const _today = new Date();
+  const todayDateStr = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, "0")}-${String(_today.getDate()).padStart(2, "0")}`;
+  const upcomingBookings = bookings
+    .filter(b => b.date >= todayDateStr)
+    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  const pastBookings = bookings
+    .filter(b => b.date < todayDateStr)
+    .sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
+
   if (authLoading || loading) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">
@@ -313,7 +318,7 @@ export default function StudentProfilePage() {
           <div>
             <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
             <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
-            {student.guardianManaged && (
+            {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
               <span
                 className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
                 style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#01fff9" }}
@@ -397,8 +402,8 @@ export default function StudentProfilePage() {
           </section>
         )}
 
-        {/* Guardian contact — shown when account is guardian-managed */}
-        {student.guardianManaged && (
+        {/* Guardian contact — shown when account is guardian-managed (or has legacy guardian fields) */}
+        {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
           <section className="bg-white rounded-xl border border-gray-200 px-4 py-4">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Guardian Contact</h2>
             {student.guardianName && (
@@ -548,13 +553,13 @@ export default function StudentProfilePage() {
         {/* Upcoming sessions */}
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Upcoming Sessions</h2>
-          {bookings.length === 0 ? (
+          {upcomingBookings.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
               No upcoming sessions
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {bookings.map((b, i) => {
+              {upcomingBookings.map((b, i) => {
                 const dateStr = b.date
                   ? new Date(b.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
                   : b.date;
@@ -582,6 +587,40 @@ export default function StudentProfilePage() {
             </div>
           )}
         </section>
+
+        {/* Past sessions */}
+        {pastBookings.length > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Past Sessions</h2>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden opacity-70">
+              {pastBookings.map((b, i) => {
+                const dateStr = b.date
+                  ? new Date(b.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                  : b.date;
+                return (
+                  <div
+                    key={b.id}
+                    className="flex items-center gap-3 px-4 py-3"
+                    style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
+                  >
+                    <div
+                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: "#f3f4f6" }}
+                    >
+                      <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-600 truncate">{b.title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{dateStr} · {b.startTime}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
       </div>
 
