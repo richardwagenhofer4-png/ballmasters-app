@@ -96,7 +96,11 @@ export default function RegisterForm() {
   const isMinor = isStudentPath && athleteAge !== null && athleteAge < 13;
 
   function validate(): string {
-    if (!termsConsentChecked)
+    // Under-13: guardian checkbox is the single consent signal.
+    // Everyone else: universal terms checkbox.
+    if (isMinor && !guardianConsentChecked)
+      return "You must check the consent box to create an account for an athlete under 13.";
+    if (!isMinor && !termsConsentChecked)
       return "Please agree to the Terms of Service, Privacy Policy, and AI Disclosure to continue.";
 
     // ── Coach path ──
@@ -124,8 +128,6 @@ export default function RegisterForm() {
       if (!password) return "Please enter a password.";
       if (password.length < 6) return "Password must be at least 6 characters.";
       if (password !== confirmPassword) return "Passwords do not match.";
-      if (!guardianConsentChecked)
-        return "You must check the consent box to create an account for an athlete under 13.";
     } else {
       if (!fullName.trim()) return "Please enter your full name.";
       if (!email.trim()) return "Please enter your email address.";
@@ -472,7 +474,7 @@ export default function RegisterForm() {
                             Privacy Policy
                           </Link>
                           , and the AI analysis described in the{" "}
-                          <Link href="/privacy#ai-disclosure" className="underline font-medium" style={{ color: "#001c48" }}>
+                          <Link href="/ai-disclosure" className="underline font-medium" style={{ color: "#001c48" }}>
                             AI Disclosure
                           </Link>
                           , on behalf of my child.
@@ -615,33 +617,35 @@ export default function RegisterForm() {
               </>
             )}
 
-            {/* Universal terms consent — required for all registrants */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3.5">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={termsConsentChecked}
-                  onChange={(e) => setTermsConsentChecked(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300"
-                  style={{ accentColor: "#001c48" }}
-                />
-                <span className="text-xs text-gray-700 leading-relaxed">
-                  I agree to the{" "}
-                  <Link href="/terms" className="underline font-medium" style={{ color: "#001c48" }}>
-                    Terms of Service
-                  </Link>
-                  ,{" "}
-                  <Link href="/privacy" className="underline font-medium" style={{ color: "#001c48" }}>
-                    Privacy Policy
-                  </Link>
-                  , and{" "}
-                  <Link href="/privacy#ai-disclosure" className="underline font-medium" style={{ color: "#001c48" }}>
-                    AI Disclosure
-                  </Link>
-                  .
-                </span>
-              </label>
-            </div>
+            {/* Universal terms consent — shown for 13+ and coaches only; under-13 uses the guardian checkbox above */}
+            {!isMinor && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3.5">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={termsConsentChecked}
+                    onChange={(e) => setTermsConsentChecked(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300"
+                    style={{ accentColor: "#001c48" }}
+                  />
+                  <span className="text-xs text-gray-700 leading-relaxed">
+                    I agree to the{" "}
+                    <Link href="/terms" className="underline font-medium" style={{ color: "#001c48" }}>
+                      Terms of Service
+                    </Link>
+                    ,{" "}
+                    <Link href="/privacy" className="underline font-medium" style={{ color: "#001c48" }}>
+                      Privacy Policy
+                    </Link>
+                    , and{" "}
+                    <Link href="/ai-disclosure" className="underline font-medium" style={{ color: "#001c48" }}>
+                      AI Disclosure
+                    </Link>
+                    .
+                  </span>
+                </label>
+              </div>
+            )}
 
             {/* Submit */}
             <button type="submit" disabled={loading}
