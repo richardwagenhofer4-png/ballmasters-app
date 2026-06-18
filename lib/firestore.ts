@@ -12,6 +12,15 @@ export interface UserProfile {
   parentEmail?: string;
   createdAt: unknown;
   school: string;
+  // Date of birth and consent fields (added for COPPA compliance)
+  dateOfBirth?: string;
+  termsConsentAt?: unknown;
+  termsConsentVersion?: string;
+  guardianManaged?: boolean;
+  guardianName?: string;
+  guardianEmail?: string;
+  guardianConsentAt?: unknown;
+  guardianConsentVersion?: string;
 }
 
 export async function saveUserProfile(
@@ -34,12 +43,16 @@ export async function saveUserProfile(
     school: "ballmasters",
     createdAt: serverTimestamp(),
   };
-  if (profile.parentEmail) {
-    data.parentEmail = profile.parentEmail;
-  }
-  if (profile.coachId) {
-    data.coachId = profile.coachId;
-  }
+  if (profile.parentEmail) data.parentEmail = profile.parentEmail;
+  if (profile.coachId) data.coachId = profile.coachId;
+  if (profile.dateOfBirth) data.dateOfBirth = profile.dateOfBirth;
+  if (profile.termsConsentAt) data.termsConsentAt = profile.termsConsentAt;
+  if (profile.termsConsentVersion) data.termsConsentVersion = profile.termsConsentVersion;
+  if (profile.guardianManaged) data.guardianManaged = profile.guardianManaged;
+  if (profile.guardianName) data.guardianName = profile.guardianName;
+  if (profile.guardianEmail) data.guardianEmail = profile.guardianEmail;
+  if (profile.guardianConsentAt) data.guardianConsentAt = profile.guardianConsentAt;
+  if (profile.guardianConsentVersion) data.guardianConsentVersion = profile.guardianConsentVersion;
 
   console.log("[saveUserProfile] writing to Firestore path: users/" + profile.uid);
   try {
