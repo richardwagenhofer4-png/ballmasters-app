@@ -895,6 +895,7 @@ export default function StudentCalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Confirm Booking</h2>
+            <p className="text-sm text-gray-600 mb-3">Are you sure you want to book this time slot?</p>
             <p className="text-sm text-gray-500 mb-1">{confirmBookSession.title}</p>
             <p className="text-sm text-gray-500 mb-6">
               {formatDisplayDate(confirmBookSession.date)} · {formatTime(confirmBookSession.startTime)}
@@ -925,6 +926,7 @@ export default function StudentCalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Join the Waitlist?</h2>
+            <p className="text-sm text-gray-600 mb-3">Are you sure you want to join the waitlist for this session?</p>
             <p className="text-sm text-gray-500 mb-1">{confirmWaitlistSession.title}</p>
             <p className="text-sm text-gray-500 mb-3">
               {formatDisplayDate(confirmWaitlistSession.date)} · {formatTime(confirmWaitlistSession.startTime)}

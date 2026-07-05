@@ -73,7 +73,7 @@ export default function RegisterForm() {
   const [email, setEmail] = useState("");             // athlete email (13+) or guardian email (under-13)
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState<Role>(coachInviteToken ? "coach" : "");
+  const [role, setRole] = useState<Role>(coachInviteToken ? "coach" : "student");
   const [inviteCode, setInviteCode] = useState(codeFromUrl);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);

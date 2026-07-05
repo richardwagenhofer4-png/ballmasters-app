@@ -16,6 +16,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
+import InitialsAvatar from "@/components/InitialsAvatar";
 import { getOrCreateThread, markThreadRead, sendMessage, threadId as makeThreadId } from "@/lib/messaging";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 
@@ -256,8 +257,11 @@ export default function StudentMessagesPage() {
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         </div>
         <h1 className="text-2xl font-extrabold text-white">Messages</h1>
-        {coachName && (
-          <p className="text-sm mt-0.5" style={{ color: "rgba(1,255,249,0.75)" }}>with {coachName}</p>
+        {coachName && coachId && (
+          <div className="flex items-center gap-2 mt-1.5">
+            <InitialsAvatar name={coachName} id={coachId} size={28} variant="coach" />
+            <p className="text-sm" style={{ color: "rgba(1,255,249,0.75)" }}>with {coachName}</p>
+          </div>
         )}
       </div>
 

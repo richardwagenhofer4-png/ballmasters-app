@@ -280,6 +280,7 @@ export default function StudentsListPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
                           <p className="text-xs text-gray-400 truncate">{s.email}</p>
+                          {s.joinedStr && <p className="text-xs text-gray-300 truncate">Joined {s.joinedStr}</p>}
                         </div>
                         {st && (
                           <div className="text-right shrink-0">
