@@ -474,6 +474,7 @@ export default function StudentCalendarPage() {
   const confirmedBookings = bookings.filter(b => b.status === "confirmed");
   const waitlistedBookings = bookings.filter(b => b.status === "waitlisted");
   const pendingBookings = bookings.filter(b => b.status === "pending_approval");
+  const declinedBookings = bookings.filter(b => b.status === "declined" && b.date >= todayStr);
 
   if (loading) {
     return (
@@ -584,7 +585,7 @@ export default function StudentCalendarPage() {
       {/* Tab bar */}
       <div className="flex border-b border-gray-200 bg-white">
         {(["available", "bookings", "pending"] as const).map(tab => {
-          const count = tab === "available" ? availableSessions.length : tab === "bookings" ? confirmedBookings.length : pendingBookings.length;
+          const count = tab === "available" ? availableSessions.length : tab === "bookings" ? (confirmedBookings.length + declinedBookings.length) : pendingBookings.length;
           const baseLabel = tab === "available" ? "Available" : tab === "bookings" ? "My Bookings" : "Pending";
           const label = `${baseLabel} (${count})`;
           const isActive = activeTab === tab;
@@ -743,44 +744,62 @@ export default function StudentCalendarPage() {
         {/* My Bookings tab */}
         {activeTab === "bookings" && (
           <>
-            {confirmedBookings.length === 0 ? (
+            {confirmedBookings.length === 0 && declinedBookings.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 py-10 text-center px-4">
                 <CalendarIcon className="h-10 w-10 text-gray-200 mx-auto mb-3" />
                 <p className="text-sm text-gray-400">No confirmed bookings yet.</p>
               </div>
             ) : (
-              confirmedBookings.map(b => {
-                const session = sessions.find(s => s.id === b.sessionId);
-                return (
-                  <div key={b.id} className="bg-white rounded-xl border border-gray-200 p-4">
+              <>
+                {confirmedBookings.map(b => {
+                  const session = sessions.find(s => s.id === b.sessionId);
+                  return (
+                    <div key={b.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
+                          Confirmed
+                        </span>
+                      </div>
+                      {b.approvalMessage && (
+                        <p className="mt-2 text-xs text-gray-700 bg-blue-50 rounded-lg px-3 py-2">
+                          <span className="font-semibold text-gray-500">Coach: </span>{b.approvalMessage}
+                        </p>
+                      )}
+                      {session && (
+                        <button
+                          onClick={() => handleCancel(session, b)}
+                          disabled={actionLoading === session.id}
+                          className="mt-3 w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+                        >
+                          {actionLoading === session.id ? "…" : "Cancel"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {declinedBookings.map(b => (
+                  <div key={b.id} className="bg-white rounded-xl border border-red-100 p-4 opacity-75">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-sm font-semibold text-gray-900 truncate">{b.title}</h3>
+                        <h3 className="text-sm font-semibold text-gray-700 truncate">{b.title}</h3>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {formatDisplayDate(b.date)} · {formatTime(b.startTime)}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">
-                        Confirmed
+                      <span className="shrink-0 text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                        Declined
                       </span>
                     </div>
-                    {b.approvalMessage && (
-                      <p className="mt-2 text-xs text-gray-700 bg-blue-50 rounded-lg px-3 py-2">
-                        <span className="font-semibold text-gray-500">Coach: </span>{b.approvalMessage}
-                      </p>
-                    )}
-                    {session && (
-                      <button
-                        onClick={() => handleCancel(session, b)}
-                        disabled={actionLoading === session.id}
-                        className="mt-3 w-full py-2 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
-                      >
-                        {actionLoading === session.id ? "…" : "Cancel"}
-                      </button>
-                    )}
+                    <p className="mt-2 text-xs text-gray-400">Your coach declined this request. You can rebook if a spot is still available.</p>
                   </div>
-                );
-              })
+                ))}
+              </>
             )}
           </>
         )}
