@@ -109,7 +109,7 @@ export default function CoachMessagesPage() {
 
   const [uid, setUid] = useState<string | null>(null);
   const [threads, setThreads] = useState<ThreadDoc[]>([]);
-  const { newComment, newMessage, bookingUpdate, notifications, markRead } = useNotificationCounts();
+  const { newComment, newMessage, notifications, markRead } = useNotificationCounts();
 
   // Conversation view state
   const [view, setView] = useState<"list" | "thread">("list");
@@ -277,7 +277,6 @@ export default function CoachMessagesPage() {
     { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
     { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
     { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
-    { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
     { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
   ];
 
@@ -530,8 +529,7 @@ export default function CoachMessagesPage() {
           const isActive = pathname === item.href;
           const badge =
             item.href === "/coach/messages" ? newMessage :
-            item.href === "/coach/videos" ? newComment :
-            item.href === "/coach/calendar" ? bookingUpdate : 0;
+            item.href === "/coach/videos" ? newComment : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">

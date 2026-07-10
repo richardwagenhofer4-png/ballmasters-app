@@ -31,7 +31,6 @@ function ChatIcon({ className }: { className?: string }) {
 const NAV_ITEMS = [
   { href: "/student/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/student/videos", label: "My Videos", Icon: VideoIcon },
-  { href: "/student/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/student/messages", label: "Messages", Icon: ChatIcon },
   { href: "/student/profile", label: "Profile", Icon: ProfileIcon },
 ];
@@ -40,7 +39,7 @@ export default function StudentProfilePage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
-  const { newVideo, newMessage, bookingUpdate } = useNotificationCounts();
+  const { newVideo, newMessage } = useNotificationCounts();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -247,8 +246,7 @@ export default function StudentProfilePage() {
           const isActive = pathname === item.href;
           const badge =
             item.href === "/student/videos" ? newVideo :
-            item.href === "/student/messages" ? newMessage :
-            item.href === "/student/calendar" ? bookingUpdate : 0;
+            item.href === "/student/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">

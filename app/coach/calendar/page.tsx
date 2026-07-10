@@ -1,7 +1,5 @@
-import dynamic from "next/dynamic";
-
-const CoachCalendarPage = dynamic(() => import("./CoachCalendarPage"));
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <CoachCalendarPage />;
+  redirect("/coach/dashboard");
 }

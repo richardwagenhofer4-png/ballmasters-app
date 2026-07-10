@@ -79,7 +79,6 @@ function ProfileIcon({ className }: { className?: string }) {
 const NAV_ITEMS = [
   { href: "/student/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/student/videos", label: "My Videos", Icon: VideoIcon },
-  { href: "/student/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/student/messages", label: "Messages", Icon: ChatIcon },
   { href: "/student/profile", label: "Profile", Icon: ProfileIcon },
 ];
@@ -101,7 +100,7 @@ export default function StudentMessagesPage() {
   const [coachName, setCoachName] = useState("");
   const [tid, setTid] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const { newVideo, newMessage, bookingUpdate, notifications, markRead } = useNotificationCounts();
+  const { newVideo, newMessage, notifications, markRead } = useNotificationCounts();
 
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
@@ -435,8 +434,7 @@ export default function StudentMessagesPage() {
           const isActive = pathname === item.href;
           const badge =
             item.href === "/student/messages" ? newMessage :
-            item.href === "/student/videos" ? newVideo :
-            item.href === "/student/calendar" ? bookingUpdate : 0;
+            item.href === "/student/videos" ? newVideo : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">

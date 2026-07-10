@@ -29,7 +29,6 @@ const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
   { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
-  { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
@@ -38,7 +37,7 @@ type Status = "loading" | "ready" | "generating" | "error";
 export default function CoachInvitePage() {
   const { user, loading: authLoading } = useAuth();
   const pathname = usePathname();
-  const { newComment, newMessage, bookingUpdate } = useNotificationCounts();
+  const { newComment, newMessage } = useNotificationCounts();
   const [coachUid, setCoachUid] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<InviteCode | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -255,8 +254,7 @@ export default function CoachInvitePage() {
           const isActive = pathname === item.href;
           const badge =
             item.href === "/coach/videos" ? newComment :
-            item.href === "/coach/messages" ? newMessage :
-            item.href === "/coach/calendar" ? bookingUpdate : 0;
+            item.href === "/coach/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">

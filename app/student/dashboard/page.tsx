@@ -132,7 +132,6 @@ function ChatIcon({ className }: { className?: string }) {
 const NAV_ITEMS = [
   { href: "/student/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/student/videos", label: "My Videos", Icon: VideoIcon },
-  { href: "/student/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/student/messages", label: "Messages", Icon: ChatIcon },
   { href: "/student/profile", label: "Profile", Icon: ProfileIcon },
 ];
@@ -151,7 +150,8 @@ export default function StudentDashboard() {
   const [avatarId, setAvatarId] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [showNotifBanner, setShowNotifBanner] = useState(false);
-  const { notifications, newVideo, newMessage, bookingUpdate, markRead } = useNotificationCounts();
+  const { notifications: allNotifications, newVideo, newMessage, markRead } = useNotificationCounts();
+  const notifications = allNotifications.filter(n => n.type !== "booking" && n.type !== "booking_approved" && n.type !== "booking_declined");
   const [notifEnabling, setNotifEnabling] = useState(false);
 
   const greeting = getGreeting();
@@ -346,12 +346,8 @@ export default function StudentDashboard() {
         {/* Quick Actions */}
         <div>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Actions</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             {[
-              {
-                label: "Book Lesson", href: "/student/calendar",
-                icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>,
-              },
               {
                 label: "Message Coach", href: "/student/messages",
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>,
@@ -397,7 +393,6 @@ export default function StudentDashboard() {
                         {n.type === "new_video" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>}
                         {n.type === "new_message" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>}
                         {n.type === "new_comment" && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>}
-                        {(n.type === "booking_approved" || n.type === "booking_declined" || n.type === "booking") && <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
@@ -543,7 +538,7 @@ export default function StudentDashboard() {
       >
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const badge = item.href === "/student/videos" ? newVideo : item.href === "/student/messages" ? newMessage : item.href === "/student/calendar" ? bookingUpdate : 0;
+          const badge = item.href === "/student/videos" ? newVideo : item.href === "/student/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
               <div className="relative">

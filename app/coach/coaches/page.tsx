@@ -34,7 +34,6 @@ const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
   { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
-  { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
@@ -65,7 +64,7 @@ export default function CoachesPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
-  const { newComment, newMessage, bookingUpdate } = useNotificationCounts();
+  const { newComment, newMessage } = useNotificationCounts();
 
   const [loading, setLoading] = useState(true);
   const [viewerUid, setViewerUid] = useState("");
@@ -456,8 +455,7 @@ export default function CoachesPage() {
           const isActive = pathname === item.href;
           const badge =
             item.href === "/coach/videos" ? newComment :
-            item.href === "/coach/messages" ? newMessage :
-            item.href === "/coach/calendar" ? bookingUpdate : 0;
+            item.href === "/coach/messages" ? newMessage : 0;
           return (
             <Link
               key={item.href}

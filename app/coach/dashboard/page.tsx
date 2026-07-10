@@ -120,7 +120,6 @@ const NAV_ITEMS = [
   { href: "/coach/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/coach/videos", label: "Videos", Icon: VideoIcon },
   { href: "/coach/students", label: "Athletes", Icon: StudentsIcon },
-  { href: "/coach/calendar", label: "Calendar", Icon: CalendarIcon },
   { href: "/coach/messages", label: "Messages", Icon: ChatIcon },
 ];
 
@@ -141,7 +140,8 @@ export default function CoachDashboard() {
   const [studentSearch, setStudentSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const { notifications, newComment, newMessage, bookingUpdate, markRead } = useNotificationCounts();
+  const { notifications: allNotifications, newComment, newMessage, markRead } = useNotificationCounts();
+  const notifications = allNotifications.filter(n => n.type !== "booking" && n.type !== "booking_approved" && n.type !== "booking_declined");
 
   const greeting = getGreeting();
 
@@ -629,7 +629,7 @@ export default function CoachDashboard() {
       >
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
-          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : item.href === "/coach/calendar" ? bookingUpdate : 0;
+          const badge = item.href === "/coach/videos" ? newComment : item.href === "/coach/messages" ? newMessage : 0;
           return (
             <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
               <div className="relative">

@@ -1,7 +1,5 @@
-import dynamic from "next/dynamic";
-
-const StudentCalendarPage = dynamic(() => import("./StudentCalendarPage"));
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <StudentCalendarPage />;
+  redirect("/student/dashboard");
 }
