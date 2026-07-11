@@ -406,7 +406,7 @@ function CoachVideosPage() {
     );
   }
 
-  const selectClass = "flex-1 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none";
+  const selectClass = "flex-1 min-w-0 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg px-2 py-2 focus:outline-none";
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
