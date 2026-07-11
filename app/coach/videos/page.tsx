@@ -605,26 +605,11 @@ function CoachVideosPage() {
                   onClick={() => router.push(watchHref)}
                   className="relative bg-white rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition"
                 >
-                  {isDrill ? (
-                    <div className="flex h-16 rounded-t-xl overflow-hidden" style={{ gap: 1, backgroundColor: "#111" }}>
-                      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
-                        <svg className="h-5 w-5 opacity-60 text-white" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#374151" }}>
-                        <svg className="h-5 w-5 opacity-40 text-white" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                        </svg>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-16 rounded-t-xl overflow-hidden" style={{ backgroundColor: "rgba(0,28,72,0.05)" }}>
-                      <svg className="h-7 w-7 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
-                        <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-center h-16 rounded-t-xl overflow-hidden" style={{ backgroundColor: "rgba(0,28,72,0.05)" }}>
+                    <svg className="h-7 w-7 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
+                      <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                    </svg>
+                  </div>
                   <div className="absolute top-1 right-1 z-20">
                     <VideoActionsMenu
                       items={[
@@ -676,20 +661,6 @@ function CoachVideosPage() {
                   onClick={() => router.push(watchHref)}
                   className="relative bg-white rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition"
                 >
-                  {isDrill && (
-                    <div className="flex h-20 shrink-0 rounded-t-xl overflow-hidden" style={{ gap: 2, backgroundColor: "#111" }}>
-                      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
-                        <svg className="h-6 w-6 opacity-60" style={{ color: "white" }} viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#374151" }}>
-                        <svg className="h-6 w-6 opacity-40" style={{ color: "white" }} viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                        </svg>
-                      </div>
-                    </div>
-                  )}
                   <div className="absolute top-2 right-2 z-20">
                     <VideoActionsMenu items={menuItems} />
                   </div>
