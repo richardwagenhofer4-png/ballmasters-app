@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
+  signInWithCredential,
   GoogleAuthProvider,
   onAuthStateChanged,
   browserPopupRedirectResolver,
 } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 import { auth } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
@@ -104,9 +107,21 @@ export default function LoginPage() {
     setError("");
     setGoogleLoading(true);
     try {
-      const provider = new GoogleAuthProvider();
-      const credential = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-      await afterLogin(credential.user.uid);
+      if (Capacitor.isNativePlatform()) {
+        // iOS shell: WKWebView breaks signInWithPopup with "missing initial
+        // state" due to storage partitioning. Use the native Google sign-in
+        // sheet and feed the returned idToken to the JS SDK so the rest of
+        // the app's auth-state logic (afterLogin, cookies, etc.) is unchanged.
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = result.credential?.idToken;
+        if (!idToken) throw new Error("Google sign-in did not return an idToken.");
+        const credential = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+        await afterLogin(credential.user.uid);
+      } else {
+        const provider = new GoogleAuthProvider();
+        const credential = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
+        await afterLogin(credential.user.uid);
+      }
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
       if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {

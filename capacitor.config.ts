@@ -12,6 +12,15 @@ const config: CapacitorConfig = {
       'accounts.google.com',
     ],
   },
+  plugins: {
+    FirebaseAuthentication: {
+      // Native Google sign-in for the iOS shell — bypasses the WKWebView
+      // storage-partitioning problem that breaks signInWithPopup with
+      // "Unable to process request due to missing initial state".
+      skipNativeAuth: false,
+      providers: ['google.com'],
+    },
+  },
 };
 
 export default config;

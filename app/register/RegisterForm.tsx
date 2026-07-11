@@ -7,8 +7,11 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   signInWithPopup,
+  signInWithCredential,
   GoogleAuthProvider,
 } from "firebase/auth";
+import { Capacitor } from "@capacitor/core";
+import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, serverTimestamp } from "firebase/firestore";
 import { saveUserProfile } from "@/lib/firestore";
@@ -264,8 +267,20 @@ export default function RegisterForm() {
         if (!valid) return;
       }
 
-      console.log("[register/google] opening Google sign-in popup");
-      const credential = await signInWithPopup(auth, googleProvider);
+      let credential;
+      if (Capacitor.isNativePlatform()) {
+        // iOS shell: use native Google sign-in and feed the idToken into
+        // the JS SDK — signInWithPopup fails in WKWebView with "missing
+        // initial state" due to storage partitioning.
+        console.log("[register/google] using native Google sign-in (iOS shell)");
+        const result = await FirebaseAuthentication.signInWithGoogle();
+        const idToken = result.credential?.idToken;
+        if (!idToken) throw new Error("Google sign-in did not return an idToken.");
+        credential = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+      } else {
+        console.log("[register/google] opening Google sign-in popup");
+        credential = await signInWithPopup(auth, googleProvider);
+      }
       console.log("[register/google] signed in, uid:", credential.user.uid);
 
       let coachIdGoogle: string | undefined;
