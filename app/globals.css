@@ -35,3 +35,31 @@ body {
     font-size: 16px !important;
   }
 }
+
+/* Push top-of-page headers below the iPhone status bar/notch when running in
+   the Capacitor iOS shell (viewport-fit=cover set in app/layout.tsx). Adds
+   env(safe-area-inset-top) as EXTRA top padding to the header, so its coloured
+   background extends up under the notch and its content sits below the clock.
+   env(safe-area-inset-top) is 0 in normal desktop/mobile browsers, so these
+   rules are no-ops there — desktop appearance is untouched.
+
+   Three header patterns cover every page in the app: */
+
+/* A) Navy standard page header — the pt-12 class is used exclusively for the
+   navy `<div style={backgroundColor:"#001c48"}>` header on 15+ pages. */
+.pt-12 {
+  padding-top: calc(3rem + env(safe-area-inset-top));
+}
+
+/* B) Dark video-editor header — annotate, drill, clips, and student-video
+   pages wrap content in <main class="bg-gray-950"> whose first child is the
+   gray-900 header row with py-3. */
+main.bg-gray-950 > .bg-gray-900:first-child {
+  padding-top: calc(0.75rem + env(safe-area-inset-top));
+}
+
+/* C) Legal pages (terms, privacy, ai-disclosure) use a bare <header> element
+   with a navy inline background; add the inset above its inner content. */
+header[style*="#001c48"] {
+  padding-top: env(safe-area-inset-top);
+}
