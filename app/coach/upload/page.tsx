@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -404,21 +405,28 @@ export default function UploadPage() {
 
   // ---- MAIN UPLOAD FORM ----
   return (
-    <main className="min-h-screen bg-gray-50 px-4 py-12">
-      <div className="mx-auto max-w-xl">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <img
-            src="/logo-dark.png"
-            alt="Ball Masters Florida"
-            style={{ width: 120, height: "auto", margin: "0 auto 12px" }}
-          />
-          <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: "#001c48" }}>
-            Upload Video
-          </h1>
-          <p className="mt-1 text-gray-500 text-sm">Share coaching footage with your athletes</p>
+    <main className="min-h-screen bg-gray-50">
+      {/* Navy top header — matches other coach pages, uses pt-12 pattern so
+          globals.css picks up env(safe-area-inset-top) automatically on iOS. */}
+      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
+        <div className="flex items-center justify-between mb-4">
+          <Link
+            href="/coach/dashboard"
+            className="flex items-center gap-1.5 text-sm font-medium transition hover:text-white"
+            style={{ color: "rgba(1,255,249,0.75)" }}
+          >
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
+            </svg>
+            Dashboard
+          </Link>
+          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         </div>
+        <h1 className="text-2xl font-extrabold text-white leading-tight">Upload Video</h1>
+        <p className="text-xs mt-0.5" style={{ color: "#01fff9" }}>Share coaching footage with your athletes</p>
+      </div>
 
+      <div className="px-4 py-8 mx-auto max-w-xl">
         <div className="bg-white rounded-2xl shadow-lg p-8 space-y-6">
           {/* Mode toggle */}
           <div className="flex rounded-xl overflow-hidden border border-gray-200">

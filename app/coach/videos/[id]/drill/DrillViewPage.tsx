@@ -323,13 +323,17 @@ export default function DrillViewPage() {
     <main className="min-h-screen bg-gray-950 flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900 shrink-0">
-        <Link href="/coach/videos" className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition">
+        <Link
+          href="/coach/videos"
+          aria-label="Back to videos"
+          className="flex items-center justify-center sm:justify-start gap-1.5 text-sm text-gray-400 hover:text-white transition min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
+        >
           <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
           </svg>
-          Videos
+          <span className="hidden sm:inline">Videos</span>
         </Link>
-        <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
+        <img src="/logo-light.png" alt="Ball Masters Florida" className="hidden sm:block" style={{ height: "32px", width: "auto" }} />
         <button
           onClick={openEdit}
           className="flex items-center gap-1 text-sm font-semibold transition"

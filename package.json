@@ -12,6 +12,8 @@
     "@aws-sdk/client-s3": "^3.1045.0",
     "@aws-sdk/s3-presigned-post": "^3.1045.0",
     "@aws-sdk/s3-request-presigner": "^3.1045.0",
+    "@capacitor/core": "^8.4.1",
+    "@capacitor/ios": "^8.4.1",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "firebase": "^12.13.0",
     "firebase-admin": "^13.9.0",
@@ -22,6 +24,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@tailwindcss/postcss": "^4",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/node": "^20",
