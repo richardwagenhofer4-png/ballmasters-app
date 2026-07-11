@@ -21,7 +21,10 @@ service cloud.firestore {
     }
 
     match /inviteCodes/{code} {
-      allow read: if true;
+      // Single-doc lookup by known code is public (needed before Auth signup);
+      // listing the collection to harvest codes is forbidden.
+      allow get: if true;
+      allow list: if false;
       allow create: if request.auth != null
         && request.resource.data.createdBy == request.auth.uid;
       allow update: if request.auth != null && (
@@ -35,7 +38,10 @@ service cloud.firestore {
     }
 
     match /coachInvites/{token} {
-      allow read: if true;
+      // Single-doc lookup by known token is public (needed before Auth signup);
+      // listing the collection to harvest tokens is forbidden.
+      allow get: if true;
+      allow list: if false;
       allow create: if isAdmin();
       allow update: if request.auth != null
         && resource.data.usedBy == null
@@ -95,19 +101,17 @@ service cloud.firestore {
       }
     }
 
-    // Sessions and bookings — open to all authenticated users, no get() calls needed
+    // Sessions and bookings — in-app calendar retired (external booking via Play by Point).
+    // Reads remain for authenticated users (coach dashboards still count past bookings for
+    // lesson stats); writes are locked to admins so nobody can create/modify/delete records.
     match /sessions/{sessionId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     match /bookings/{bookingId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // 1-to-1 messaging threads
@@ -146,12 +150,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // In-app notifications — each user can only read/update their own; server-side writes allowed
+    // In-app notifications — each user can only read/update their own; creates are
+    // constrained so an authed user can't spoof a notification to themselves and
+    // must use a known type. Recipient must differ from caller (nobody legitimately
+    // notifies themselves — this blocks self-spam and abusive impersonation of self).
     match /notifications/{notifId} {
       allow read, update: if request.auth != null
         && resource.data.recipientId == request.auth.uid;
-      // Allow create if caller is authenticated (coach/system writes to student, and vice versa)
-      allow create: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.recipientId is string
+        && request.resource.data.recipientId != request.auth.uid
+        && request.resource.data.type in ['new_video', 'new_message', 'new_comment', 'booking', 'booking_approved', 'booking_declined']
+        && request.resource.data.read == false;
     }
 
   }
