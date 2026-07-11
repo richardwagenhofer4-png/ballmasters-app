@@ -8,6 +8,7 @@ import { collection, doc, getDoc, getDocs, query, where } from "firebase/firesto
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import VideoActionsMenu from "@/components/VideoActionsMenu";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -391,7 +392,7 @@ export default function CoachDashboard() {
         )}
 
         {/* Quick Actions */}
-        <div>
+        <div className={isAdmin ? "pt-7" : ""}>
           <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Actions</h2>
           <div className="grid grid-cols-3 gap-3">
             {[
@@ -462,7 +463,11 @@ export default function CoachDashboard() {
             </div>
             <div className="space-y-3">
               {recentVideos.map(v => (
-                <div key={v.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                <div
+                  key={v.id}
+                  onClick={() => router.push(`/coach/videos/${v.id}/annotate`)}
+                  className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition"
+                >
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex-1 min-w-0">
                       <h3 className="text-sm font-semibold text-gray-900 truncate">{v.title}</h3>
@@ -480,45 +485,23 @@ export default function CoachDashboard() {
                         {v.rate}%
                       </span>
                     )}
+                    <VideoActionsMenu
+                      items={[
+                        { label: "Annotate & Notes", onClick: () => router.push(`/coach/videos/${v.id}/annotate`) },
+                        { label: "Cut Clips", onClick: () => router.push(`/coach/videos/${v.id}/clips`) },
+                        { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
+                      ]}
+                    />
                   </div>
 
                   {v.assignedCount > 0 && (
-                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all"
                         style={{ width: `${v.rate}%`, backgroundColor: v.rate === 100 ? "#01fff9" : "#001c48" }}
                       />
                     </div>
                   )}
-
-                  <div className="flex gap-2">
-                    <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
-                      <button className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                        Watch
-                      </button>
-                    </Link>
-                    <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
-                      <button className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                        Annotate &amp; Notes
-                      </button>
-                    </Link>
-                    <Link href={`/coach/videos/${v.id}/clips`} className="flex-1">
-                      <button className="w-full py-1.5 text-xs font-semibold rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
-                        Cut Clips
-                      </button>
-                    </Link>
-                    <button
-                      onClick={() => handleShare(v.id)}
-                      className="flex-1 py-1.5 text-xs font-semibold rounded-lg transition"
-                      style={{
-                        backgroundColor: copiedId === v.id ? "rgba(1,255,249,0.08)" : "#f3f4f6",
-                        color: copiedId === v.id ? "#001c48" : "#374151",
-                        border: copiedId === v.id ? "1px solid rgba(1,255,249,0.4)" : "1px solid transparent",
-                      }}
-                    >
-                      {copiedId === v.id ? "Copied!" : "Assign to Athlete"}
-                    </button>
-                  </div>
                 </div>
               ))}
             </div>

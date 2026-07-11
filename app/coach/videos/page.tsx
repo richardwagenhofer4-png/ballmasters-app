@@ -14,6 +14,7 @@ import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
+import VideoActionsMenu from "@/components/VideoActionsMenu";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -560,33 +561,32 @@ function CoachVideosPage() {
               const rate = watchRate(v);
               const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
               const needsReply = videoNeedsReply.get(v.id);
+              const watchHref = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
               return (
-                <div key={v.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition">
-                  <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`} className="flex-1 min-w-0 flex items-center gap-3">
-                    <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
-                      <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
-                    </svg>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{v.title}</p>
-                      <VideoMetaRows v={v} students={students} size={26} />
-                    </div>
-                  </Link>
+                <div
+                  key={v.id}
+                  onClick={() => router.push(watchHref)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 cursor-pointer transition"
+                >
+                  <svg className="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                    <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{v.title}</p>
+                    <VideoMetaRows v={v} students={students} size={26} />
+                  </div>
                   <div className="shrink-0 flex items-center gap-1.5">
                     {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
                     {rate !== null && <span className="text-xs font-bold" style={{ color: rateColor(rate) }}>{rate}%</span>}
                     <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={v.status === "published" ? { backgroundColor: "#001c48", color: "#01fff9" } : { backgroundColor: "#f3f4f6", color: "#374151" }}>
                       {v.status === "published" ? "Pub" : "Draft"}
                     </span>
-                    <button onClick={() => openEdit(v)} className="p-1.5 rounded-lg hover:bg-gray-100 transition text-gray-500">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
-                      </svg>
-                    </button>
-                    <button onClick={() => setDeletingVideo(v)} className="p-1.5 rounded-lg hover:bg-red-50 transition text-red-400">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                    </button>
+                    <VideoActionsMenu
+                      items={[
+                        { label: "Edit", onClick: () => openEdit(v) },
+                        { label: "Delete", onClick: () => setDeletingVideo(v), danger: true },
+                      ]}
+                    />
                   </div>
                 </div>
               );
@@ -598,36 +598,45 @@ function CoachVideosPage() {
               const rate = watchRate(v);
               const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
               const needsReply = videoNeedsReply.get(v.id);
+              const watchHref = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
               return (
-                <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
-                    {isDrill ? (
-                      <div className="flex h-16" style={{ gap: 1, backgroundColor: "#111" }}>
-                        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
-                          <svg className="h-5 w-5 opacity-60 text-white" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                          </svg>
-                        </div>
-                        <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#374151" }}>
-                          <svg className="h-5 w-5 opacity-40 text-white" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                          </svg>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center h-16" style={{ backgroundColor: "rgba(0,28,72,0.05)" }}>
-                        <svg className="h-7 w-7 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                <div
+                  key={v.id}
+                  onClick={() => router.push(watchHref)}
+                  className="relative bg-white rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition"
+                >
+                  {isDrill ? (
+                    <div className="flex h-16 rounded-t-xl overflow-hidden" style={{ gap: 1, backgroundColor: "#111" }}>
+                      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
+                        <svg className="h-5 w-5 opacity-60 text-white" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
                         </svg>
                       </div>
-                    )}
-                  </Link>
+                      <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#374151" }}>
+                        <svg className="h-5 w-5 opacity-40 text-white" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
+                        </svg>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-16 rounded-t-xl overflow-hidden" style={{ backgroundColor: "rgba(0,28,72,0.05)" }}>
+                      <svg className="h-7 w-7 text-gray-300" viewBox="0 0 24 24" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="absolute top-1 right-1 z-20">
+                    <VideoActionsMenu
+                      items={[
+                        { label: "Edit", onClick: () => openEdit(v) },
+                        { label: "Delete", onClick: () => setDeletingVideo(v), danger: true },
+                      ]}
+                    />
+                  </div>
                   <div className="p-2.5">
-                    <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
-                      <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1 hover:underline">{v.title}</p>
-                    </Link>
+                    <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug mb-1">{v.title}</p>
                     <VideoMetaRows v={v} students={students} size={24} abbreviate />
-                    <div className="flex flex-wrap gap-1 mt-1.5 mb-2">
+                    <div className="flex flex-wrap gap-1 mt-1.5">
                       <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#001c48", color: "#01fff9" }}>
                         {isDrill ? "Drill" : "Std"}
                       </span>
@@ -636,10 +645,6 @@ function CoachVideosPage() {
                       </span>
                       {rate !== null && <span className="text-xs font-bold" style={{ color: rateColor(rate) }}>{rate}%</span>}
                       {needsReply && <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: "#fef3c7", color: "#b45309" }}>Reply</span>}
-                    </div>
-                    <div className="flex gap-1">
-                      <button onClick={() => openEdit(v)} className="flex-1 py-1.5 text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition">Edit</button>
-                      <button onClick={() => setDeletingVideo(v)} className="flex-1 py-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition">Del</button>
                     </div>
                   </div>
                 </div>
@@ -653,10 +658,26 @@ function CoachVideosPage() {
               const rate = watchRate(v);
               const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
               const needsReply = videoNeedsReply.get(v.id);
+              const watchHref = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
+              const menuItems = isDrill
+                ? [
+                    { label: "Edit", onClick: () => openEdit(v) },
+                    { label: "Delete", onClick: () => setDeletingVideo(v), danger: true },
+                  ]
+                : [
+                    { label: "Annotate & Notes", onClick: () => router.push(`/coach/videos/${v.id}/annotate`) },
+                    { label: "Cut Clips", onClick: () => router.push(`/coach/videos/${v.id}/clips`) },
+                    { label: "Edit", onClick: () => openEdit(v) },
+                    { label: "Delete", onClick: () => setDeletingVideo(v), danger: true },
+                  ];
               return (
-                <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div
+                  key={v.id}
+                  onClick={() => router.push(watchHref)}
+                  className="relative bg-white rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50 transition"
+                >
                   {isDrill && (
-                    <div className="flex h-20 shrink-0" style={{ gap: 2, backgroundColor: "#111" }}>
+                    <div className="flex h-20 shrink-0 rounded-t-xl overflow-hidden" style={{ gap: 2, backgroundColor: "#111" }}>
                       <div className="flex-1 flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
                         <svg className="h-6 w-6 opacity-60" style={{ color: "white" }} viewBox="0 0 24 24" fill="currentColor">
                           <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
@@ -669,12 +690,13 @@ function CoachVideosPage() {
                       </div>
                     </div>
                   )}
-                  <div className="p-4 pb-3">
-                    <div className="flex items-start gap-2 mb-3">
+                  <div className="absolute top-2 right-2 z-20">
+                    <VideoActionsMenu items={menuItems} />
+                  </div>
+                  <div className="p-4">
+                    <div className="flex items-start gap-2 mb-3 pr-10">
                       <div className="flex-1 min-w-0">
-                        <Link href={isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`}>
-                          <h3 className="text-sm font-bold text-gray-900 leading-snug hover:underline truncate cursor-pointer">{v.title}</h3>
-                        </Link>
+                        <h3 className="text-sm font-bold text-gray-900 leading-snug truncate">{v.title}</h3>
                         <VideoMetaRows v={v} students={students} size={26} />
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
@@ -700,64 +722,6 @@ function CoachVideosPage() {
                     ) : (
                       <p className="text-xs text-gray-400">No athletes assigned</p>
                     )}
-                  </div>
-                  <div className="flex border-t border-gray-100">
-                    {isDrill ? (
-                      <>
-                        <Link href={`/coach/videos/${v.id}/drill`} className="flex-1">
-                          <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                            </svg>
-                            View Drill
-                          </button>
-                        </Link>
-                        <div className="w-px bg-gray-100" />
-                      </>
-                    ) : (
-                      <>
-                        <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
-                          <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L8.029 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
-                            </svg>
-                            Watch
-                          </button>
-                        </Link>
-                        <div className="w-px bg-gray-100" />
-                        <Link href={`/coach/videos/${v.id}/annotate`} className="flex-1">
-                          <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3a2 2 0 01.586-1.414z" />
-                            </svg>
-                            Annotate &amp; Notes
-                          </button>
-                        </Link>
-                        <div className="w-px bg-gray-100" />
-                        <Link href={`/coach/videos/${v.id}/clips`} className="flex-1">
-                          <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            Cut Clips
-                          </button>
-                        </Link>
-                        <div className="w-px bg-gray-100" />
-                      </>
-                    )}
-                    <button onClick={() => openEdit(v)} className="flex-1 py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
-                      </svg>
-                      Edit
-                    </button>
-                    <div className="w-px bg-gray-100" />
-                    <button onClick={() => setDeletingVideo(v)} className="flex-1 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition flex items-center justify-center gap-1">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                      Delete
-                    </button>
                   </div>
                 </div>
               );
