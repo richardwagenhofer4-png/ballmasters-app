@@ -10,6 +10,7 @@ export default withSentryConfig(nextConfig, {
   // doesn't require Sentry auth credentials.
   sourcemaps: { disable: true },
   silent: true,
-  disableLogger: true,
-  automaticVercelMonitors: false,
+  // disableLogger and automaticVercelMonitors are webpack-only in v10;
+  // Next 16 defaults to Turbopack, so they'd be no-ops (and emit
+  // deprecation warnings) — omitted.
 });

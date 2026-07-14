@@ -7,3 +7,7 @@ Sentry.init({
   replaysSessionSampleRate: 0,
   replaysOnErrorSampleRate: 0,
 });
+
+// Feed Next.js App Router navigation into Sentry navigation spans.
+// Required in Sentry v10 when the client init lives in instrumentation-client.ts.
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
