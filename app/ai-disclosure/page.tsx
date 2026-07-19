@@ -23,7 +23,7 @@ export default function AIDisclosurePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header style={{ backgroundColor: "#001c48" }}>
+      <header style={{ backgroundColor: "#001c48", paddingTop: "env(safe-area-inset-top)" }}>
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: 32, width: "auto" }} />
           <Link href="/register" className="text-sm font-medium text-gray-300 hover:text-white transition">

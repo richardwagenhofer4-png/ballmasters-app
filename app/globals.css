@@ -43,7 +43,10 @@ body {
    env(safe-area-inset-top) is 0 in normal desktop/mobile browsers, so these
    rules are no-ops there — desktop appearance is untouched.
 
-   Three header patterns cover every page in the app: */
+   Two header patterns cover the rest of the app; the legal pages (terms,
+   privacy, ai-disclosure) set this padding directly on their own inline
+   <header> style instead, since the attribute-selector approach here
+   doesn't survive minification intact in the iOS WKWebView. */
 
 /* A) Navy standard page header — the pt-12 class is used exclusively for the
    navy `<div style={backgroundColor:"#001c48"}>` header on 15+ pages. */
@@ -58,8 +61,3 @@ main.bg-gray-950 > .bg-gray-900:first-child {
   padding-top: calc(0.75rem + env(safe-area-inset-top));
 }
 
-/* C) Legal pages (terms, privacy, ai-disclosure) use a bare <header> element
-   with a navy inline background; add the inset above its inner content. */
-header[style*="#001c48"] {
-  padding-top: env(safe-area-inset-top);
-}
