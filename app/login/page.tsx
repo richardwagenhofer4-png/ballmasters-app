@@ -13,9 +13,14 @@ import {
 } from "firebase/auth";
 import { Capacitor } from "@capacitor/core";
 import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
-import { auth } from "@/lib/firebase";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
+
+function markLastActive(uid: string) {
+  updateDoc(doc(db, "users", uid), { lastActiveAt: serverTimestamp() }).catch(console.error);
+}
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/invalid-credential": "Invalid email or password.",
@@ -51,6 +56,7 @@ export default function LoginPage() {
     const cachedRole = localStorage.getItem("ballmasters_role");
     if (cachedRole === "coach" || cachedRole === "admin" || cachedRole === "student") {
       setAuthCookies(cachedRole);
+      markLastActive(uid);
       router.push("/dashboard");
       return;
     }
@@ -61,6 +67,7 @@ export default function LoginPage() {
     }
     localStorage.setItem("ballmasters_role", profile.role);
     setAuthCookies(profile.role);
+    markLastActive(uid);
     router.push("/dashboard");
   }
 

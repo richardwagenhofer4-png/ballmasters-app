@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc } from "@/lib/firebaseServer";
 import { getVideoUrl, deleteObject } from "@/lib/r2";
 import { getAdminAuth, getAdminFirestore } from "@/lib/firebaseAdmin";
+import { deleteAllDocs } from "@/lib/adminFirestoreHelpers";
 
 export async function GET(
   request: NextRequest,
@@ -107,17 +108,17 @@ export async function DELETE(
       const fileName = d.data().fileName as string | undefined;
       if (fileName) await deleteObject(fileName);
     }
-    await Promise.all(voiceoverSnap.docs.map((d) => d.ref.delete()));
+    await deleteAllDocs(voiceoverSnap);
 
     // 3. Remaining subcollections Firestore does not cascade-delete.
     for (const sub of ["annotations", "comments", "reactions"]) {
       const snap = await videoRef.collection(sub).get();
-      await Promise.all(snap.docs.map((d) => d.ref.delete()));
+      await deleteAllDocs(snap);
     }
 
     // 4. Notifications referencing this video.
     const notifSnap = await db.collection("notifications").where("meta.videoId", "==", id).get();
-    await Promise.all(notifSnap.docs.map((d) => d.ref.delete()));
+    await deleteAllDocs(notifSnap);
 
     // 5. The video document last — a failure above leaves the record visible
     //    rather than orphaning R2/subcollection state invisibly.
