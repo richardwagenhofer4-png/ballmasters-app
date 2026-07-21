@@ -1,4 +1,5 @@
 import { createHmac, createHash } from "crypto";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 const BUCKET = process.env.CLOUDFLARE_R2_BUCKET_NAME!;
 
@@ -63,4 +64,31 @@ export function getUploadUrl(key: string): string {
 
 export function getVideoUrl(fileName: string): string {
   return presignedUrl("GET", fileName, 60 * 60 * 24);
+}
+
+// ---------------------------------------------------------------------------
+// Deletion — separate SDK client, independent of the manual SigV4 signing above.
+// ---------------------------------------------------------------------------
+
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: process.env.CLOUDFLARE_R2_ENDPOINT!,
+  credentials: {
+    accessKeyId: process.env.CLOUDFLARE_R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY!,
+  },
+});
+
+// S3-compatible DeleteObject already no-ops on a missing key (204, no error), but the
+// safety net here guards against that specific error shape if R2 ever surfaces one.
+// Only NoSuchKey is swallowed — any other 404 (e.g. wrong bucket/hostname) is a real
+// failure and must not be treated as "already deleted."
+export async function deleteObject(key: string): Promise<void> {
+  try {
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+  } catch (err: unknown) {
+    const name = (err as { name?: string })?.name;
+    if (name === "NoSuchKey") return;
+    throw err;
+  }
 }

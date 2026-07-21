@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  collection, deleteDoc, doc, getDocs, query, updateDoc, where,
+  collection, doc, getDocs, query, updateDoc, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
@@ -178,6 +178,7 @@ function CoachVideosPage() {
   // Delete modal
   const [deletingVideo, setDeletingVideo] = useState<Video | null>(null);
   const [deleteConfirming, setDeleteConfirming] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const [viewMode, setViewMode] = useViewMode("coach-videos");
 
   useEffect(() => {
@@ -379,12 +380,22 @@ function CoachVideosPage() {
   async function confirmDelete() {
     if (!deletingVideo) return;
     setDeleteConfirming(true);
+    setDeleteError("");
     try {
-      await deleteDoc(doc(db, "videos", deletingVideo.id));
+      const token = await auth.currentUser!.getIdToken();
+      const res = await fetch(`/api/videos/${deletingVideo.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error ?? "Failed to delete video");
+      }
       setVideos(prev => prev.filter(v => v.id !== deletingVideo.id));
       setDeletingVideo(null);
     } catch (err) {
       console.error("[delete video]", err);
+      setDeleteError((err as Error).message || "Failed to delete video. Please try again.");
     } finally {
       setDeleteConfirming(false);
     }
@@ -819,7 +830,7 @@ function CoachVideosPage() {
       {/* Delete Modal */}
       {deletingVideo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => !deleteConfirming && setDeletingVideo(null)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => { if (!deleteConfirming) { setDeletingVideo(null); setDeleteError(""); } }} />
           <div className="relative bg-white rounded-2xl w-full max-w-sm p-6 text-center shadow-xl">
             <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
               <svg className="h-6 w-6 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -830,8 +841,11 @@ function CoachVideosPage() {
             <p className="text-sm text-gray-500 mb-6">
               <span className="font-semibold text-gray-700">&ldquo;{deletingVideo.title}&rdquo;</span> will be permanently deleted. This cannot be undone.
             </p>
+            {deleteError && (
+              <p className="text-sm text-red-600 bg-red-50 rounded-lg py-2 px-3 mb-4">{deleteError}</p>
+            )}
             <div className="flex gap-3">
-              <button onClick={() => setDeletingVideo(null)} disabled={deleteConfirming} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
+              <button onClick={() => { setDeletingVideo(null); setDeleteError(""); }} disabled={deleteConfirming} className="flex-1 rounded-lg border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition disabled:opacity-50">
                 Cancel
               </button>
               <button onClick={confirmDelete} disabled={deleteConfirming} className="flex-1 rounded-lg py-2.5 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50">

@@ -141,6 +141,23 @@ export async function updateFirestoreDoc(
   }
 }
 
+export async function deleteFirestoreDoc(
+  collection: string,
+  docId: string,
+  idToken: string
+): Promise<void> {
+  const res = await fetch(`${FIRESTORE}/${collection}/${docId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  // Firestore's own DELETE is already idempotent (no error for a missing doc),
+  // but guard explicitly so a repeat call never surfaces as a failure.
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json();
+    throw new Error(err.error?.message ?? "Firestore delete failed");
+  }
+}
+
 type Filter = { field: string; op: string; value: unknown };
 
 export async function queryFirestore(

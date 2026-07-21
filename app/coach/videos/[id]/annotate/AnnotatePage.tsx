@@ -533,7 +533,15 @@ export default function AnnotatePage() {
 
   async function deleteVoiceover() {
     try {
-      await deleteDoc(doc(db, "videos", id, "voiceover", "main"));
+      const token = await auth.currentUser!.getIdToken();
+      const res = await fetch(`/api/voiceover?videoId=${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error ?? "Failed to delete voiceover");
+      }
       if (previewBlobUrlRef.current) { URL.revokeObjectURL(previewBlobUrlRef.current); previewBlobUrlRef.current = null; }
       previewAudioRef.current?.pause();
       previewAudioRef.current = null;
