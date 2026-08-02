@@ -53,25 +53,37 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Not found or forbidden" }, { status: 404 });
     }
 
-    // Under-13 privacy gate: skip transcription if any assigned athlete is under 13.
+    // Under-13 privacy gate. While transcription is disabled by policy, it may
+    // proceed ONLY when we can positively confirm every person in the video is
+    // 13 or older. Anything short of that fails safe (skip):
+    //   - No assigned athlete → we don't know who is in the video → skip.
+    //   - A missing profile or unknown DOB → not confirmed 13+ → skip
+    //     (isUnder13 already treats unknown DOB as under-13).
+    //   - Any assigned athlete under 13 → skip.
     if (!UNDER13_TRANSCRIPTION_ENABLED) {
       const studentIds: string[] = (video.studentIds as string[]) ?? [];
-      if (studentIds.length > 0) {
+
+      let skipTranscription: boolean;
+      if (studentIds.length === 0) {
+        skipTranscription = true;
+      } else {
         const profiles = await Promise.all(
           studentIds.map((sid) => getFirestoreDoc("users", sid, idToken))
         );
-        const hasUnder13 = profiles.some(
-          (p) => p && isUnder13(p.dateOfBirth as string | null)
+        // A null profile is not a confirmed 13+ athlete, so it also fails safe.
+        skipTranscription = profiles.some(
+          (p) => !p || isUnder13(p.dateOfBirth as string | null)
         );
-        if (hasUnder13) {
-          await updateFirestoreDoc(
-            "videos",
-            videoId,
-            { transcriptionSkippedReason: "under13_privacy" },
-            idToken
-          );
-          return Response.json({ transcriptionSkippedReason: "under13_privacy" });
-        }
+      }
+
+      if (skipTranscription) {
+        await updateFirestoreDoc(
+          "videos",
+          videoId,
+          { transcriptionSkippedReason: "under13_privacy" },
+          idToken
+        );
+        return Response.json({ transcriptionSkippedReason: "under13_privacy" });
       }
     }
 
