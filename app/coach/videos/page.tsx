@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  collection, doc, getDocs, query, updateDoc, where,
+  collection, doc, getDoc, getDocs, query, updateDoc, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
@@ -149,6 +149,7 @@ function CoachVideosPage() {
 
   const [loading, setLoading] = useState(true);
   const [uid, setUid] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { newComment, newMessage } = useNotificationCounts();
   const [videos, setVideos] = useState<Video[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -186,9 +187,23 @@ function CoachVideosPage() {
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
       try {
+        // Load the caller's role first: admins see every video and athlete;
+        // coaches see only their own. A blanket query would return docs the
+        // rules forbid a coach from reading, which fails the whole query.
+        const profileSnap = await getDoc(doc(db, "users", user.uid));
+        const admin = profileSnap.data()?.role === "admin";
+        setIsAdmin(admin);
+
+        const videosQuery = admin
+          ? collection(db, "videos")
+          : query(collection(db, "videos"), where("coachId", "==", user.uid));
+        const studentsQuery = admin
+          ? query(collection(db, "users"), where("role", "==", "student"))
+          : query(collection(db, "users"), where("coachId", "==", user.uid));
+
         const [videosSnap, studentsSnap] = await Promise.all([
-          getDocs(collection(db, "videos")),
-          getDocs(query(collection(db, "users"), where("role", "==", "student"))),
+          getDocs(videosQuery),
+          getDocs(studentsQuery),
         ]);
         const videoDocs: Video[] = videosSnap.docs.map(d => ({
           id: d.id,
@@ -436,7 +451,7 @@ function CoachVideosPage() {
         </div>
         <div className="flex items-center justify-between mt-3 mb-4">
           <div>
-            <h1 className="text-2xl font-extrabold text-white leading-tight">My Videos</h1>
+            <h1 className="text-2xl font-extrabold text-white leading-tight">{isAdmin ? "All Videos" : "My Videos"}</h1>
             <p className="text-xs mt-0.5" style={{ color: "#01fff9" }}>{videos.length} video{videos.length !== 1 ? "s" : ""} total</p>
           </div>
           <Link href="/coach/upload">

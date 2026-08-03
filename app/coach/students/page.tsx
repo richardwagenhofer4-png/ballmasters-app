@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import ViewToggle from "@/components/ViewToggle";
@@ -102,9 +102,22 @@ export default function StudentsListPage() {
     if (!user) { router.push("/login"); return; }
     (async () => {
       try {
+        // Admins see every athlete and video; coaches see only their own. A
+        // blanket query would return docs the rules forbid a coach from
+        // reading, which fails the whole query.
+        const profileSnap = await getDoc(doc(db, "users", user.uid));
+        const admin = profileSnap.data()?.role === "admin";
+
+        const usersQuery = admin
+          ? query(collection(db, "users"), where("role", "==", "student"))
+          : query(collection(db, "users"), where("coachId", "==", user.uid));
+        const videosQuery = admin
+          ? collection(db, "videos")
+          : query(collection(db, "videos"), where("coachId", "==", user.uid));
+
         const [usersSnap, videosSnap, bookingsSnap] = await Promise.all([
-          getDocs(query(collection(db, "users"), where("role", "==", "student"))),
-          getDocs(collection(db, "videos")),
+          getDocs(usersQuery),
+          getDocs(videosQuery),
           getDocs(query(collection(db, "bookings"), where("status", "==", "confirmed"))),
         ]);
 
