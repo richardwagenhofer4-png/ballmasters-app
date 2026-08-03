@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getAdminAuth, getAdminFirestore } from "@/lib/firebaseAdmin";
 import { FieldValue } from "firebase-admin/firestore";
-import { deleteAllDocs } from "@/lib/adminFirestoreHelpers";
+import { deleteAllDocs, deleteVideoCompletely } from "@/lib/adminFirestoreHelpers";
 
 export async function POST(req: NextRequest) {
   try {
@@ -72,10 +72,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 1. Remove targetUid from video studentIds arrays
+    // 1. Videos this user is tagged in as an athlete. If they were the ONLY
+    // athlete, the video is entirely their personal data — delete it in full
+    // (R2 objects, subcollections, notifications, doc) via the shared helper.
+    // Otherwise just untag them, leaving the video for the remaining athletes.
+    // Coaches are never in studentIds, so this never matches a coach deletion;
+    // the coach path's own video handling (reassignment) is separate below.
     const videosSnap = await db.collection("videos").where("studentIds", "array-contains", targetUid).get();
     for (const vDoc of videosSnap.docs) {
-      await vDoc.ref.update({ studentIds: FieldValue.arrayRemove(targetUid) });
+      const studentIds = (vDoc.data().studentIds as string[]) ?? [];
+      const isSoleAthlete = studentIds.length === 1 && studentIds[0] === targetUid;
+      if (isSoleAthlete) {
+        await deleteVideoCompletely(db, vDoc.id);
+      } else {
+        await vDoc.ref.update({ studentIds: FieldValue.arrayRemove(targetUid) });
+      }
     }
 
     // 2. Remove from sessions bookedBy/waitlist and delete booking docs

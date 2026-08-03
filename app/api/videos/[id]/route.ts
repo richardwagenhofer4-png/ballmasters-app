@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc } from "@/lib/firebaseServer";
-import { getVideoUrl, deleteObject } from "@/lib/r2";
+import { getVideoUrl } from "@/lib/r2";
 import { getAdminAuth, getAdminFirestore } from "@/lib/firebaseAdmin";
-import { deleteAllDocs } from "@/lib/adminFirestoreHelpers";
+import { deleteVideoCompletely } from "@/lib/adminFirestoreHelpers";
 
 export async function GET(
   request: NextRequest,
@@ -92,37 +92,9 @@ export async function DELETE(
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // 1. R2 object(s) backing the video itself.
-    if (video.type === "drill_comparison" || (video.coachVideoKey && video.studentVideoKey)) {
-      await Promise.all([
-        deleteObject(video.coachVideoKey as string),
-        deleteObject(video.studentVideoKey as string),
-      ]);
-    } else if (video.fileName) {
-      await deleteObject(video.fileName as string);
-    }
-
-    // 2. Voiceover — capture its R2 key before the subcollection wipe removes the doc.
-    const voiceoverSnap = await videoRef.collection("voiceover").get();
-    for (const d of voiceoverSnap.docs) {
-      const fileName = d.data().fileName as string | undefined;
-      if (fileName) await deleteObject(fileName);
-    }
-    await deleteAllDocs(voiceoverSnap);
-
-    // 3. Remaining subcollections Firestore does not cascade-delete.
-    for (const sub of ["annotations", "comments", "reactions"]) {
-      const snap = await videoRef.collection(sub).get();
-      await deleteAllDocs(snap);
-    }
-
-    // 4. Notifications referencing this video.
-    const notifSnap = await db.collection("notifications").where("meta.videoId", "==", id).get();
-    await deleteAllDocs(notifSnap);
-
-    // 5. The video document last — a failure above leaves the record visible
-    //    rather than orphaning R2/subcollection state invisibly.
-    await videoRef.delete();
+    // Full teardown (R2 objects, subcollections, notifications, doc last) lives
+    // in the shared helper so this route and account deletion stay in lockstep.
+    await deleteVideoCompletely(db, id);
 
     return Response.json({ success: true });
   } catch (err: unknown) {
