@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
 
@@ -160,9 +161,16 @@ export default function UploadPage() {
   );
 
   useEffect(() => {
-    async function load() {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) { setStudentsLoading(false); return; }
       try {
-        const q = query(collection(db, "users"), where("role", "==", "student"));
+        // Admins see every athlete; a coach sees only their own. A blanket
+        // query would be rejected by the rules for a non-admin coach.
+        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        const admin = (viewerSnap.data()?.role as string) === "admin";
+        const q = admin
+          ? query(collection(db, "users"), where("role", "==", "student"))
+          : query(collection(db, "users"), where("coachId", "==", user.uid));
         const snap = await getDocs(q);
         setStudents(
           snap.docs.map((d) => ({
@@ -176,8 +184,8 @@ export default function UploadPage() {
       } finally {
         setStudentsLoading(false);
       }
-    }
-    load();
+    });
+    return unsub;
   }, []);
 
   function handleModeChange(newMode: Mode) {

@@ -117,11 +117,19 @@ export default function DrillViewPage() {
         setCoachVideoUrl(data.coachVideoUrl);
         setStudentVideoUrl(data.studentVideoUrl);
 
+        // Load students for name resolution / the edit picker. Admins see all
+        // athletes; a coach sees only their own. A blanket query would be
+        // rejected by the rules for a non-admin coach, so both branches below
+        // use the same scoped query.
+        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        const admin = (viewerSnap.data()?.role as string) === "admin";
+        const studentsQuery = admin
+          ? query(collection(db, "users"), where("role", "==", "student"))
+          : query(collection(db, "users"), where("coachId", "==", user.uid));
+
         // Load assigned students
         if (drillDoc.studentIds.length > 0) {
-          const studentsSnap = await getDocs(
-            query(collection(db, "users"), where("role", "==", "student"))
-          );
+          const studentsSnap = await getDocs(studentsQuery);
           const all = studentsSnap.docs.map(d => ({
             id: d.id,
             fullName: (d.data().fullName as string) ?? "Athlete",
@@ -130,9 +138,7 @@ export default function DrillViewPage() {
           setAllStudents(all);
           setStudents(all.filter(s => drillDoc.studentIds.includes(s.id)));
         } else {
-          const studentsSnap = await getDocs(
-            query(collection(db, "users"), where("role", "==", "student"))
-          );
+          const studentsSnap = await getDocs(studentsQuery);
           setAllStudents(studentsSnap.docs.map(d => ({
             id: d.id,
             fullName: (d.data().fullName as string) ?? "Athlete",
