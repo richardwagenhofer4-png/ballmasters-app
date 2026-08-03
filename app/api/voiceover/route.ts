@@ -42,8 +42,9 @@ export async function POST(request: NextRequest) {
     if (!videoId) return Response.json({ error: "videoId required" }, { status: 400 });
 
     const video = await getFirestoreDoc("videos", videoId, idToken);
-    if (!video || video.coachId !== uid) {
-      return Response.json({ error: "Not found or forbidden" }, { status: 404 });
+    const callerProfile = await getFirestoreDoc("users", uid, idToken);
+    if (!video || (video.coachId !== uid && callerProfile?.role !== "admin")) {
+      return Response.json({ error: "You don't have access to this video." }, { status: 404 });
     }
 
     const ext = mimeType?.includes("mp4") ? "mp4" : "webm";
@@ -71,8 +72,9 @@ export async function DELETE(request: NextRequest) {
     if (!videoId) return Response.json({ error: "videoId required" }, { status: 400 });
 
     const video = await getFirestoreDoc("videos", videoId, idToken);
-    if (!video || video.coachId !== uid) {
-      return Response.json({ error: "Not found or forbidden" }, { status: 404 });
+    const callerProfile = await getFirestoreDoc("users", uid, idToken);
+    if (!video || (video.coachId !== uid && callerProfile?.role !== "admin")) {
+      return Response.json({ error: "You don't have access to this video." }, { status: 404 });
     }
 
     const voiceover = await getFirestoreDoc(`videos/${videoId}/voiceover`, "main", idToken);
