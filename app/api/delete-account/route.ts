@@ -197,8 +197,15 @@ export async function POST(req: NextRequest) {
     // 8. Delete user document
     await db.collection("users").doc(targetUid).delete();
 
-    // 9. Delete Firebase Auth account
-    await adminAuth.deleteUser(targetUid);
+    // 9. Delete Firebase Auth account. If it's already gone (a retry after a
+    //    partial failure, or a double-call), that IS the desired end state, so
+    //    treat auth/user-not-found as success. Any other error still propagates.
+    try {
+      await adminAuth.deleteUser(targetUid);
+    } catch (err) {
+      if ((err as { code?: string }).code !== "auth/user-not-found") throw err;
+      console.log(`[delete-account] Auth account for uid=${targetUid} already gone — treating as success`);
+    }
 
     console.log(`[delete-account] Successfully deleted uid=${targetUid} by caller=${callerUid}`);
     return Response.json({ success: true });
