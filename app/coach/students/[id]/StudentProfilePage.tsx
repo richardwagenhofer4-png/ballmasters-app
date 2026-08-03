@@ -149,9 +149,20 @@ export default function StudentProfilePage() {
 
     (async () => {
       try {
+        // Load the viewer's role first: an admin sees this athlete's videos
+        // regardless of owner; a coach sees only their own of them. The coach
+        // branch combines array-contains with an equality filter, which needs
+        // a composite index on videos (coachId ASC + studentIds CONTAINS).
+        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        const admin = (viewerSnap.data()?.role as string) === "admin";
+
+        const videosQuery = admin
+          ? query(collection(db, "videos"), where("studentIds", "array-contains", id))
+          : query(collection(db, "videos"), where("studentIds", "array-contains", id), where("coachId", "==", user.uid));
+
         const [studentSnap, videosSnap] = await Promise.all([
           getDoc(doc(db, "users", id)),
-          getDocs(query(collection(db, "videos"), where("studentIds", "array-contains", id))),
+          getDocs(videosQuery),
         ]);
 
         if (!studentSnap.exists()) {
@@ -163,9 +174,8 @@ export default function StudentProfilePage() {
         const studentData = studentSnap.data() as StudentDoc;
         setStudent(studentData);
 
-        // Admin-only: check viewer role and load coach list
-        const viewerSnap = await getDoc(doc(db, "users", user.uid));
-        if ((viewerSnap.data()?.role as string) === "admin") {
+        // Admin-only: load coach list for reassignment
+        if (admin) {
           setIsAdmin(true);
           const currentCoachId = studentData.coachId ?? null;
           setAthleteCoachId(currentCoachId);

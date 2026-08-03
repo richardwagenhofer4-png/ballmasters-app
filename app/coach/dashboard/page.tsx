@@ -152,18 +152,26 @@ export default function CoachDashboard() {
       setUid(user.uid);
 
       try {
-        const [profileSnap, studentsSnap, videosSnap] = await Promise.all([
-          getDoc(doc(db, "users", user.uid)),
-          getDocs(query(collection(db, "users"), where("role", "==", "student"))),
-          getDocs(collection(db, "videos")),
-        ]);
-
+        // Load the caller's role first: admins see every athlete and video;
+        // coaches see only their own. A blanket query would return docs the
+        // rules forbid a coach from reading, which fails the whole query.
+        const profileSnap = await getDoc(doc(db, "users", user.uid));
         const viewerRole = profileSnap.data()?.role as string | undefined;
+        const admin = viewerRole === "admin";
         setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? user.displayName ?? "Coach");
+        if (admin) setIsAdmin(true);
 
-        if (viewerRole === "admin") {
-          setIsAdmin(true);
-        }
+        const studentsQuery = admin
+          ? query(collection(db, "users"), where("role", "==", "student"))
+          : query(collection(db, "users"), where("coachId", "==", user.uid));
+        const videosQuery = admin
+          ? collection(db, "videos")
+          : query(collection(db, "videos"), where("coachId", "==", user.uid));
+
+        const [studentsSnap, videosSnap] = await Promise.all([
+          getDocs(studentsQuery),
+          getDocs(videosQuery),
+        ]);
 
         const studentDocs: StudentData[] = studentsSnap.docs.map(d => ({
           id: d.id,

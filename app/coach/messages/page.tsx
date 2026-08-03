@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   collection,
+  doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -108,6 +110,7 @@ export default function CoachMessagesPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [uid, setUid] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [threads, setThreads] = useState<ThreadDoc[]>([]);
   const { newComment, newMessage, notifications, markRead } = useNotificationCounts();
 
@@ -136,6 +139,11 @@ export default function CoachMessagesPage() {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
     setUid(user.uid);
+    // Load role so athlete-video lookups can be scoped: admins see all of an
+    // athlete's videos; coaches see only their own (coachId == uid).
+    getDoc(doc(db, "users", user.uid))
+      .then(snap => setIsAdmin((snap.data()?.role as string) === "admin"))
+      .catch(() => {});
   }, [authLoading, user, router]);
 
   // Real-time threads listener
@@ -197,7 +205,9 @@ export default function CoachMessagesPage() {
     // Load athlete videos
     try {
       const videosSnap = await getDocs(
-        query(collection(db, "videos"), where("studentIds", "array-contains", thread.athleteId))
+        isAdmin
+          ? query(collection(db, "videos"), where("studentIds", "array-contains", thread.athleteId))
+          : query(collection(db, "videos"), where("studentIds", "array-contains", thread.athleteId), where("coachId", "==", uid))
       );
       setAthleteVideos(
         videosSnap.docs.map(d => ({ id: d.id, title: (d.data().title as string) ?? "Untitled" }))
