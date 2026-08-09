@@ -131,9 +131,9 @@ service cloud.firestore {
           (
             request.resource.data.coachId == request.auth.uid
             && (
-              get(/databases/$(database)/documents/users/$(request.resource.data.athleteId)).data.coachId == request.auth.uid
+              get(/databases/$(database)/documents/users/$(request.resource.data.athleteId)).data.get('coachId', null) == request.auth.uid
               || (
-                !("coachId" in get(/databases/$(database)/documents/users/$(request.resource.data.athleteId)).data)
+                get(/databases/$(database)/documents/users/$(request.resource.data.athleteId)).data.get('coachId', null) == null
                 && get(/databases/$(database)/documents/settings/general).data.headCoachId == request.auth.uid
               )
             )
