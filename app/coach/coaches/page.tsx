@@ -273,7 +273,7 @@ export default function CoachesPage() {
                       {coach.athleteCount} athlete{coach.athleteCount !== 1 ? "s" : ""} · {coach.videoCount} video{coach.videoCount !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  {coach.uid !== viewerUid && (
+                  {coach.uid !== viewerUid && coach.uid !== headCoachId && (
                     <button
                       onClick={() => {
                         setDeleteTarget(coach);
