@@ -38,6 +38,23 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // A student has no coach or admin console — send them to their own dashboard.
+  // This is UI tidiness, not an access boundary (the role cookie is client-set
+  // and editable; the real protection is the Firestore security rules). Only
+  // the student→coach/admin direction is redirected; /student/* is intentionally
+  // left open because coaches legitimately open student routes. A missing or
+  // unexpected role cookie is not "student", so it keeps the existing
+  // pass-through behaviour below unchanged.
+  if (
+    isAuthenticated &&
+    role === "student" &&
+    (pathname.startsWith("/coach") || pathname.startsWith("/admin"))
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/student/dashboard";
+    return NextResponse.redirect(url);
+  }
+
   // Authenticated users on /coach/*, /student/*, /admin/* pass through immediately —
   // no further redirect logic should touch these routes
   if (
