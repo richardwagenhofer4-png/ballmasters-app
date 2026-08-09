@@ -251,7 +251,9 @@ export default function StudentProfilePage() {
     setSavingCoach(true);
     setCoachSaveSuccess(false);
     try {
-      await setDoc(doc(db, "users", id), { coachId: selectedCoachId }, { merge: true });
+      // Clear the needs-assignment flag in the same write — once a coach is
+      // assigned the athlete is no longer stranded.
+      await setDoc(doc(db, "users", id), { coachId: selectedCoachId, needsCoachAssignment: false }, { merge: true });
       setAthleteCoachId(selectedCoachId);
       const found = coaches.find(c => c.id === selectedCoachId);
       setAthleteCoachName(found?.name ?? selectedCoachId);

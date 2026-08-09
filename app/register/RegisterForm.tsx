@@ -215,6 +215,10 @@ export default function RegisterForm() {
           guardianConsentVersion: "v1",
         } : {}),
         ...(coachId ? { coachId } : {}),
+        // A student whose coach could not be resolved (lookup threw, code doc
+        // missing, or createdBy absent) is flagged so an admin can assign one.
+        // Never flag coaches — they legitimately have no coachId.
+        ...(role === "student" && !coachId ? { needsCoachAssignment: true } : {}),
       });
 
       if (coachInviteToken) {
@@ -305,6 +309,10 @@ export default function RegisterForm() {
         termsConsentVersion: "v1",
         ...(isStudentPath && dateOfBirth ? { dateOfBirth } : {}),
         ...(coachIdGoogle ? { coachId: coachIdGoogle } : {}),
+        // A student whose coach could not be resolved (lookup threw, code doc
+        // missing, or createdBy absent) is flagged so an admin can assign one.
+        // Never flag coaches — they legitimately have no coachId.
+        ...(role === "student" && !coachIdGoogle ? { needsCoachAssignment: true } : {}),
       });
 
       if (coachInviteToken) {

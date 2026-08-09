@@ -21,6 +21,7 @@ export interface UserProfile {
   guardianEmail?: string;
   guardianConsentAt?: unknown;
   guardianConsentVersion?: string;
+  needsCoachAssignment?: boolean;
 }
 
 export async function saveUserProfile(
@@ -53,6 +54,7 @@ export async function saveUserProfile(
   if (profile.guardianEmail) data.guardianEmail = profile.guardianEmail;
   if (profile.guardianConsentAt) data.guardianConsentAt = profile.guardianConsentAt;
   if (profile.guardianConsentVersion) data.guardianConsentVersion = profile.guardianConsentVersion;
+  if (profile.needsCoachAssignment) data.needsCoachAssignment = profile.needsCoachAssignment;
 
   console.log("[saveUserProfile] writing to Firestore path: users/" + profile.uid);
   try {
