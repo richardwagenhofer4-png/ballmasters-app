@@ -6,6 +6,8 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
+import { getAthleteCoachId } from "@/lib/getAthleteCoach";
+import { getOrCreateThread, sendMessage } from "@/lib/messaging";
 import type { Booking } from "@/lib/sessionTypes";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
@@ -142,6 +144,14 @@ export default function StudentProfilePage() {
   const [deleteError, setDeleteError] = useState("");
   const deleteInputRef = useRef<HTMLInputElement>(null);
 
+  // Coach-initiated messaging (only when the viewer is this athlete's resolved coach)
+  const [viewerFullName, setViewerFullName] = useState("");
+  const [resolvedCoachId, setResolvedCoachId] = useState<string | null>(null);
+  const [showCompose, setShowCompose] = useState(false);
+  const [composeText, setComposeText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [composeError, setComposeError] = useState("");
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
@@ -154,7 +164,10 @@ export default function StudentProfilePage() {
         // branch combines array-contains with an equality filter, which needs
         // a composite index on videos (coachId ASC + studentIds CONTAINS).
         const viewerSnap = await getDoc(doc(db, "users", user.uid));
-        const admin = (viewerSnap.data()?.role as string) === "admin";
+        const viewerData = viewerSnap.data();
+        const admin = (viewerData?.role as string) === "admin";
+        // Needed as coachName and senderName when the coach starts a conversation.
+        setViewerFullName((viewerData?.fullName as string) ?? "");
 
         const videosQuery = admin
           ? query(collection(db, "videos"), where("studentIds", "array-contains", id))
@@ -174,11 +187,19 @@ export default function StudentProfilePage() {
         const studentData = studentSnap.data() as StudentDoc;
         setStudent(studentData);
 
+        // Set for every viewer (was previously admin-only).
+        setAthleteCoachId(studentData.coachId ?? null);
+
+        // Resolve the athlete's coach (their coachId, else the head coach) to
+        // decide whether this viewer may message them. The Message button and
+        // the thread-create rule both hinge on the viewer BEING this coach.
+        const resolved = await getAthleteCoachId(id);
+        setResolvedCoachId(resolved);
+
         // Admin-only: load coach list for reassignment
         if (admin) {
           setIsAdmin(true);
           const currentCoachId = studentData.coachId ?? null;
-          setAthleteCoachId(currentCoachId);
           setSelectedCoachId(currentCoachId ?? "");
           const coachesSnap = await getDocs(
             query(collection(db, "users"), where("role", "in", ["coach", "admin"]))
@@ -266,6 +287,22 @@ export default function StudentProfilePage() {
     }
   }
 
+  async function handleSendMessage() {
+    const text = composeText.trim();
+    if (!user || !student || !text || sending) return;
+    setSending(true);
+    setComposeError("");
+    try {
+      const tid = await getOrCreateThread(user.uid, id, viewerFullName, student.fullName, student.avatarId ?? "");
+      await sendMessage(tid, user.uid, "coach", text, null, viewerFullName);
+      router.push("/coach/messages");
+    } catch (err) {
+      console.error("[student-profile] send message error:", err);
+      setComposeError(err instanceof Error ? err.message : "Could not send message. Please try again.");
+      setSending(false);
+    }
+  }
+
   const assigned = videos.length;
   const watched = videos.filter(v => v.viewedBy.includes(id)).length;
   const watchRate = assigned > 0 ? Math.round((watched / assigned) * 100) : 0;
@@ -324,23 +361,35 @@ export default function StudentProfilePage() {
         </Link>
 
         {/* Student identity */}
-        <div className="flex items-center gap-3 mb-5">
-          <InitialsAvatar name={student.fullName} id={id} size={56} variant="student" avatarId={student.avatarId || undefined} />
-          <div>
-            <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
-            <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
-            {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
-              <span
-                className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#01fff9" }}
-              >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                </svg>
-                Guardian-managed account
-              </span>
-            )}
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3 min-w-0">
+            <InitialsAvatar name={student.fullName} id={id} size={56} variant="student" avatarId={student.avatarId || undefined} />
+            <div>
+              <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
+              <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
+              {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
+                <span
+                  className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#01fff9" }}
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                  </svg>
+                  Guardian-managed account
+                </span>
+              )}
+            </div>
           </div>
+          {user?.uid === resolvedCoachId && (
+            <button
+              onClick={() => { setComposeText(""); setComposeError(""); setShowCompose(true); }}
+              className="shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition hover:opacity-90"
+              style={{ backgroundColor: "#01fff9", color: "#001c48" }}
+            >
+              <ChatIcon className="h-4 w-4" />
+              Message
+            </button>
+          )}
         </div>
 
         {/* Stats row */}
@@ -677,6 +726,41 @@ export default function StudentProfilePage() {
                 style={{ backgroundColor: "#dc2626" }}
               >
                 {deletingAccount ? "Deleting…" : "Delete Athlete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compose message (coach → assigned athlete) */}
+      {showCompose && student && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Message {student.fullName}</h2>
+            <p className="text-xs text-gray-500 mb-4">This starts a conversation in Messages.</p>
+            <textarea
+              value={composeText}
+              onChange={e => setComposeText(e.target.value)}
+              placeholder="Write a message…"
+              rows={4}
+              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-cyan-400 mb-4 transition resize-none"
+            />
+            {composeError && <p className="text-xs text-red-600 mb-3">{composeError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCompose(false)}
+                disabled={sending}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendMessage}
+                disabled={sending || !composeText.trim()}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#001c48" }}
+              >
+                {sending ? "Sending…" : "Send"}
               </button>
             </div>
           </div>

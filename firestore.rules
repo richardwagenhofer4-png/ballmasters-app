@@ -121,10 +121,23 @@ service cloud.firestore {
           resource.data.coachId == request.auth.uid
           || resource.data.athleteId == request.auth.uid
         );
-      // Allow create when the doc doesn't exist yet — validate the ids match the caller
+      // Allow create when the doc doesn't exist yet — validate the ids match the caller.
+      // Coach side additionally requires the caller to be the athlete's resolved
+      // coach (their users.coachId, or the head coach when they have no coachId),
+      // so a coach can only open a thread the athlete can actually see. The
+      // athlete side is unchanged.
       allow create: if request.auth != null
         && (
-          request.resource.data.coachId == request.auth.uid
+          (
+            request.resource.data.coachId == request.auth.uid
+            && (
+              get(/databases/$(database)/documents/users/$(request.resource.data.athleteId)).data.coachId == request.auth.uid
+              || (
+                !("coachId" in get(/databases/$(database)/documents/users/$(request.resource.data.athleteId)).data)
+                && get(/databases/$(database)/documents/settings/general).data.headCoachId == request.auth.uid
+              )
+            )
+          )
           || request.resource.data.athleteId == request.auth.uid
         );
 

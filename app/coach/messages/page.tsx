@@ -313,7 +313,7 @@ export default function CoachMessagesPage() {
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <ChatIcon className="h-12 w-12 text-gray-200 mb-4" />
                 <p className="text-sm font-medium text-gray-500">No conversations yet.</p>
-                <p className="text-xs text-gray-400 mt-1">Conversations will appear here once athletes message you.</p>
+                <p className="text-xs text-gray-400 mt-1">You can start one from an athlete&rsquo;s profile.</p>
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
