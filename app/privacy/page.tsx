@@ -8,28 +8,12 @@ function FillIn({ text }: { text: string }) {
   );
 }
 
-function Decide({ text }: { text: string }) {
-  return (
-    <span className="inline rounded bg-amber-100 px-1 py-0.5 text-xs font-mono font-semibold text-amber-900 border border-amber-300 mx-0.5 whitespace-nowrap">
-      DECIDE + FILL IN: {text}
-    </span>
-  );
-}
-
 function ReviewBlock({ children }: { children: React.ReactNode }) {
   if (process.env.NODE_ENV === "production") return null;
   return (
     <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700 font-mono leading-relaxed">
       ⚠ LAWYER REVIEW — {children}
     </div>
-  );
-}
-
-function ReviewInline() {
-  return (
-    <span className="inline rounded bg-red-50 px-1 py-0.5 text-xs font-mono font-semibold text-red-700 border border-red-200 mx-0.5 whitespace-nowrap">
-      ⚠ LAWYER REVIEW
-    </span>
   );
 }
 
@@ -66,14 +50,14 @@ export default function PrivacyPage() {
               Privacy Policy
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: <FillIn text="DATE" />
+              Last updated: August 9, 2026
             </p>
           </div>
 
           {/* WHO WE ARE */}
           <H2>Who We Are</H2>
           <p className={p}>
-            Ball Masters Florida (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) operates the Ball Masters Florida application (the &ldquo;App&rdquo;), a private video coaching platform used by <FillIn text="the soccer school name" /> to share training videos, coaching feedback, scheduling, and messaging between coaches and athletes. The App is operated by <FillIn text="LLC legal name once formed" />, a <FillIn text="state" /> LLC, located at <FillIn text="business address" />. Contact for privacy questions: <FillIn text="privacy@yourdomain.com" />.
+            Ball Masters Florida (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) operates the Ball Masters Florida application (the &ldquo;App&rdquo;), a private video coaching platform used by Ball Masters USA LLC to share training videos, coaching feedback, scheduling, and messaging between coaches and athletes. You may see two different company names, so to be clear: the App is operated by RW App Ventures LLC, a Florida limited liability company, which licenses it for use by Ball Masters USA LLC, a Florida limited liability company — the soccer school whose coaches and athletes use the App. RW App Ventures LLC is located at <FillIn text="BUSINESS_ADDRESS — PENDING" />. Contact for privacy questions: privacy@rwappventures.com or +1 (561) 887-5689.
           </p>
 
           {/* CHILDREN'S PRIVACY */}
@@ -120,12 +104,8 @@ export default function PrivacyPage() {
             The App uses a third-party AI service (OpenAI&rsquo;s Whisper API) to transcribe audio from training videos into text. This means video audio — which may include a child&rsquo;s voice — is sent to OpenAI for processing.
           </p>
           <ul className="mt-3 space-y-2.5 list-disc list-outside ml-4">
-            <li className={li}>
-              <FillIn text="once arranged" /> For data of children under 13, we process this under OpenAI&rsquo;s Zero Data Retention (ZDR) terms, meaning OpenAI does not retain the submitted data after processing.{" "}
-              <ReviewInline /> Confirm ZDR is active before enabling transcription for under-13 users.
-            </li>
+            <li className={li}>Transcription is disabled for users under 13, so their video audio is never sent to OpenAI.</li>
             <li className={li}>Parents/guardians consent to this AI processing at sign-up.</li>
-            <li className={li}>If ZDR is not yet active, transcription is disabled for under-13 users.</li>
           </ul>
 
           {/* SUB-PROCESSORS */}
@@ -151,7 +131,7 @@ export default function PrivacyPage() {
           <ul className="mt-2 space-y-2.5 list-disc list-outside ml-4">
             <li className={li}>Account information, videos, transcripts, messages, and related data are retained while the account is active.</li>
             <li className={li}>When an account is deleted, the associated personal data and videos are removed from our systems and the login is deleted.</li>
-            <li className={li}><Decide text="inactivity window" /> Accounts and videos inactive for <FillIn text="e.g. 18 months" /> will be deleted.</li>
+            <li className={li}>Accounts and videos inactive for 12 months will be deleted.</li>
           </ul>
 
           {/* SECURITY */}
@@ -178,7 +158,7 @@ export default function PrivacyPage() {
           {/* CONTACT */}
           <H2>Contact</H2>
           <p className={p}>
-            <FillIn text="privacy@yourdomain.com" /> &middot; <FillIn text="business address" />
+            privacy@rwappventures.com &middot; +1 (561) 887-5689 &middot; <FillIn text="BUSINESS_ADDRESS — PENDING" />
           </p>
 
           {/* Cross-links */}

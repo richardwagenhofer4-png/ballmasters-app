@@ -1,13 +1,5 @@
 import Link from "next/link";
 
-function FillIn({ text }: { text: string }) {
-  return (
-    <span className="inline rounded bg-amber-100 px-1 py-0.5 text-xs font-mono font-semibold text-amber-900 border border-amber-300 mx-0.5 whitespace-nowrap">
-      FILL IN: {text}
-    </span>
-  );
-}
-
 function ReviewBlock({ children }: { children: React.ReactNode }) {
   if (process.env.NODE_ENV === "production") return null;
   return (
@@ -50,20 +42,20 @@ export default function TermsPage() {
               Terms of Service
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: <FillIn text="DATE" />
+              Last updated: August 9, 2026
             </p>
           </div>
 
           {/* 1. AGREEMENT */}
           <H2 num={1}>Agreement</H2>
           <p className={p}>
-            These Terms govern your use of the Ball Masters Florida App operated by <FillIn text="LLC legal name" />, a <FillIn text="state" /> LLC (&ldquo;we&rdquo;). By creating an account or using the App, you agree to these Terms. If you do not agree, do not use the App.
+            These Terms govern your use of the Ball Masters Florida App operated by RW App Ventures LLC, a Florida LLC (&ldquo;we&rdquo;). By creating an account or using the App, you agree to these Terms. If you do not agree, do not use the App.
           </p>
 
           {/* 2. ELIGIBILITY */}
           <H2 num={2}>Eligibility and Accounts</H2>
           <ul className="mt-2 space-y-2.5 list-disc list-outside ml-4">
-            <li className={li}>The App is a private platform for <FillIn text="the school" /> and its coaches and athletes. Access requires a valid invitation.</li>
+            <li className={li}>The App is a private platform for Ball Masters USA LLC and its coaches and athletes. Access requires a valid invitation.</li>
             <li className={li}>Accounts for anyone under 18 must be created and managed by a parent or legal guardian, who agrees to these Terms on the minor&rsquo;s behalf. For athletes under 13, the parent/guardian owns and manages the account.</li>
             <li className={li}>You must provide accurate information and keep your login credentials secure. You are responsible for activity under your account.</li>
           </ul>
@@ -110,7 +102,7 @@ export default function TermsPage() {
           {/* 8. DISCLAIMERS */}
           <H2 num={8}>Disclaimers and Limitation of Liability</H2>
           <p className={p}>
-            The App is provided &ldquo;as is&rdquo; without warranties. To the fullest extent permitted by law, we are not liable for indirect or consequential damages, and our total liability is limited to <FillIn text="amount — LAWYER REVIEW" />.
+            The App is provided &ldquo;as is&rdquo; without warranties. To the fullest extent permitted by law, we are not liable for indirect or consequential damages, and our total liability is limited to the greater of the fees paid in the preceding 12 months, or USD $100.
           </p>
           <ReviewBlock>
             This section needs attorney drafting.
@@ -119,7 +111,7 @@ export default function TermsPage() {
           {/* 9. GOVERNING LAW */}
           <H2 num={9}>Governing Law</H2>
           <p className={p}>
-            These Terms are governed by the laws of the State of <FillIn text="Florida?" />, without regard to conflict-of-laws rules.
+            These Terms are governed by the laws of the State of Florida, without regard to conflict-of-laws rules.
           </p>
           <ReviewBlock>
             Confirm governing law and jurisdiction.
@@ -128,7 +120,7 @@ export default function TermsPage() {
           {/* 10. CONTACT */}
           <H2 num={10}>Contact</H2>
           <p className={p}>
-            <FillIn text="support@yourdomain.com" />
+            support@rwappventures.com
           </p>
 
           {/* Cross-links */}
