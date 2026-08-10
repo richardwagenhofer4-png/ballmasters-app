@@ -93,6 +93,7 @@ export default function StudentMessagesPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [athleteName, setAthleteName] = useState("");
   const [avatarId, setAvatarId] = useState("");
@@ -131,6 +132,23 @@ export default function StudentMessagesPage() {
         // Load athlete profile
         const profileSnap = await getDoc(doc(db, "users", currentUid));
         const profileData = profileSnap.data();
+
+        // Coaches and admins must never run the thread bootstrap below: it would
+        // resolve their coach as the head coach and getOrCreateThread would write
+        // a junk thread with the head coach as coachId and this account as
+        // athleteId. Redirect them out BEFORE getAthleteCoachId / getOrCreateThread,
+        // so no thread doc is created. The finally at the end of this try always
+        // runs setLoading(false), so returning here does NOT hold the loading
+        // screen — a separate `redirecting` flag keeps it up until the navigation
+        // completes, preventing the student UI from flashing. Any other role,
+        // including a missing one, proceeds exactly as before.
+        const viewerRole = profileData?.role;
+        if (viewerRole === "coach" || viewerRole === "admin") {
+          setRedirecting(true);
+          router.replace("/coach/messages");
+          return;
+        }
+
         const name = profileData?.fullName ?? profileData?.name ?? user.displayName ?? "Athlete";
         const avId = profileData?.avatarId ?? "";
         setAthleteName(name);
@@ -235,7 +253,7 @@ export default function StudentMessagesPage() {
     e.target.style.height = e.target.scrollHeight + "px";
   }
 
-  if (authLoading || loading) {
+  if (authLoading || loading || redirecting) {
     return (
       <main className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
         <svg className="h-10 w-10 animate-spin text-white opacity-40" viewBox="0 0 24 24" fill="none">
