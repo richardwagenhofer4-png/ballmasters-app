@@ -1,13 +1,5 @@
 import Link from "next/link";
 
-function FillIn({ text }: { text: string }) {
-  return (
-    <span className="inline rounded bg-amber-100 px-1 py-0.5 text-xs font-mono font-semibold text-amber-900 border border-amber-300 mx-0.5 whitespace-nowrap">
-      FILL IN: {text}
-    </span>
-  );
-}
-
 function ReviewBlock({ children }: { children: React.ReactNode }) {
   if (process.env.NODE_ENV === "production") return null;
   return (
@@ -57,7 +49,7 @@ export default function PrivacyPage() {
           {/* WHO WE ARE */}
           <H2>Who We Are</H2>
           <p className={p}>
-            Ball Masters Florida (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) operates the Ball Masters Florida application (the &ldquo;App&rdquo;), a private video coaching platform used by Ball Masters USA LLC to share training videos, coaching feedback, scheduling, and messaging between coaches and athletes. You may see two different company names, so to be clear: the App is operated by RW App Ventures LLC, a Florida limited liability company, which licenses it for use by Ball Masters USA LLC, a Florida limited liability company — the soccer school whose coaches and athletes use the App. RW App Ventures LLC is located at <FillIn text="BUSINESS_ADDRESS — PENDING" />. Contact for privacy questions: privacy@rwappventures.com or +1 (561) 887-5689.
+            Ball Masters Florida (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) operates the Ball Masters Florida application (the &ldquo;App&rdquo;), a private video coaching platform used by Ball Masters USA LLC to share training videos, coaching feedback, scheduling, and messaging between coaches and athletes. You may see two different company names, so to be clear: the App is operated by RW App Ventures LLC, a Florida limited liability company, which licenses it for use by Ball Masters USA LLC, a Florida limited liability company — the soccer school whose coaches and athletes use the App. RW App Ventures LLC is located at 5205 Congress Ave, Apt 448, Boca Raton, FL 33487. Contact for privacy questions: privacy@rwappventures.com or +1 (561) 887-5689.
           </p>
 
           {/* CHILDREN'S PRIVACY */}
@@ -158,7 +150,7 @@ export default function PrivacyPage() {
           {/* CONTACT */}
           <H2>Contact</H2>
           <p className={p}>
-            privacy@rwappventures.com &middot; +1 (561) 887-5689 &middot; <FillIn text="BUSINESS_ADDRESS — PENDING" />
+            privacy@rwappventures.com &middot; +1 (561) 887-5689 &middot; 5205 Congress Ave, Apt 448, Boca Raton, FL 33487
           </p>
 
           {/* Cross-links */}
