@@ -1,7 +1,8 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
 
 interface AuthContextType {
   user: User | null;
@@ -9,6 +10,42 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
+
+// Refresh users/{uid}.lastActiveAt so the retention job sees real usage, not
+// just logins. Fire-and-forget (never awaited, never throws into the auth
+// flow), throttled to at most one write per user per local calendar day via a
+// localStorage marker. Login/page.tsx also writes this on login; the throttle
+// suppresses the duplicate.
+function markLastActive(uid: string) {
+  const now = new Date();
+  const today =
+    `${now.getFullYear()}-` +
+    `${String(now.getMonth() + 1).padStart(2, "0")}-` +
+    `${String(now.getDate()).padStart(2, "0")}`;
+  const key = `lastActiveWrite:${uid}`;
+
+  let canPersist = true;
+  try {
+    const last = localStorage.getItem(key);
+    // YYYY-MM-DD sorts chronologically as a string — skip if already written today.
+    if (last && last >= today) return;
+  } catch {
+    // localStorage unavailable — just write, and don't try to persist the marker.
+    canPersist = false;
+  }
+
+  updateDoc(doc(db, "users", uid), { lastActiveAt: serverTimestamp() })
+    .then(() => {
+      if (canPersist) {
+        try {
+          localStorage.setItem(key, today);
+        } catch {
+          // ignore — the write still succeeded
+        }
+      }
+    })
+    .catch(console.error);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Seed from currentUser if already available (instant on warm sessions)
@@ -25,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
       setLoading(false);
       clearTimeout(timeout);
+      if (u) markLastActive(u.uid);
     });
     return () => {
       unsub();
