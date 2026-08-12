@@ -63,7 +63,7 @@ export default function TermsPage() {
           {/* 3. ACCEPTABLE USE */}
           <H2 num={3}>Acceptable Use</H2>
           <p className={p}>
-            You agree not to: misuse the App; upload unlawful, harmful, or infringing content; attempt to access other users&rsquo; data without authorization; disrupt or reverse-engineer the service; or use the App other than for its intended coaching purpose. Coaches are responsible for ensuring they have the right to upload videos depicting athletes, with appropriate parental consent.
+            You agree not to: misuse the App; upload unlawful, harmful, or infringing content; attempt to access other users&rsquo; data without authorization; disrupt or reverse-engineer the service; or use the App other than for its intended coaching purpose. Coaches are responsible for ensuring they have the right to upload videos depicting athletes, with appropriate consent from the athlete or, for athletes under 13, from their parent or legal guardian.
           </p>
 
           {/* 4. CONTENT */}

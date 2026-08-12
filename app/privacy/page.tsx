@@ -97,7 +97,7 @@ export default function PrivacyPage() {
           </p>
           <ul className="mt-3 space-y-2.5 list-disc list-outside ml-4">
             <li className={li}>Transcription is disabled for users under 13, so their video audio is never sent to OpenAI.</li>
-            <li className={li}>Parents/guardians consent to this AI processing at sign-up.</li>
+            <li className={li}>Consent to this AI processing is given at sign-up — by the parent/guardian for athletes under 13, and by the athlete for those 13 and older.</li>
           </ul>
 
           {/* SUB-PROCESSORS */}
@@ -135,7 +135,7 @@ export default function PrivacyPage() {
           {/* YOUR RIGHTS */}
           <H2>Your Rights / Parental Rights</H2>
           <p className={p}>
-            Parents/guardians (and adult users) may access, correct, or delete their information, delete the account, and withdraw consent via in-app account deletion or by contacting us.
+            Parents/guardians (and adult users, and self-registered athletes 13 and older) may access, correct, or delete their information, delete the account, and withdraw consent via in-app account deletion or by contacting us.
           </p>
           <ReviewBlock>
             Add state-law rights (e.g. CCPA) if applicable.
