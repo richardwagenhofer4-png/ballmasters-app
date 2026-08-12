@@ -58,7 +58,7 @@ export default function PrivacyPage() {
             The App is used by children, including children under 13. We comply with the U.S. Children&rsquo;s Online Privacy Protection Act (COPPA).
           </p>
           <ul className="mt-3 space-y-2.5 list-disc list-outside ml-4">
-            <li className={li}>Accounts for athletes under 18 are created by a parent or legal guardian, who provides consent before any of the child&rsquo;s personal information is collected. For athletes under 13, the parent/guardian creates, owns, and manages the account.</li>
+            <li className={li}>For athletes under 13, a parent or legal guardian creates, owns, and manages the account and provides consent before any of the child&rsquo;s personal information is collected. Athletes 13 and older register and operate their own accounts; we encourage a parent or guardian to review this policy with them.</li>
             <li className={li}>A parent/guardian who creates an account consents to our collection and use of their child&rsquo;s information as described in this policy, including the AI transcription described below.</li>
             <li className={li}>Parents/guardians can review their child&rsquo;s information, request corrections, request deletion, and withdraw consent at any time using the in-app account deletion feature or by contacting us. Withdrawing consent or deleting the account removes the child&rsquo;s personal data and videos as described in &ldquo;Data Retention.&rdquo;</li>
             <li className={li}>We collect only information reasonably necessary for the coaching service.</li>

@@ -56,7 +56,7 @@ export default function TermsPage() {
           <H2 num={2}>Eligibility and Accounts</H2>
           <ul className="mt-2 space-y-2.5 list-disc list-outside ml-4">
             <li className={li}>The App is a private platform for Ball Masters USA LLC and its coaches and athletes. Access requires a valid invitation.</li>
-            <li className={li}>Accounts for anyone under 18 must be created and managed by a parent or legal guardian, who agrees to these Terms on the minor&rsquo;s behalf. For athletes under 13, the parent/guardian owns and manages the account.</li>
+            <li className={li}>Accounts for athletes under 13 must be created and managed by a parent or legal guardian, who agrees to these Terms on the child&rsquo;s behalf. Athletes 13 and older may create their own accounts and agree to these Terms themselves.</li>
             <li className={li}>You must provide accurate information and keep your login credentials secure. You are responsible for activity under your account.</li>
           </ul>
 
