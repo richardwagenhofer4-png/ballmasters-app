@@ -49,7 +49,7 @@ export default function PrivacyPage() {
           {/* WHO WE ARE */}
           <H2>Who We Are</H2>
           <p className={p}>
-            Ball Masters Florida (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) operates the Ball Masters Florida application (the &ldquo;App&rdquo;), a private video coaching platform used by Ball Masters USA LLC to share training videos, coaching feedback, scheduling, and messaging between coaches and athletes. You may see two different company names, so to be clear: the App is operated by RW App Ventures LLC, a Florida limited liability company, which licenses it for use by Ball Masters USA LLC, a Florida limited liability company — the soccer school whose coaches and athletes use the App. RW App Ventures LLC is located at 5205 Congress Ave, Apt 448, Boca Raton, FL 33487. Contact for privacy questions: privacy@rwappventures.com or +1 (561) 887-5689.
+            Ball Masters Florida (&ldquo;we,&rdquo; &ldquo;us,&rdquo; &ldquo;our&rdquo;) operates the Ball Masters Florida application (the &ldquo;App&rdquo;), a private video coaching platform used by Ball Masters USA LLC to share training videos, coaching feedback, and messaging between coaches and athletes. You may see two different company names, so to be clear: the App is operated by RW App Ventures LLC, a Florida limited liability company, which licenses it for use by Ball Masters USA LLC, a Florida limited liability company — the soccer school whose coaches and athletes use the App. RW App Ventures LLC is located at 5205 Congress Ave, Apt 448, Boca Raton, FL 33487. Contact for privacy questions: privacy@rwappventures.com or +1 (561) 887-5689.
           </p>
 
           {/* CHILDREN'S PRIVACY */}
@@ -74,14 +74,14 @@ export default function PrivacyPage() {
             <li className={li}><strong>Profile information:</strong> a chosen avatar (icon or initials).</li>
             <li className={li}><strong>Training videos and related content:</strong> videos uploaded by coaches that may depict athletes, plus coach annotations, voiceover, comments, and reactions.</li>
             <li className={li}><strong>Audio/transcripts:</strong> audio from videos may be transcribed to text (see &ldquo;AI Processing&rdquo;).</li>
-            <li className={li}><strong>Scheduling and messaging:</strong> session bookings, waitlist entries, and 1-to-1 messages between an athlete (or guardian) and their coach.</li>
+            <li className={li}><strong>Messaging:</strong> 1-to-1 messages between an athlete (or guardian) and their coach.</li>
             <li className={li}><strong>Usage data:</strong> which videos have been watched, activity for notifications, and standard technical/diagnostic data.</li>
           </ul>
 
           {/* HOW WE USE INFORMATION */}
           <H2>How We Use Information</H2>
           <ul className="mt-2 space-y-2.5 list-disc list-outside ml-4">
-            <li className={li}>To provide the coaching service: deliver videos, feedback, scheduling, messaging, and notifications.</li>
+            <li className={li}>To provide the coaching service: deliver videos, feedback, messaging, and notifications.</li>
             <li className={li}>To transcribe video audio to text to support coaching (see &ldquo;AI Processing&rdquo;).</li>
             <li className={li}>To operate, secure, maintain, and improve the App.</li>
             <li className={li}>To communicate service-related messages.</li>

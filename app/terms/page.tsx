@@ -84,14 +84,8 @@ export default function TermsPage() {
             . AI output may contain errors and is provided to assist, not replace, coaching judgment.
           </p>
 
-          {/* 6. BOOKINGS */}
-          <H2 num={6}>Bookings</H2>
-          <p className={p}>
-            Session bookings are requests subject to coach approval. We are not responsible for sessions, cancellations, or in-person activities, which are arranged between the school/coaches and athletes/guardians.
-          </p>
-
-          {/* 7. TERMINATION */}
-          <H2 num={7}>Termination</H2>
+          {/* 6. TERMINATION */}
+          <H2 num={6}>Termination</H2>
           <p className={p}>
             We may suspend or terminate access for violation of these Terms. You may delete your account at any time in the App.
           </p>
@@ -99,8 +93,8 @@ export default function TermsPage() {
             Add fees/subscription/refund terms if paid subscriptions are introduced.
           </ReviewBlock>
 
-          {/* 8. DISCLAIMERS */}
-          <H2 num={8}>Disclaimers and Limitation of Liability</H2>
+          {/* 7. DISCLAIMERS */}
+          <H2 num={7}>Disclaimers and Limitation of Liability</H2>
           <p className={p}>
             The App is provided &ldquo;as is&rdquo; without warranties. To the fullest extent permitted by law, we are not liable for indirect or consequential damages, and our total liability is limited to the greater of the fees paid in the preceding 12 months, or USD $100.
           </p>
@@ -108,8 +102,8 @@ export default function TermsPage() {
             This section needs attorney drafting.
           </ReviewBlock>
 
-          {/* 9. GOVERNING LAW */}
-          <H2 num={9}>Governing Law</H2>
+          {/* 8. GOVERNING LAW */}
+          <H2 num={8}>Governing Law</H2>
           <p className={p}>
             These Terms are governed by the laws of the State of Florida, without regard to conflict-of-laws rules.
           </p>
@@ -117,8 +111,8 @@ export default function TermsPage() {
             Confirm governing law and jurisdiction.
           </ReviewBlock>
 
-          {/* 10. CONTACT */}
-          <H2 num={10}>Contact</H2>
+          {/* 9. CONTACT */}
+          <H2 num={9}>Contact</H2>
           <p className={p}>
             support@rwappventures.com
           </p>
