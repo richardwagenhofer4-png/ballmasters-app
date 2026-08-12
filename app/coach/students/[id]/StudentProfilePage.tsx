@@ -8,7 +8,6 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import { getOrCreateThread, sendMessage } from "@/lib/messaging";
-import type { Booking } from "@/lib/sessionTypes";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -30,10 +29,6 @@ function StudentsIcon({ className }: { className?: string }) {
 function InviteIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.354-1z" clipRule="evenodd" /></svg>;
 }
-function CalendarIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>;
-}
-
 function ChatIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
 }
@@ -126,7 +121,6 @@ export default function StudentProfilePage() {
   const [notFound, setNotFound] = useState(false);
   const [student, setStudent] = useState<StudentDoc | null>(null);
   const [videos, setVideos] = useState<VideoDoc[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
 
   // Admin-only coach assignment state
   const [isAdmin, setIsAdmin] = useState(false);
@@ -230,15 +224,6 @@ export default function StudentProfilePage() {
           }))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         setVideos(videoList);
-
-        const bookingsSnap = await getDocs(query(
-          collection(db, "bookings"),
-          where("studentId", "==", id),
-          where("status", "==", "confirmed"),
-        ));
-        const bookingList: Booking[] = bookingsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }));
-        setBookings(bookingList);
       } catch (err) {
         console.error("[student-profile]", err);
       } finally {
@@ -306,15 +291,6 @@ export default function StudentProfilePage() {
   const assigned = videos.length;
   const watched = videos.filter(v => v.viewedBy.includes(id)).length;
   const watchRate = assigned > 0 ? Math.round((watched / assigned) * 100) : 0;
-
-  const _today = new Date();
-  const todayDateStr = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, "0")}-${String(_today.getDate()).padStart(2, "0")}`;
-  const upcomingBookings = bookings
-    .filter(b => b.date >= todayDateStr)
-    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-  const pastBookings = bookings
-    .filter(b => b.date < todayDateStr)
-    .sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
 
   if (authLoading || loading) {
     return (
@@ -609,78 +585,6 @@ export default function StudentProfilePage() {
             </div>
           )}
         </section>
-
-        {/* Upcoming sessions */}
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Upcoming Sessions</h2>
-          {upcomingBookings.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
-              No upcoming sessions
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {upcomingBookings.map((b, i) => {
-                const dateStr = b.date
-                  ? new Date(b.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                  : b.date;
-                return (
-                  <div
-                    key={b.id}
-                    className="flex items-center gap-3 px-4 py-3.5"
-                    style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
-                  >
-                    <div
-                      className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: "rgba(1,255,249,0.12)" }}
-                    >
-                      <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
-                        <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{b.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{dateStr} · {b.startTime}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Past sessions */}
-        {pastBookings.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Past Sessions</h2>
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden opacity-70">
-              {pastBookings.map((b, i) => {
-                const dateStr = b.date
-                  ? new Date(b.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                  : b.date;
-                return (
-                  <div
-                    key={b.id}
-                    className="flex items-center gap-3 px-4 py-3"
-                    style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
-                  >
-                    <div
-                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: "#f3f4f6" }}
-                    >
-                      <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
-                        <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-600 truncate">{b.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{dateStr} · {b.startTime}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
 
       </div>
 
