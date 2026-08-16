@@ -22,7 +22,6 @@ interface Student {
 interface StudentStat {
   videoCount: number;
   watchRate: number | null;
-  lessonCount: number;
 }
 
 interface VideoData {
@@ -62,7 +61,7 @@ function formatJoinDate(createdAt: unknown): string {
   } catch { return ""; }
 }
 
-type SortField = "videos" | "lessons" | "watched";
+type SortField = "videos" | "watched";
 
 function rateColor(rate: number): string {
   if (rate >= 75) return "#16a34a";
@@ -111,10 +110,9 @@ export default function StudentsListPage() {
           ? collection(db, "videos")
           : query(collection(db, "videos"), where("coachId", "==", user.uid));
 
-        const [usersSnap, videosSnap, bookingsSnap] = await Promise.all([
+        const [usersSnap, videosSnap] = await Promise.all([
           getDocs(usersQuery),
           getDocs(videosQuery),
-          getDocs(query(collection(db, "bookings"), where("status", "==", "confirmed"))),
         ]);
 
         const list: Student[] = usersSnap.docs
@@ -132,19 +130,13 @@ export default function StudentsListPage() {
           viewedBy: (d.data().viewedBy as string[]) ?? [],
         }));
 
-        const lessonsBySid: Record<string, number> = {};
-        bookingsSnap.docs.forEach(d => {
-          const sid = d.data().studentId as string;
-          if (sid) lessonsBySid[sid] = (lessonsBySid[sid] ?? 0) + 1;
-        });
-
         const statsMap: Record<string, StudentStat> = {};
         for (const s of list) {
           const myVideos = videos.filter(v => v.studentIds.includes(s.id));
           const videoCount = myVideos.length;
           const watchedCount = myVideos.filter(v => v.viewedBy.includes(s.id)).length;
           const watchRate = videoCount > 0 ? Math.round(watchedCount / videoCount * 100) : null;
-          statsMap[s.id] = { videoCount, watchRate, lessonCount: lessonsBySid[s.id] ?? 0 };
+          statsMap[s.id] = { videoCount, watchRate };
         }
 
         setStudents(list);
@@ -171,9 +163,6 @@ export default function StudentsListPage() {
       if (sortBy === "videos") {
         av = sa?.videoCount ?? 0;
         bv = sb?.videoCount ?? 0;
-      } else if (sortBy === "lessons") {
-        av = sa?.lessonCount ?? 0;
-        bv = sb?.lessonCount ?? 0;
       } else {
         av = sa?.watchRate ?? -1;
         bv = sb?.watchRate ?? -1;
@@ -252,7 +241,6 @@ export default function StudentsListPage() {
             <div className="flex gap-2 mb-3">
               {([
                 { field: "videos" as SortField, label: "Videos" },
-                { field: "lessons" as SortField, label: "Lessons" },
                 { field: "watched" as SortField, label: "Watched" },
               ]).map(({ field, label }) => {
                 const isActive = sortBy === field;
@@ -292,7 +280,7 @@ export default function StudentsListPage() {
                         </div>
                         {st && (
                           <div className="text-right shrink-0">
-                            <p className="text-xs text-gray-500">{st.videoCount} vid{st.videoCount !== 1 ? "s" : ""} · {st.lessonCount} lesson{st.lessonCount !== 1 ? "s" : ""}</p>
+                            <p className="text-xs text-gray-500">{st.videoCount} vid{st.videoCount !== 1 ? "s" : ""}</p>
                             {st.watchRate !== null && (
                               <p className="text-xs font-semibold" style={{ color: rateColor(st.watchRate) }}>{st.watchRate}% watched</p>
                             )}
@@ -325,14 +313,10 @@ export default function StudentsListPage() {
                           </svg>
                         </div>
                         {st && (
-                          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-gray-100">
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
                             <div className="text-center">
                               <p className="text-base font-bold text-gray-900">{st.videoCount}</p>
                               <p className="text-xs text-gray-400">Videos</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-base font-bold text-gray-900">{st.lessonCount}</p>
-                              <p className="text-xs text-gray-400">Lessons</p>
                             </div>
                             <div className="text-center">
                               {st.watchRate !== null ? (
@@ -366,7 +350,7 @@ export default function StudentsListPage() {
                         {s.joinedStr && <p className="text-xs text-gray-300 mt-0.5">Joined {s.joinedStr}</p>}
                         {st && (
                           <p className="text-xs text-gray-500 mt-2">
-                            {st.videoCount}v · {st.lessonCount}l
+                            {st.videoCount}v
                             {st.watchRate !== null && (
                               <span style={{ color: rateColor(st.watchRate) }}> · {st.watchRate}%</span>
                             )}
