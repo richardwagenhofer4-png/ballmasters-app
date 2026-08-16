@@ -22,20 +22,16 @@ export async function getOrCreateThread(
   athleteAvatarId: string
 ): Promise<string> {
   const tid = threadId(coachId, athleteId);
+  // Only ever write identity/display fields. The volatile conversation state
+  // (lastMessage, lastSenderRole, lastAt, unreadForCoach, unreadForAthlete) is
+  // owned by sendMessage — its increment() works on a not-yet-existent field,
+  // so nothing needs initialising here. Writing them would reset a live thread
+  // on every page load that resolves it. A pre-create getDoc is not an option:
+  // the /threads read rule denies on a non-existent doc (resource is null), so
+  // it would throw rather than return exists() === false.
   await setDoc(
     doc(db, "threads", tid),
-    {
-      coachId,
-      athleteId,
-      coachName,
-      athleteName,
-      athleteAvatarId,
-      lastMessage: "",
-      lastSenderRole: null,
-      lastAt: null,
-      unreadForCoach: 0,
-      unreadForAthlete: 0,
-    },
+    { coachId, athleteId, coachName, athleteName, athleteAvatarId },
     { merge: true }
   );
   return tid;

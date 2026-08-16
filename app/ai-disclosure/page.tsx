@@ -1,13 +1,5 @@
 import Link from "next/link";
 
-function FillIn({ text }: { text: string }) {
-  return (
-    <span className="inline rounded bg-amber-100 px-1 py-0.5 text-xs font-mono font-semibold text-amber-900 border border-amber-300 mx-0.5 whitespace-nowrap">
-      FILL IN: {text}
-    </span>
-  );
-}
-
 function ReviewBlock({ children }: { children: React.ReactNode }) {
   if (process.env.NODE_ENV === "production") return null;
   return (
@@ -42,7 +34,7 @@ export default function AIDisclosurePage() {
               AI Disclosure &amp; Consent
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: <FillIn text="DATE" />
+              Last updated: August 11, 2026
             </p>
           </div>
 
@@ -57,7 +49,7 @@ export default function AIDisclosurePage() {
           </div>
 
           <p className={p}>
-            When a coach uploads a training video, the audio from that video — which may include your child&rsquo;s voice — may be sent to a third-party AI service (OpenAI&rsquo;s Whisper) to automatically convert speech into text. This transcript helps coaches give better feedback.
+            When a coach uploads a training video, the audio from that video — which may include the athlete&rsquo;s voice — may be sent to a third-party AI service (OpenAI&rsquo;s Whisper) to automatically convert speech into text. This transcript helps coaches give better feedback.
           </p>
 
           {/* Consent items */}
@@ -69,10 +61,8 @@ export default function AIDisclosurePage() {
           </p>
           <ul className="space-y-3 list-disc list-outside ml-4">
             <li className={li}>Video audio may be processed by OpenAI&rsquo;s transcription service.</li>
-            <li className={li}>This may include audio of a minor for whom you are the parent/legal guardian.</li>
-            <li className={li}>
-              <FillIn text="once arranged" /> For children under 13, this processing is performed under OpenAI&rsquo;s Zero Data Retention terms, so the audio is not retained by OpenAI after transcription.
-            </li>
+            <li className={li}>This may include your own audio or, where the account is guardian-managed, that of the child for whom you are the parent or legal guardian.</li>
+            <li className={li}>Transcription is disabled for users under 13, so their video audio is never sent to OpenAI.</li>
             <li className={li}>AI transcripts may contain errors and are used only to assist coaching.</li>
             <li className={li}>You can withdraw consent at any time by deleting the account, which stops further AI processing of that account&rsquo;s content.</li>
           </ul>

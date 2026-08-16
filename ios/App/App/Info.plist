@@ -47,6 +47,12 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ball Masters uses your microphone to record voice notes on coaching videos.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Ball Masters uses your camera to record training videos to upload for coaching feedback.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ball Masters accesses your photo library so you can upload existing training videos for coaching feedback.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -54,7 +60,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.100173822895-5jghdee11clm74bi959d4jgtdfremq3p</string>
+				<string>com.googleusercontent.apps.100173822895-65a529nferme9tsroojo8b3lf8bnrkeo</string>
 			</array>
 		</dict>
 	</array>

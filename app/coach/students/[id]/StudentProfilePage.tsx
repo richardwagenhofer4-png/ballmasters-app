@@ -6,7 +6,8 @@ import { useParams, usePathname, useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/AuthContext";
-import type { Booking } from "@/lib/sessionTypes";
+import { getAthleteCoachId } from "@/lib/getAthleteCoach";
+import { getOrCreateThread, sendMessage } from "@/lib/messaging";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -28,10 +29,6 @@ function StudentsIcon({ className }: { className?: string }) {
 function InviteIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.354-1z" clipRule="evenodd" /></svg>;
 }
-function CalendarIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>;
-}
-
 function ChatIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
 }
@@ -124,7 +121,6 @@ export default function StudentProfilePage() {
   const [notFound, setNotFound] = useState(false);
   const [student, setStudent] = useState<StudentDoc | null>(null);
   const [videos, setVideos] = useState<VideoDoc[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
 
   // Admin-only coach assignment state
   const [isAdmin, setIsAdmin] = useState(false);
@@ -142,6 +138,14 @@ export default function StudentProfilePage() {
   const [deleteError, setDeleteError] = useState("");
   const deleteInputRef = useRef<HTMLInputElement>(null);
 
+  // Coach-initiated messaging (only when the viewer is this athlete's resolved coach)
+  const [viewerFullName, setViewerFullName] = useState("");
+  const [resolvedCoachId, setResolvedCoachId] = useState<string | null>(null);
+  const [showCompose, setShowCompose] = useState(false);
+  const [composeText, setComposeText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [composeError, setComposeError] = useState("");
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
@@ -154,7 +158,10 @@ export default function StudentProfilePage() {
         // branch combines array-contains with an equality filter, which needs
         // a composite index on videos (coachId ASC + studentIds CONTAINS).
         const viewerSnap = await getDoc(doc(db, "users", user.uid));
-        const admin = (viewerSnap.data()?.role as string) === "admin";
+        const viewerData = viewerSnap.data();
+        const admin = (viewerData?.role as string) === "admin";
+        // Needed as coachName and senderName when the coach starts a conversation.
+        setViewerFullName((viewerData?.fullName as string) ?? "");
 
         const videosQuery = admin
           ? query(collection(db, "videos"), where("studentIds", "array-contains", id))
@@ -174,11 +181,19 @@ export default function StudentProfilePage() {
         const studentData = studentSnap.data() as StudentDoc;
         setStudent(studentData);
 
+        // Set for every viewer (was previously admin-only).
+        setAthleteCoachId(studentData.coachId ?? null);
+
+        // Resolve the athlete's coach (their coachId, else the head coach) to
+        // decide whether this viewer may message them. The Message button and
+        // the thread-create rule both hinge on the viewer BEING this coach.
+        const resolved = await getAthleteCoachId(id);
+        setResolvedCoachId(resolved);
+
         // Admin-only: load coach list for reassignment
         if (admin) {
           setIsAdmin(true);
           const currentCoachId = studentData.coachId ?? null;
-          setAthleteCoachId(currentCoachId);
           setSelectedCoachId(currentCoachId ?? "");
           const coachesSnap = await getDocs(
             query(collection(db, "users"), where("role", "in", ["coach", "admin"]))
@@ -209,15 +224,6 @@ export default function StudentProfilePage() {
           }))
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
         setVideos(videoList);
-
-        const bookingsSnap = await getDocs(query(
-          collection(db, "bookings"),
-          where("studentId", "==", id),
-          where("status", "==", "confirmed"),
-        ));
-        const bookingList: Booking[] = bookingsSnap.docs
-          .map(d => ({ id: d.id, ...(d.data() as Omit<Booking, "id">) }));
-        setBookings(bookingList);
       } catch (err) {
         console.error("[student-profile]", err);
       } finally {
@@ -251,7 +257,9 @@ export default function StudentProfilePage() {
     setSavingCoach(true);
     setCoachSaveSuccess(false);
     try {
-      await setDoc(doc(db, "users", id), { coachId: selectedCoachId }, { merge: true });
+      // Clear the needs-assignment flag in the same write — once a coach is
+      // assigned the athlete is no longer stranded.
+      await setDoc(doc(db, "users", id), { coachId: selectedCoachId, needsCoachAssignment: false }, { merge: true });
       setAthleteCoachId(selectedCoachId);
       const found = coaches.find(c => c.id === selectedCoachId);
       setAthleteCoachName(found?.name ?? selectedCoachId);
@@ -264,18 +272,25 @@ export default function StudentProfilePage() {
     }
   }
 
+  async function handleSendMessage() {
+    const text = composeText.trim();
+    if (!user || !student || !text || sending) return;
+    setSending(true);
+    setComposeError("");
+    try {
+      const tid = await getOrCreateThread(user.uid, id, viewerFullName, student.fullName, student.avatarId ?? "");
+      await sendMessage(tid, user.uid, "coach", text, null, viewerFullName);
+      router.push("/coach/messages");
+    } catch (err) {
+      console.error("[student-profile] send message error:", err);
+      setComposeError(err instanceof Error ? err.message : "Could not send message. Please try again.");
+      setSending(false);
+    }
+  }
+
   const assigned = videos.length;
   const watched = videos.filter(v => v.viewedBy.includes(id)).length;
   const watchRate = assigned > 0 ? Math.round((watched / assigned) * 100) : 0;
-
-  const _today = new Date();
-  const todayDateStr = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, "0")}-${String(_today.getDate()).padStart(2, "0")}`;
-  const upcomingBookings = bookings
-    .filter(b => b.date >= todayDateStr)
-    .sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
-  const pastBookings = bookings
-    .filter(b => b.date < todayDateStr)
-    .sort((a, b) => (b.date + b.startTime).localeCompare(a.date + a.startTime));
 
   if (authLoading || loading) {
     return (
@@ -322,23 +337,35 @@ export default function StudentProfilePage() {
         </Link>
 
         {/* Student identity */}
-        <div className="flex items-center gap-3 mb-5">
-          <InitialsAvatar name={student.fullName} id={id} size={56} variant="student" avatarId={student.avatarId || undefined} />
-          <div>
-            <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
-            <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
-            {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
-              <span
-                className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#01fff9" }}
-              >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-                </svg>
-                Guardian-managed account
-              </span>
-            )}
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3 min-w-0">
+            <InitialsAvatar name={student.fullName} id={id} size={56} variant="student" avatarId={student.avatarId || undefined} />
+            <div>
+              <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
+              <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
+              {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
+                <span
+                  className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
+                  style={{ backgroundColor: "rgba(1,255,249,0.15)", color: "#01fff9" }}
+                >
+                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                  </svg>
+                  Guardian-managed account
+                </span>
+              )}
+            </div>
           </div>
+          {user?.uid === resolvedCoachId && (
+            <button
+              onClick={() => { setComposeText(""); setComposeError(""); setShowCompose(true); }}
+              className="shrink-0 flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition hover:opacity-90"
+              style={{ backgroundColor: "#01fff9", color: "#001c48" }}
+            >
+              <ChatIcon className="h-4 w-4" />
+              Message
+            </button>
+          )}
         </div>
 
         {/* Stats row */}
@@ -559,78 +586,6 @@ export default function StudentProfilePage() {
           )}
         </section>
 
-        {/* Upcoming sessions */}
-        <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Upcoming Sessions</h2>
-          {upcomingBookings.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 px-4 py-6 text-center text-sm text-gray-400">
-              No upcoming sessions
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {upcomingBookings.map((b, i) => {
-                const dateStr = b.date
-                  ? new Date(b.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                  : b.date;
-                return (
-                  <div
-                    key={b.id}
-                    className="flex items-center gap-3 px-4 py-3.5"
-                    style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
-                  >
-                    <div
-                      className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: "rgba(1,255,249,0.12)" }}
-                    >
-                      <svg className="h-4 w-4" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
-                        <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{b.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{dateStr} · {b.startTime}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Past sessions */}
-        {pastBookings.length > 0 && (
-          <section>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Past Sessions</h2>
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden opacity-70">
-              {pastBookings.map((b, i) => {
-                const dateStr = b.date
-                  ? new Date(b.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                  : b.date;
-                return (
-                  <div
-                    key={b.id}
-                    className="flex items-center gap-3 px-4 py-3"
-                    style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
-                  >
-                    <div
-                      className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: "#f3f4f6" }}
-                    >
-                      <svg className="h-4 w-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
-                        <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-600 truncate">{b.title}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{dateStr} · {b.startTime}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
       </div>
 
       {/* Delete Athlete Confirm Modal */}
@@ -675,6 +630,41 @@ export default function StudentProfilePage() {
                 style={{ backgroundColor: "#dc2626" }}
               >
                 {deletingAccount ? "Deleting…" : "Delete Athlete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Compose message (coach → assigned athlete) */}
+      {showCompose && student && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Message {student.fullName}</h2>
+            <p className="text-xs text-gray-500 mb-4">This starts a conversation in Messages.</p>
+            <textarea
+              value={composeText}
+              onChange={e => setComposeText(e.target.value)}
+              placeholder="Write a message…"
+              rows={4}
+              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-cyan-400 mb-4 transition resize-none"
+            />
+            {composeError && <p className="text-xs text-red-600 mb-3">{composeError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCompose(false)}
+                disabled={sending}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendMessage}
+                disabled={sending || !composeText.trim()}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#001c48" }}
+              >
+                {sending ? "Sending…" : "Send"}
               </button>
             </div>
           </div>

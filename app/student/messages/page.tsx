@@ -66,9 +66,6 @@ function HomeIcon({ className }: { className?: string }) {
 function VideoIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" /></svg>;
 }
-function CalendarIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" /></svg>;
-}
 function ChatIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>;
 }
@@ -93,6 +90,7 @@ export default function StudentMessagesPage() {
   const { user, loading: authLoading } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [athleteName, setAthleteName] = useState("");
   const [avatarId, setAvatarId] = useState("");
@@ -131,6 +129,23 @@ export default function StudentMessagesPage() {
         // Load athlete profile
         const profileSnap = await getDoc(doc(db, "users", currentUid));
         const profileData = profileSnap.data();
+
+        // Coaches and admins must never run the thread bootstrap below: it would
+        // resolve their coach as the head coach and getOrCreateThread would write
+        // a junk thread with the head coach as coachId and this account as
+        // athleteId. Redirect them out BEFORE getAthleteCoachId / getOrCreateThread,
+        // so no thread doc is created. The finally at the end of this try always
+        // runs setLoading(false), so returning here does NOT hold the loading
+        // screen — a separate `redirecting` flag keeps it up until the navigation
+        // completes, preventing the student UI from flashing. Any other role,
+        // including a missing one, proceeds exactly as before.
+        const viewerRole = profileData?.role;
+        if (viewerRole === "coach" || viewerRole === "admin") {
+          setRedirecting(true);
+          router.replace("/coach/messages");
+          return;
+        }
+
         const name = profileData?.fullName ?? profileData?.name ?? user.displayName ?? "Athlete";
         const avId = profileData?.avatarId ?? "";
         setAthleteName(name);
@@ -235,7 +250,7 @@ export default function StudentMessagesPage() {
     e.target.style.height = e.target.scrollHeight + "px";
   }
 
-  if (authLoading || loading) {
+  if (authLoading || loading || redirecting) {
     return (
       <main className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#001c48" }}>
         <svg className="h-10 w-10 animate-spin text-white opacity-40" viewBox="0 0 24 24" fill="none">

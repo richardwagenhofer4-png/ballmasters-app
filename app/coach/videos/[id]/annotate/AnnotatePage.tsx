@@ -132,7 +132,18 @@ export default function AnnotatePage() {
         if (!res.ok) throw new Error("Failed to load video");
         const data = await res.json();
         setVideo(data);
-        setVideoUrl(data.videoUrl);
+        if (data.videoUrl) {
+          setVideoUrl(data.videoUrl);
+        } else if (data.type === "drill_comparison" || data.coachVideoKey) {
+          // Drill comparison videos have no single videoUrl (the API returns
+          // coachVideoUrl/studentVideoUrl). They belong on the drill page —
+          // redirect rather than hang forever on "Loading video…".
+          router.replace(`/coach/videos/${id}/drill`);
+          return;
+        } else {
+          // No playable URL and not a drill — fail visibly instead of hanging.
+          throw new Error("This video has no playable file.");
+        }
 
         const snap = await getDocs(collection(db, "videos", id, "annotations"));
         setAnnotations(
@@ -767,6 +778,13 @@ export default function AnnotatePage() {
             onPause={() => setIsPaused(true)}
             onSeeked={handleSeeked}
           />
+        ) : error ? (
+          <div className="h-48 flex flex-col items-center justify-center gap-2 px-4 text-center text-sm">
+            <p className="text-red-400">{error}</p>
+            <Link href="/coach/videos" className="font-semibold" style={{ color: "#01fff9" }}>
+              ← Back to videos
+            </Link>
+          </div>
         ) : (
           <div className="h-48 flex items-center justify-center text-gray-600 text-sm">
             Loading video…

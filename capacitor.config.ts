@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.ballmasters.app.dev',
+  appId: 'com.ballmasters.app',
   appName: 'Ball Masters',
   // SPIKE ONLY (spike/local-bundle): load the locally-bundled static export
   // (produced by `npm run build:static` into out-static/) instead of pointing

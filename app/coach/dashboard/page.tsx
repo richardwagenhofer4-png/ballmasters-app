@@ -27,6 +27,8 @@ interface VideoData {
   createdAt: string;
   studentIds: string[];
   viewedBy: string[];
+  type?: string;
+  coachVideoKey?: string;
 }
 
 interface StudentStat extends StudentData {
@@ -101,14 +103,6 @@ function InviteIcon({ className }: { className?: string }) {
   );
 }
 
-function CalendarIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clipRule="evenodd" />
-    </svg>
-  );
-}
-
 function ChatIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -137,7 +131,7 @@ export default function CoachDashboard() {
   const [coachName, setCoachName] = useState("");
   const [students, setStudents] = useState<StudentData[]>([]);
   const [videos, setVideos] = useState<VideoData[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [videosNeedingReply, setVideosNeedingReply] = useState(0);
   const [studentSearch, setStudentSearch] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -186,6 +180,8 @@ export default function CoachDashboard() {
           createdAt: (d.data().createdAt as string) ?? "",
           studentIds: (d.data().studentIds as string[]) ?? [],
           viewedBy: (d.data().viewedBy as string[]) ?? [],
+          type: d.data().type as string | undefined,
+          coachVideoKey: d.data().coachVideoKey as string | undefined,
         }));
 
         setStudents(studentDocs);
@@ -210,7 +206,7 @@ export default function CoachDashboard() {
             );
             if (hasUnreplied) needsReplyCount++;
           });
-          setUnreadCount(needsReplyCount);
+          setVideosNeedingReply(needsReplyCount);
         }
       } catch (err) {
         console.error("[dashboard]", err);
@@ -305,8 +301,8 @@ export default function CoachDashboard() {
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z" /><path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" /></svg>,
     },
     {
-      label: "Needs Reply",
-      value: unreadCount,
+      label: "Videos Needing Reply",
+      value: videosNeedingReply,
       href: "/coach/videos?needsReply=true",
       icon: <svg className="h-4 w-4 mb-1 mx-auto" style={{ color: "#01fff9" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97a48.901 48.901 0 01-3.476.383.39.39 0 00-.297.17l-2.755 4.133a.75.75 0 01-1.248 0l-2.755-4.133a.39.39 0 00-.297-.17 48.9 48.9 0 01-3.476-.384c-1.978-.29-3.348-2.024-3.348-3.97V6.741c0-1.946 1.37-3.68 3.348-3.97z" clipRule="evenodd" /></svg>,
     },
@@ -470,10 +466,22 @@ export default function CoachDashboard() {
               <Link href="/coach/videos" className="text-xs font-semibold" style={{ color: "#001c48" }}>View all →</Link>
             </div>
             <div className="space-y-3">
-              {recentVideos.map(v => (
+              {recentVideos.map(v => {
+                const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+                const watchHref = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
+                const menuItems = isDrill
+                  ? [
+                      { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
+                    ]
+                  : [
+                      { label: "Annotate & Notes", onClick: () => router.push(`/coach/videos/${v.id}/annotate`) },
+                      { label: "Cut Clips", onClick: () => router.push(`/coach/videos/${v.id}/clips`) },
+                      { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
+                    ];
+                return (
                 <div
                   key={v.id}
-                  onClick={() => router.push(`/coach/videos/${v.id}/annotate`)}
+                  onClick={() => router.push(watchHref)}
                   className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition"
                 >
                   <div className="flex items-start gap-2 mb-2">
@@ -493,13 +501,7 @@ export default function CoachDashboard() {
                         {v.rate}%
                       </span>
                     )}
-                    <VideoActionsMenu
-                      items={[
-                        { label: "Annotate & Notes", onClick: () => router.push(`/coach/videos/${v.id}/annotate`) },
-                        { label: "Cut Clips", onClick: () => router.push(`/coach/videos/${v.id}/clips`) },
-                        { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
-                      ]}
-                    />
+                    <VideoActionsMenu items={menuItems} />
                   </div>
 
                   {v.assignedCount > 0 && (
@@ -511,7 +513,8 @@ export default function CoachDashboard() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (

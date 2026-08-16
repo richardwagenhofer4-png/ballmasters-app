@@ -1,13 +1,5 @@
 import Link from "next/link";
 
-function FillIn({ text }: { text: string }) {
-  return (
-    <span className="inline rounded bg-amber-100 px-1 py-0.5 text-xs font-mono font-semibold text-amber-900 border border-amber-300 mx-0.5 whitespace-nowrap">
-      FILL IN: {text}
-    </span>
-  );
-}
-
 function ReviewBlock({ children }: { children: React.ReactNode }) {
   if (process.env.NODE_ENV === "production") return null;
   return (
@@ -50,28 +42,28 @@ export default function TermsPage() {
               Terms of Service
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: <FillIn text="DATE" />
+              Last updated: August 11, 2026
             </p>
           </div>
 
           {/* 1. AGREEMENT */}
           <H2 num={1}>Agreement</H2>
           <p className={p}>
-            These Terms govern your use of the Ball Masters Florida App operated by <FillIn text="LLC legal name" />, a <FillIn text="state" /> LLC (&ldquo;we&rdquo;). By creating an account or using the App, you agree to these Terms. If you do not agree, do not use the App.
+            These Terms govern your use of the Ball Masters Florida App operated by RW App Ventures LLC, a Florida LLC (&ldquo;we&rdquo;). By creating an account or using the App, you agree to these Terms. If you do not agree, do not use the App.
           </p>
 
           {/* 2. ELIGIBILITY */}
           <H2 num={2}>Eligibility and Accounts</H2>
           <ul className="mt-2 space-y-2.5 list-disc list-outside ml-4">
-            <li className={li}>The App is a private platform for <FillIn text="the school" /> and its coaches and athletes. Access requires a valid invitation.</li>
-            <li className={li}>Accounts for anyone under 18 must be created and managed by a parent or legal guardian, who agrees to these Terms on the minor&rsquo;s behalf. For athletes under 13, the parent/guardian owns and manages the account.</li>
+            <li className={li}>The App is a private platform for Ball Masters USA LLC and its coaches and athletes. Access requires a valid invitation.</li>
+            <li className={li}>Accounts for athletes under 13 must be created and managed by a parent or legal guardian, who agrees to these Terms on the child&rsquo;s behalf. Athletes 13 and older may create their own accounts and agree to these Terms themselves.</li>
             <li className={li}>You must provide accurate information and keep your login credentials secure. You are responsible for activity under your account.</li>
           </ul>
 
           {/* 3. ACCEPTABLE USE */}
           <H2 num={3}>Acceptable Use</H2>
           <p className={p}>
-            You agree not to: misuse the App; upload unlawful, harmful, or infringing content; attempt to access other users&rsquo; data without authorization; disrupt or reverse-engineer the service; or use the App other than for its intended coaching purpose. Coaches are responsible for ensuring they have the right to upload videos depicting athletes, with appropriate parental consent.
+            You agree not to: misuse the App; upload unlawful, harmful, or infringing content; attempt to access other users&rsquo; data without authorization; disrupt or reverse-engineer the service; or use the App other than for its intended coaching purpose. Coaches are responsible for ensuring they have the right to upload videos depicting athletes, with appropriate consent from the athlete or, for athletes under 13, from their parent or legal guardian.
           </p>
 
           {/* 4. CONTENT */}
@@ -92,14 +84,8 @@ export default function TermsPage() {
             . AI output may contain errors and is provided to assist, not replace, coaching judgment.
           </p>
 
-          {/* 6. BOOKINGS */}
-          <H2 num={6}>Bookings</H2>
-          <p className={p}>
-            Session bookings are requests subject to coach approval. We are not responsible for sessions, cancellations, or in-person activities, which are arranged between the school/coaches and athletes/guardians.
-          </p>
-
-          {/* 7. TERMINATION */}
-          <H2 num={7}>Termination</H2>
+          {/* 6. TERMINATION */}
+          <H2 num={6}>Termination</H2>
           <p className={p}>
             We may suspend or terminate access for violation of these Terms. You may delete your account at any time in the App.
           </p>
@@ -107,28 +93,28 @@ export default function TermsPage() {
             Add fees/subscription/refund terms if paid subscriptions are introduced.
           </ReviewBlock>
 
-          {/* 8. DISCLAIMERS */}
-          <H2 num={8}>Disclaimers and Limitation of Liability</H2>
+          {/* 7. DISCLAIMERS */}
+          <H2 num={7}>Disclaimers and Limitation of Liability</H2>
           <p className={p}>
-            The App is provided &ldquo;as is&rdquo; without warranties. To the fullest extent permitted by law, we are not liable for indirect or consequential damages, and our total liability is limited to <FillIn text="amount — LAWYER REVIEW" />.
+            The App is provided &ldquo;as is&rdquo; without warranties. To the fullest extent permitted by law, we are not liable for indirect or consequential damages, and our total liability is limited to the greater of the fees paid in the preceding 12 months, or USD $100.
           </p>
           <ReviewBlock>
             This section needs attorney drafting.
           </ReviewBlock>
 
-          {/* 9. GOVERNING LAW */}
-          <H2 num={9}>Governing Law</H2>
+          {/* 8. GOVERNING LAW */}
+          <H2 num={8}>Governing Law</H2>
           <p className={p}>
-            These Terms are governed by the laws of the State of <FillIn text="Florida?" />, without regard to conflict-of-laws rules.
+            These Terms are governed by the laws of the State of Florida, without regard to conflict-of-laws rules.
           </p>
           <ReviewBlock>
             Confirm governing law and jurisdiction.
           </ReviewBlock>
 
-          {/* 10. CONTACT */}
-          <H2 num={10}>Contact</H2>
+          {/* 9. CONTACT */}
+          <H2 num={9}>Contact</H2>
           <p className={p}>
-            <FillIn text="support@yourdomain.com" />
+            support@rwappventures.com
           </p>
 
           {/* Cross-links */}
