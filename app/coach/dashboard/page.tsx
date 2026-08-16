@@ -27,6 +27,8 @@ interface VideoData {
   createdAt: string;
   studentIds: string[];
   viewedBy: string[];
+  type?: string;
+  coachVideoKey?: string;
 }
 
 interface StudentStat extends StudentData {
@@ -178,6 +180,8 @@ export default function CoachDashboard() {
           createdAt: (d.data().createdAt as string) ?? "",
           studentIds: (d.data().studentIds as string[]) ?? [],
           viewedBy: (d.data().viewedBy as string[]) ?? [],
+          type: d.data().type as string | undefined,
+          coachVideoKey: d.data().coachVideoKey as string | undefined,
         }));
 
         setStudents(studentDocs);
@@ -462,10 +466,22 @@ export default function CoachDashboard() {
               <Link href="/coach/videos" className="text-xs font-semibold" style={{ color: "#001c48" }}>View all →</Link>
             </div>
             <div className="space-y-3">
-              {recentVideos.map(v => (
+              {recentVideos.map(v => {
+                const isDrill = v.type === "drill_comparison" || !!v.coachVideoKey;
+                const watchHref = isDrill ? `/coach/videos/${v.id}/drill` : `/coach/videos/${v.id}/annotate`;
+                const menuItems = isDrill
+                  ? [
+                      { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
+                    ]
+                  : [
+                      { label: "Annotate & Notes", onClick: () => router.push(`/coach/videos/${v.id}/annotate`) },
+                      { label: "Cut Clips", onClick: () => router.push(`/coach/videos/${v.id}/clips`) },
+                      { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
+                    ];
+                return (
                 <div
                   key={v.id}
-                  onClick={() => router.push(`/coach/videos/${v.id}/annotate`)}
+                  onClick={() => router.push(watchHref)}
                   className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:bg-gray-50 active:bg-gray-100 transition"
                 >
                   <div className="flex items-start gap-2 mb-2">
@@ -485,13 +501,7 @@ export default function CoachDashboard() {
                         {v.rate}%
                       </span>
                     )}
-                    <VideoActionsMenu
-                      items={[
-                        { label: "Annotate & Notes", onClick: () => router.push(`/coach/videos/${v.id}/annotate`) },
-                        { label: "Cut Clips", onClick: () => router.push(`/coach/videos/${v.id}/clips`) },
-                        { label: copiedId === v.id ? "Copied!" : "Assign to Athlete", onClick: () => handleShare(v.id) },
-                      ]}
-                    />
+                    <VideoActionsMenu items={menuItems} />
                   </div>
 
                   {v.assignedCount > 0 && (
@@ -503,7 +513,8 @@ export default function CoachDashboard() {
                     </div>
                   )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (
