@@ -83,6 +83,7 @@ export default function AnnotatePage() {
   const [voiceover, setVoiceover] = useState<VoiceoverMeta | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "recording" | "stopping" | "uploading">("idle");
   const [recordingTimer, setRecordingTimer] = useState(0);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [voiceoverError, setVoiceoverError] = useState("");
   const [previewMode, setPreviewMode] = useState(false);
@@ -99,7 +100,7 @@ export default function AnnotatePage() {
   const uploadUrlRef = useRef<string>("");
   const fileNameRef = useRef<string>("");
   const recordingStartVideoTimeRef = useRef<number>(0);
-  const wallStartRef = useRef<number>(0);
+  const countdownCancelledRef = useRef(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewBlobUrlRef = useRef<string | null>(null);
@@ -163,6 +164,7 @@ export default function AnnotatePage() {
 
   useEffect(() => {
     return () => {
+      countdownCancelledRef.current = true;
       streamRef.current?.getTracks().forEach(t => t.stop());
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       if (previewBlobUrlRef.current) URL.revokeObjectURL(previewBlobUrlRef.current);
@@ -423,68 +425,155 @@ export default function AnnotatePage() {
     setLiveDrawing(null);
   }
 
+  // Mic + upload target are prepared while the countdown runs so that
+  // recorder.start() and video.play() can fire in the same tick.
+  async function prepareRecording(): Promise<{ recorder: MediaRecorder; mimeType: string }> {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    });
+    streamRef.current = stream;
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "audio/mp4";
+
+    const token = await auth.currentUser!.getIdToken();
+    const res = await fetch("/api/voiceover", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ videoId: id, mimeType }),
+    });
+    if (!res.ok) throw new Error("Failed to prepare upload");
+    const { uploadUrl, fileName } = await res.json();
+    uploadUrlRef.current = uploadUrl;
+    fileNameRef.current = fileName;
+
+    audioChunksRef.current = [];
+    const recorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorderRef.current = recorder;
+    return { recorder, mimeType };
+  }
+
+  function releaseMic() {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
+  }
+
   async function startRecording() {
+    if (recordingState !== "idle" || countdown !== null) return;
+    const video = videoRef.current;
+    if (!video) return;
     setVoiceoverError("");
+
+    // play() on an ended clip restarts it at 0, which would leave the anchor
+    // pointing at the end of the video and desync the whole take.
+    if (video.ended || (video.duration && video.currentTime >= video.duration - 0.05)) {
+      setVoiceoverError("The playhead is at the end of the clip — scrub back to where the voiceover should start.");
+      return;
+    }
+
+    // Anchor the take to the frame the video is parked on when the countdown
+    // begins. Do not touch currentTime after this — a seek would abort the take.
+    recordingStartVideoTimeRef.current = video.currentTime;
+    video.pause();
+    countdownCancelledRef.current = false;
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      streamRef.current = stream;
-      // Keep speaker output out of the microphone while recording.
-      if (videoRef.current) videoRef.current.muted = true;
+      const prep = prepareRecording();
+      prep.catch(() => {}); // rejection is surfaced at the await below
 
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-        ? "audio/webm;codecs=opus"
-        : MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/mp4";
+      for (let n = 3; n > 0 && !countdownCancelledRef.current; n--) {
+        setCountdown(n);
+        await new Promise(r => setTimeout(r, 1000));
+      }
 
-      const token = await auth.currentUser!.getIdToken();
-      const res = await fetch("/api/voiceover", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ videoId: id, mimeType }),
-      });
-      if (!res.ok) throw new Error("Failed to prepare upload");
-      const { uploadUrl, fileName } = await res.json();
-      uploadUrlRef.current = uploadUrl;
-      fileNameRef.current = fileName;
-
-      audioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType });
-      mediaRecorderRef.current = recorder;
-      recordingStartVideoTimeRef.current = videoRef.current?.currentTime ?? 0;
-      wallStartRef.current = Date.now();
+      const { recorder, mimeType } = await prep;
+      setCountdown(null);
+      if (countdownCancelledRef.current) { releaseMic(); return; }
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
       recorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        const duration = (Date.now() - wallStartRef.current) / 1000;
+        // Duration in VIDEO time. The recorder is paused whenever the video is,
+        // so the audio timeline matches the playback formula on the student
+        // page (audio t = video t − startTime).
+        const endVideoTime = videoRef.current?.currentTime ?? recordingStartVideoTimeRef.current;
+        const duration = Math.max(0, endVideoTime - recordingStartVideoTimeRef.current);
         doUploadVoiceover(blob, duration, mimeType);
       };
 
+      // Keep speaker output out of the microphone while recording.
+      video.muted = true;
       recorder.start(1000);
+      video.play().catch(() => {});
       setRecordingState("recording");
       setRecordingTimer(0);
-      timerIntervalRef.current = setInterval(() => setRecordingTimer(prev => prev + 1), 1000);
+      // The timer reports elapsed VIDEO time, so it stops while the video does.
+      timerIntervalRef.current = setInterval(() => {
+        const v = videoRef.current;
+        if (v) setRecordingTimer(Math.max(0, v.currentTime - recordingStartVideoTimeRef.current));
+      }, 250);
     } catch (err) {
+      setCountdown(null);
       setVoiceoverError((err as Error).message);
-      streamRef.current?.getTracks().forEach(t => t.stop());
-      streamRef.current = null;
+      releaseMic();
       if (videoRef.current) videoRef.current.muted = false;
     }
   }
 
   function stopRecording() {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return; // already stopping
     setRecordingState("stopping");
     if (timerIntervalRef.current) { clearInterval(timerIntervalRef.current); timerIntervalRef.current = null; }
-    mediaRecorderRef.current?.stop();
-    streamRef.current?.getTracks().forEach(t => t.stop());
-    streamRef.current = null;
+    recorder.stop();
+    videoRef.current?.pause();
+    releaseMic();
     if (videoRef.current) videoRef.current.muted = false;
   }
+
+  // ── Recorder follows the video's playback state ─────────────────────────────
+  // Any dead air while the video is paused/buffering would permanently desync
+  // everything after it, since playback maps audio to video linearly.
+  useEffect(() => {
+    if (recordingState !== "recording") return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const holdRecorder = () => {
+      const rec = mediaRecorderRef.current;
+      if (rec?.state === "recording") rec.pause();
+    };
+    const resumeRecorder = () => {
+      const rec = mediaRecorderRef.current;
+      if (rec?.state === "paused") rec.resume();
+    };
+    const handleEnded = () => stopRecording();
+    const handleSeeking = () => {
+      setVoiceoverError("Recording stopped — you can't scrub while recording. Press Record again to start a new take.");
+      stopRecording();
+    };
+
+    video.addEventListener("pause", holdRecorder);
+    video.addEventListener("waiting", holdRecorder);
+    video.addEventListener("stalled", holdRecorder);
+    video.addEventListener("playing", resumeRecorder);
+    video.addEventListener("ended", handleEnded);
+    video.addEventListener("seeking", handleSeeking);
+    return () => {
+      video.removeEventListener("pause", holdRecorder);
+      video.removeEventListener("waiting", holdRecorder);
+      video.removeEventListener("stalled", holdRecorder);
+      video.removeEventListener("playing", resumeRecorder);
+      video.removeEventListener("ended", handleEnded);
+      video.removeEventListener("seeking", handleSeeking);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordingState]);
 
   async function doUploadVoiceover(blob: Blob, duration: number, mimeType: string) {
     setRecordingState("uploading");
@@ -1001,7 +1090,18 @@ export default function AnnotatePage() {
           )}
         </div>
 
-        {recordingState === "idle" && (
+        {countdown !== null && (
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-600 text-sm font-bold text-white">
+              {countdown}
+            </span>
+            <span className="text-xs text-gray-400">
+              Playback and recording start together at {fmt(recordingStartVideoTimeRef.current)}…
+            </span>
+          </div>
+        )}
+
+        {recordingState === "idle" && countdown === null && (
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={startRecording}
@@ -1037,7 +1137,7 @@ export default function AnnotatePage() {
               <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse inline-block" />
               <span className="text-sm font-mono font-semibold text-red-400">{fmt(recordingTimer)}</span>
             </div>
-            <span className="text-xs text-gray-400">Recording from mic…</span>
+            <span className="text-xs text-gray-400">Recording — pauses with the video</span>
             <button
               onClick={stopRecording}
               className="ml-auto flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-semibold text-white bg-red-700 hover:bg-red-600 transition"
