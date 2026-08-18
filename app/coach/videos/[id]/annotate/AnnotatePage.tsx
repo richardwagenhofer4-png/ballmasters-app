@@ -426,8 +426,12 @@ export default function AnnotatePage() {
   async function startRecording() {
     setVoiceoverError("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
       streamRef.current = stream;
+      // Keep speaker output out of the microphone while recording.
+      if (videoRef.current) videoRef.current.muted = true;
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
         ? "audio/webm;codecs=opus"
@@ -469,6 +473,7 @@ export default function AnnotatePage() {
       setVoiceoverError((err as Error).message);
       streamRef.current?.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+      if (videoRef.current) videoRef.current.muted = false;
     }
   }
 
@@ -478,6 +483,7 @@ export default function AnnotatePage() {
     mediaRecorderRef.current?.stop();
     streamRef.current?.getTracks().forEach(t => t.stop());
     streamRef.current = null;
+    if (videoRef.current) videoRef.current.muted = false;
   }
 
   async function doUploadVoiceover(blob: Blob, duration: number, mimeType: string) {
@@ -510,6 +516,7 @@ export default function AnnotatePage() {
     if (previewing) {
       previewAudioRef.current?.pause();
       videoRef.current?.pause();
+      if (videoRef.current) videoRef.current.muted = false;
       setPreviewing(false);
       return;
     }
@@ -532,12 +539,19 @@ export default function AnnotatePage() {
       }
       const audio = previewAudioRef.current;
       audio.currentTime = 0;
-      audio.onended = () => { videoRef.current?.pause(); setPreviewing(false); };
+      audio.onended = () => {
+        videoRef.current?.pause();
+        if (videoRef.current) videoRef.current.muted = false;
+        setPreviewing(false);
+      };
       if (videoRef.current) videoRef.current.currentTime = voiceover.startTime;
       await audio.play();
+      // Duck the clip's own soundtrack under the voiceover.
+      if (videoRef.current) videoRef.current.muted = true;
       videoRef.current?.play();
       setPreviewing(true);
     } catch (err) {
+      if (videoRef.current) videoRef.current.muted = false;
       setVoiceoverError((err as Error).message);
     }
   }
@@ -556,6 +570,7 @@ export default function AnnotatePage() {
       if (previewBlobUrlRef.current) { URL.revokeObjectURL(previewBlobUrlRef.current); previewBlobUrlRef.current = null; }
       previewAudioRef.current?.pause();
       previewAudioRef.current = null;
+      if (videoRef.current) videoRef.current.muted = false;
       setVoiceover(null);
       setPreviewing(false);
     } catch (err) {
@@ -598,7 +613,12 @@ export default function AnnotatePage() {
           const { audioUrl } = await res.json();
           src = audioUrl;
         }
-        previewModeAudioRef.current = new Audio(src);
+        const pmAudio = new Audio(src);
+        // Restore the clip audio when the voiceover runs out mid-playback.
+        pmAudio.onended = () => {
+          if (previewVideoRef.current) previewVideoRef.current.muted = false;
+        };
+        previewModeAudioRef.current = pmAudio;
       } catch {
         // voiceover won't play in preview, but continue
       }
@@ -609,6 +629,7 @@ export default function AnnotatePage() {
   function closePreview() {
     previewVideoRef.current?.pause();
     if (previewModeAudioRef.current) previewModeAudioRef.current.pause();
+    if (previewVideoRef.current) previewVideoRef.current.muted = false;
     previewPausedAtRef.current = null;
     setPreviewMode(false);
   }
@@ -642,6 +663,7 @@ export default function AnnotatePage() {
       previewPausedAtRef.current = ann.timestamp;
       pvid.pause();
       previewModeAudioRef.current?.pause();
+      pvid.muted = false;
     }
 
     if (previewPausedAtRef.current !== null) {
@@ -658,11 +680,15 @@ export default function AnnotatePage() {
     if (offset >= 0 && offset < voiceover.duration) {
       audio.currentTime = offset;
       audio.play().catch(() => {});
+      pvid.muted = true;
+    } else {
+      pvid.muted = false;
     }
   }
 
   function handlePreviewPause() {
     previewModeAudioRef.current?.pause();
+    if (previewVideoRef.current) previewVideoRef.current.muted = false;
   }
 
   function handlePreviewSeeked() {
@@ -694,8 +720,10 @@ export default function AnnotatePage() {
       if (offset >= 0 && offset < voiceover.duration) {
         previewModeAudioRef.current.currentTime = offset;
         previewModeAudioRef.current.play().catch(() => {});
+        pvid.muted = true;
       } else {
         previewModeAudioRef.current.pause();
+        pvid.muted = false;
       }
     }
   }

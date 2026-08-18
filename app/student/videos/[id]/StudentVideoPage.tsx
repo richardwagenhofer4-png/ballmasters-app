@@ -155,6 +155,12 @@ export default function VideoPlayerPage() {
               const { audioUrl } = await voRes.json();
               const audio = new Audio(audioUrl);
               audio.preload = "auto";
+              // The voiceover can run out while the clip keeps playing, and
+              // syncVoiceover only runs on play/seek — restore the clip audio here.
+              audio.onended = () => {
+                if (videoRef.current) videoRef.current.muted = false;
+                setVoiceoverActive(false);
+              };
               voiceoverAudioRef.current = audio;
             }
           }
@@ -211,6 +217,10 @@ export default function VideoPlayerPage() {
     return () => {
       voiceoverAudioRef.current?.pause();
       voiceoverAudioRef.current = null;
+      // Reading the live ref is intentional: we want whatever element is
+      // mounted now, so the clip is never left muted.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (videoRef.current) videoRef.current.muted = false;
       reactionsUnsubRef.current?.();
     };
   }, []);
@@ -278,15 +288,20 @@ export default function VideoPlayerPage() {
     const expected = video.currentTime - voiceoverMeta.startTime;
     if (expected < 0 || expected > voiceoverMeta.duration + 0.5) {
       audio.pause();
+      video.muted = false;
       setVoiceoverActive(false);
       return;
     }
     if (Math.abs(audio.currentTime - expected) > 0.3) audio.currentTime = expected;
     if (videoPaused) {
       audio.pause();
+      video.muted = false;
       setVoiceoverActive(false);
     } else {
       audio.play().catch(() => {});
+      // Duck the clip's own soundtrack so the coach's voice is intelligible.
+      // Set on the ref, not a React prop, so <video controls> keeps its own UI.
+      video.muted = true;
       setVoiceoverActive(true);
     }
   }
@@ -305,6 +320,7 @@ export default function VideoPlayerPage() {
 
   function handlePause() {
     voiceoverAudioRef.current?.pause();
+    if (videoRef.current) videoRef.current.muted = false;
     setVoiceoverActive(false);
   }
 
@@ -471,7 +487,7 @@ export default function VideoPlayerPage() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2a3 3 0 013 3v6a3 3 0 11-6 0V5a3 3 0 013-3zm-1 15.93V20H9a1 1 0 100 2h6a1 1 0 100-2h-2v-2.07A8.001 8.001 0 0020 11a1 1 0 10-2 0 6 6 0 01-12 0 1 1 0 10-2 0 8.001 8.001 0 007 7.93z" />
                 </svg>
-                Coach voiceover
+                Coach voiceover — clip audio muted
               </div>
             )}
 
