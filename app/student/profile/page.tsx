@@ -41,6 +41,10 @@ export default function StudentProfilePage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [avatarId, setAvatarId] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const nameMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -55,9 +59,35 @@ export default function StudentProfilePage() {
     getDoc(doc(db, "users", user.uid)).then(snap => {
       const data = snap.data();
       setName(data?.fullName ?? data?.name ?? user.displayName ?? "Athlete");
+      setNameInput(data?.fullName ?? data?.name ?? user.displayName ?? "");
       setAvatarId(data?.avatarId ?? "");
     });
   }, [authLoading, user, router]);
+
+  useEffect(() => () => { if (nameMsgTimerRef.current) clearTimeout(nameMsgTimerRef.current); }, []);
+
+  function flashNameMsg(msg: { ok: boolean; text: string }) {
+    if (nameMsgTimerRef.current) clearTimeout(nameMsgTimerRef.current);
+    setNameMsg(msg);
+    nameMsgTimerRef.current = setTimeout(() => setNameMsg(null), 3000);
+  }
+
+  async function handleSaveName() {
+    if (!user || savingName) return;
+    const trimmed = nameInput.trim();
+    if (!trimmed) { flashNameMsg({ ok: false, text: "Name can't be empty." }); return; }
+    setSavingName(true);
+    try {
+      await setDoc(doc(db, "users", user.uid), { fullName: trimmed }, { merge: true });
+      setNameInput(trimmed);
+      setName(trimmed);
+      flashNameMsg({ ok: true, text: "Saved" });
+    } catch {
+      flashNameMsg({ ok: false, text: "Couldn't save — try again." });
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   async function handleAvatarSelect(id: string) {
     if (!user) return;
@@ -135,6 +165,32 @@ export default function StudentProfilePage() {
       </div>
 
       <div className="px-4 py-6 space-y-5">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Your name</p>
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-3.5">
+            <input
+              type="text"
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              placeholder="Full name"
+              className="w-full text-sm text-gray-900 placeholder-gray-400 focus:outline-none"
+            />
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={handleSaveName}
+              disabled={savingName || !nameInput.trim()}
+              className="h-9 px-4 rounded-xl text-sm font-semibold text-white transition disabled:opacity-40"
+              style={{ backgroundColor: "#001c48" }}
+            >
+              {savingName ? "Saving…" : "Save"}
+            </button>
+            {nameMsg && (
+              <span className={`text-xs ${nameMsg.ok ? "text-green-600" : "text-red-600"}`}>{nameMsg.text}</span>
+            )}
+          </div>
+        </div>
+
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Choose your avatar</p>
           <div className="grid grid-cols-4 gap-3">

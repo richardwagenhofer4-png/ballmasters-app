@@ -1,7 +1,13 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { useAuth } from "@/lib/AuthContext";
+import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 function HomeIcon({ className }: { className?: string }) {
@@ -29,7 +35,83 @@ const NAV_ITEMS = [
 
 export default function SettingsPage() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const { newComment, newMessage } = useNotificationCounts();
+
+  const [nameInput, setNameInput] = useState("");
+  const [savingName, setSavingName] = useState(false);
+  const [nameMsg, setNameMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const nameMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const deleteInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) { router.push("/login"); return; }
+    getDoc(doc(db, "users", user.uid)).then(snap => {
+      const data = snap.data();
+      setNameInput(data?.fullName ?? data?.name ?? user.displayName ?? "");
+    });
+  }, [authLoading, user, router]);
+
+  useEffect(() => () => { if (nameMsgTimerRef.current) clearTimeout(nameMsgTimerRef.current); }, []);
+
+  function flashNameMsg(msg: { ok: boolean; text: string }) {
+    if (nameMsgTimerRef.current) clearTimeout(nameMsgTimerRef.current);
+    setNameMsg(msg);
+    nameMsgTimerRef.current = setTimeout(() => setNameMsg(null), 3000);
+  }
+
+  async function handleSaveName() {
+    if (!user || savingName) return;
+    const trimmed = nameInput.trim();
+    if (!trimmed) { flashNameMsg({ ok: false, text: "Name can't be empty." }); return; }
+    setSavingName(true);
+    try {
+      await setDoc(doc(db, "users", user.uid), { fullName: trimmed }, { merge: true });
+      setNameInput(trimmed);
+      flashNameMsg({ ok: true, text: "Saved" });
+    } catch {
+      flashNameMsg({ ok: false, text: "Couldn't save — try again." });
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  async function handleSignOut() {
+    await signOut(auth);
+    clearAuthCookies();
+    router.push("/login");
+  }
+
+  async function handleDeleteAccount() {
+    if (!user || deletingAccount) return;
+    setDeletingAccount(true);
+    setDeleteError("");
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/delete-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ targetUid: user.uid }),
+      });
+      const data = await res.json() as { error?: string };
+      // The API explains head-coach / last-admin refusals in the error text;
+      // show it verbatim rather than a generic failure message.
+      if (!res.ok) throw new Error(data.error ?? "Deletion failed");
+      await signOut(auth);
+      clearAuthCookies();
+      router.push("/login?deleted=1");
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Something went wrong.");
+      setDeletingAccount(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
@@ -40,18 +122,105 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-extrabold text-white">Settings</h1>
       </div>
 
-      <div className="px-4 py-12 flex flex-col items-center text-center">
-        <div
-          className="h-16 w-16 rounded-full flex items-center justify-center mb-4"
-          style={{ backgroundColor: "#dbeafe" }}
-        >
-          <svg className="h-8 w-8" style={{ color: "#001c48" }} viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M11.078 2.25c-.917 0-1.699.663-1.85 1.567L9.05 4.889c-.02.12-.115.26-.297.348a7.493 7.493 0 00-.986.57c-.166.115-.334.126-.45.083L6.3 5.508a1.875 1.875 0 00-2.282.819l-.922 1.597a1.875 1.875 0 00.432 2.385l.84.692c.095.078.17.229.154.43a7.598 7.598 0 000 1.139c.015.2-.059.352-.153.43l-.841.692a1.875 1.875 0 00-.432 2.385l.922 1.597a1.875 1.875 0 002.282.818l1.019-.382c.115-.043.283-.031.45.082.312.214.641.405.985.57.182.088.277.228.297.35l.178 1.071c.151.904.933 1.567 1.85 1.567h1.844c.916 0 1.699-.663 1.85-1.567l.178-1.072c.02-.12.114-.26.297-.349.344-.165.673-.356.985-.57.167-.114.335-.125.45-.082l1.02.382a1.875 1.875 0 002.28-.819l.923-1.597a1.875 1.875 0 00-.432-2.385l-.84-.692c-.095-.078-.17-.229-.154-.43a7.614 7.614 0 000-1.139c-.016-.2.059-.352.153-.43l.84-.692c.708-.582.891-1.59.433-2.385l-.922-1.597a1.875 1.875 0 00-2.282-.818l-1.02.382c-.114.043-.282.031-.449-.083a7.49 7.49 0 00-.985-.57c-.183-.087-.277-.227-.297-.348l-.179-1.072a1.875 1.875 0 00-1.85-1.567h-1.843zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" clipRule="evenodd" /></svg>
+      <div className="px-4 py-6 space-y-5">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Profile</p>
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-3.5">
+            <input
+              type="text"
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              placeholder="Full name"
+              className="w-full text-sm text-gray-900 placeholder-gray-400 focus:outline-none"
+            />
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={handleSaveName}
+              disabled={savingName || !nameInput.trim()}
+              className="h-9 px-4 rounded-xl text-sm font-semibold text-white transition disabled:opacity-40"
+              style={{ backgroundColor: "#001c48" }}
+            >
+              {savingName ? "Saving…" : "Save"}
+            </button>
+            {nameMsg && (
+              <span className={`text-xs ${nameMsg.ok ? "text-green-600" : "text-red-600"}`}>{nameMsg.text}</span>
+            )}
+          </div>
         </div>
-        <h2 className="text-lg font-bold text-gray-800 mb-1">Settings coming soon</h2>
-        <p className="text-sm text-gray-400 max-w-xs">
-          Account preferences, notification settings, and more will be available here.
-        </p>
+
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</p>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-3 bg-white rounded-xl border border-gray-200 px-4 py-3.5 text-sm font-medium text-red-600 hover:bg-red-50 transition"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign out
+          </button>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Danger Zone</p>
+          <button
+            onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); setDeleteError(""); setTimeout(() => deleteInputRef.current?.focus(), 50); }}
+            className="w-full flex items-center gap-3 bg-white rounded-xl border border-red-200 px-4 py-3.5 text-sm font-medium text-red-600 hover:bg-red-50 transition"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete My Account
+          </button>
+        </div>
       </div>
+
+      {/* Delete Account Confirm Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                <svg className="h-5 w-5 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                </svg>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900">Delete Your Account?</h2>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              This permanently deletes your account, your messages, and removes you from your videos and sessions. <span className="font-semibold">This cannot be undone.</span>
+            </p>
+            <p className="text-xs font-semibold text-gray-500 mb-2">Type <span className="text-red-600 font-bold">DELETE</span> to confirm</p>
+            <input
+              ref={deleteInputRef}
+              type="text"
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-red-400 mb-4 transition"
+            />
+            {deleteError && <p className="text-xs text-red-600 mb-3">{deleteError}</p>}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deletingAccount}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== "DELETE" || deletingAccount}
+                className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#dc2626" }}
+              >
+                {deletingAccount ? "Deleting…" : "Delete Account"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav
         className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex"
