@@ -101,6 +101,8 @@ export default function AnnotatePage() {
   const fileNameRef = useRef<string>("");
   const recordingStartVideoTimeRef = useRef<number>(0);
   const countdownCancelledRef = useRef(false);
+  const lastVideoTimeRef = useRef<number>(0);
+  const abortedBySeekRef = useRef(false);
   const timerIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewBlobUrlRef = useRef<string | null>(null);
@@ -479,6 +481,8 @@ export default function AnnotatePage() {
     recordingStartVideoTimeRef.current = video.currentTime;
     video.pause();
     countdownCancelledRef.current = false;
+    abortedBySeekRef.current = false;
+    lastVideoTimeRef.current = recordingStartVideoTimeRef.current;
 
     try {
       const prep = prepareRecording();
@@ -501,7 +505,11 @@ export default function AnnotatePage() {
         // Duration in VIDEO time. The recorder is paused whenever the video is,
         // so the audio timeline matches the playback formula on the student
         // page (audio t = video t − startTime).
-        const endVideoTime = videoRef.current?.currentTime ?? recordingStartVideoTimeRef.current;
+        // On a seek-abort, currentTime is already the seek DESTINATION by the
+        // time `seeking` fires, so fall back to the last sampled frame.
+        const endVideoTime = abortedBySeekRef.current
+          ? lastVideoTimeRef.current
+          : videoRef.current?.currentTime ?? recordingStartVideoTimeRef.current;
         const duration = Math.max(0, endVideoTime - recordingStartVideoTimeRef.current);
         doUploadVoiceover(blob, duration, mimeType);
       };
@@ -515,7 +523,9 @@ export default function AnnotatePage() {
       // The timer reports elapsed VIDEO time, so it stops while the video does.
       timerIntervalRef.current = setInterval(() => {
         const v = videoRef.current;
-        if (v) setRecordingTimer(Math.max(0, v.currentTime - recordingStartVideoTimeRef.current));
+        if (!v) return;
+        lastVideoTimeRef.current = v.currentTime;
+        setRecordingTimer(Math.max(0, v.currentTime - recordingStartVideoTimeRef.current));
       }, 250);
     } catch (err) {
       setCountdown(null);
@@ -554,6 +564,7 @@ export default function AnnotatePage() {
     };
     const handleEnded = () => stopRecording();
     const handleSeeking = () => {
+      abortedBySeekRef.current = true;
       setVoiceoverError("Recording stopped — you can't scrub while recording. Press Record again to start a new take.");
       stopRecording();
     };
