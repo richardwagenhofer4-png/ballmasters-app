@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import CommentsSection from "@/components/CommentsSection";
 
 interface DrillDoc {
   id: string;
@@ -56,6 +57,7 @@ export default function DrillViewPage() {
   const studentRef = useRef<HTMLVideoElement>(null);
   const syncingRef = useRef(false);
 
+  const [uid, setUid] = useState<string | null>(null);
   const [drill, setDrill] = useState<DrillDoc | null>(null);
   const [coachVideoUrl, setCoachVideoUrl] = useState<string | null>(null);
   const [studentVideoUrl, setStudentVideoUrl] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export default function DrillViewPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
+      setUid(user.uid);
       try {
         const idToken = await user.getIdToken();
 
@@ -413,6 +416,18 @@ export default function DrillViewPage() {
             </div>
           )}
         </div>
+
+        {/* Comments */}
+        {uid && drill && (
+          <CommentsSection
+            videoId={id}
+            uid={uid}
+            authorName={drill.coachName}
+            role="coach"
+            videoCoachId={drill.coachId}
+            videoStudentIds={drill.studentIds}
+          />
+        )}
       </div>
 
       {/* Edit modal */}
