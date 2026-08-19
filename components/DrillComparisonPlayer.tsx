@@ -40,6 +40,70 @@ function formatDate(iso: string) {
   } catch { return ""; }
 }
 
+type PanelRenderer = (maxH: string, extraStyle?: React.CSSProperties) => React.ReactNode;
+
+// Declared at module scope on purpose: as a function inside the parent's render
+// body this became a new component type on every re-render, and the parent DOES
+// re-render mid-playback (onTimeUpdate -> setActiveAnnotation), which unmounted
+// and remounted both <video> elements at each annotation boundary.
+function VideoSection({
+  layout,
+  coachPanel,
+  studentPanel,
+  activeTab,
+  setActiveTab,
+}: {
+  layout: DrillMeta["layout"];
+  coachPanel: PanelRenderer;
+  studentPanel: PanelRenderer;
+  activeTab: "coach" | "student";
+  setActiveTab: (tab: "coach" | "student") => void;
+}) {
+  if (layout === "side_by_side") {
+    return (
+      <div className="bg-black shrink-0 flex" style={{ gap: 2 }}>
+        {coachPanel("40vh")}
+        {studentPanel("40vh")}
+      </div>
+    );
+  }
+  if (layout === "stacked") {
+    return (
+      <div className="bg-black shrink-0">
+        {coachPanel("38vh")}
+        <div style={{ height: 2, backgroundColor: "#111" }} />
+        {studentPanel("38vh")}
+      </div>
+    );
+  }
+  // tabs
+  return (
+    <div className="bg-black shrink-0">
+      <div className="flex bg-gray-900 border-b border-gray-800">
+        {(["coach", "student"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className="flex-1 py-2 text-sm font-semibold transition"
+            style={{
+              color: activeTab === tab ? "#4ade80" : "#9ca3af",
+              borderBottom: activeTab === tab ? "2px solid #4ade80" : "2px solid transparent",
+            }}
+          >
+            {tab === "coach" ? "Coach Demo" : "Your Attempt"}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: activeTab === "coach" ? "block" : "none" }}>
+        {coachPanel("50vh")}
+      </div>
+      <div style={{ display: activeTab === "student" ? "block" : "none" }}>
+        {studentPanel("50vh")}
+      </div>
+    </div>
+  );
+}
+
 export default function DrillComparisonPlayer({ videoId, uid, userName, meta, coachVideoUrl, studentVideoUrl }: Props) {
   const coachRef = useRef<HTMLVideoElement>(null);
   const studentRef = useRef<HTMLVideoElement>(null);
@@ -203,6 +267,7 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
           className="w-full bg-black"
           style={{ maxHeight: maxH, display: "block" }}
           playsInline
+          muted
           onPlay={() => { recordView(); syncPlay("coach"); }}
           onPause={() => syncPause("coach")}
           onSeeked={() => syncSeek("coach")}
@@ -238,6 +303,7 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
           className="w-full bg-black"
           style={{ maxHeight: maxH, display: "block" }}
           playsInline
+          muted
           onPlay={() => syncPlay("student")}
           onPause={() => syncPause("student")}
           onSeeked={() => syncSeek("student")}
@@ -246,52 +312,6 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
       )}
     </div>
   );
-
-  function VideoSection() {
-    if (layout === "side_by_side") {
-      return (
-        <div className="bg-black shrink-0 flex" style={{ gap: 2 }}>
-          {coachPanel("40vh")}
-          {studentPanel("40vh")}
-        </div>
-      );
-    }
-    if (layout === "stacked") {
-      return (
-        <div className="bg-black shrink-0">
-          {coachPanel("38vh")}
-          <div style={{ height: 2, backgroundColor: "#111" }} />
-          {studentPanel("38vh")}
-        </div>
-      );
-    }
-    // tabs
-    return (
-      <div className="bg-black shrink-0">
-        <div className="flex bg-gray-900 border-b border-gray-800">
-          {(["coach", "student"] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className="flex-1 py-2 text-sm font-semibold transition"
-              style={{
-                color: activeTab === tab ? "#4ade80" : "#9ca3af",
-                borderBottom: activeTab === tab ? "2px solid #4ade80" : "2px solid transparent",
-              }}
-            >
-              {tab === "coach" ? "Coach Demo" : "Your Attempt"}
-            </button>
-          ))}
-        </div>
-        <div style={{ display: activeTab === "coach" ? "block" : "none" }}>
-          {coachPanel("50vh")}
-        </div>
-        <div style={{ display: activeTab === "student" ? "block" : "none" }}>
-          {studentPanel("50vh")}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <main className="min-h-screen bg-gray-950 flex flex-col">
@@ -318,7 +338,13 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
       </div>
 
       {/* Two-video section */}
-      <VideoSection />
+      <VideoSection
+        layout={layout}
+        coachPanel={coachPanel}
+        studentPanel={studentPanel}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
 
       {/* Scrollable section */}
       <div className="flex-1 overflow-y-auto">
