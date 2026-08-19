@@ -254,6 +254,7 @@ export default function DrillViewPage() {
         className="w-full bg-black"
         style={{ maxHeight: maxH, display: "block" }}
         playsInline
+        muted
         onPlay={() => syncPlay("coach")}
         onPause={() => syncPause("coach")}
         onSeeked={() => syncSeek("coach")}
@@ -272,6 +273,7 @@ export default function DrillViewPage() {
         className="w-full bg-black"
         style={{ maxHeight: maxH, display: "block" }}
         playsInline
+        muted
         onPlay={() => syncPlay("student")}
         onPause={() => syncPause("student")}
         onSeeked={() => syncSeek("student")}
