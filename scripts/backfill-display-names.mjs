@@ -1,4 +1,9 @@
-// One-time backfill: re-sync denormalised display names to users/{uid}.
+// One-time cleanup: denormalised display names, plus a few fixed text edits.
+//
+// Two kinds of pass live here. The display-name passes are re-derivable — they
+// read from users/{uid}, so re-running self-corrects. The text passes are
+// one-way edits to what someone actually wrote, matched on the whole trimmed
+// field, and the original survives nowhere afterwards.
 //
 // Display names are copied onto documents at write time and were never
 // refreshed when the Settings page (commit 2614cd3) started letting users
@@ -17,8 +22,13 @@
 // authorName / parentId), app/api/videos/route.ts (coachId / coachName) and
 // lib/messaging.ts (coachId / athleteId / coachName / athleteName), not guessed.
 //
+// Plus two one-off whole-field typo fixes:
+//
+//   videos/{videoId}/comments/{id}.text  — see TEXT_FIX_FROM
+//   threads/{threadId}/messages/{id}.text — see MESSAGE_FIX_FROM
+//
 // DRY RUN BY DEFAULT. Nothing is written unless --apply is passed. No field
-// other than the three above is ever touched.
+// other than the five above is ever touched.
 //
 // Needs in env (loaded via `node --env-file=.env.local`):
 //   FIREBASE_ADMIN_PROJECT_ID / FIREBASE_ADMIN_CLIENT_EMAIL / FIREBASE_ADMIN_PRIVATE_KEY
@@ -54,6 +64,10 @@ const SKIP_COMMENTS = new Set(["yOFnRkkz08rJmHPw65EY"]);
 // trimmed field value in full — never as a substring rewrite.
 const TEXT_FIX_FROM = "Very fun excersice";
 const TEXT_FIX_TO = "Very fun exercise";
+
+// Whole-field typo fix applied by backfillMessageText(), same rules.
+const MESSAGE_FIX_FROM = "Absolutely. I think we are scheduled on Thursday. We can do more of these excersices";
+const MESSAGE_FIX_TO = "Absolutely. I think we are scheduled on Thursday. We can do more of these exercises";
 const BATCH_LIMIT = 450; // Firestore caps a batch at 500 ops; leave headroom.
 
 // --- helpers -------------------------------------------------------------
@@ -246,6 +260,49 @@ async function backfillCommentText() {
   return { label: "comment text", scanned, changes: hits.length, committed, skipped: 0 };
 }
 
+// --- 3c. threads/{id}/messages.text (one-off typo fix) ------------------
+
+// Field name `text` confirmed from lib/messaging.ts (the addDoc in sendMessage)
+// rather than guessed.
+async function backfillMessageText() {
+  const writer = makeWriter();
+  const snap = await db.collectionGroup("messages").get();
+  let scanned = 0;
+  const hits = [];
+
+  console.log();
+  console.log("=".repeat(72));
+  console.log("threads/{threadId}/messages.text  (typo fix: 'excersices' -> 'exercises')");
+  console.log("=".repeat(72));
+
+  for (const doc of snap.docs) {
+    if (doc.ref.parent.parent?.parent.id !== "threads") continue;
+    scanned++;
+    const data = doc.data();
+    if (typeof data.text !== "string" || data.text.trim() !== MESSAGE_FIX_FROM) continue;
+    const path = `threads/${doc.ref.parent.parent.id}/messages/${doc.id}`;
+    console.log(`${path}: text '${data.text}' -> '${MESSAGE_FIX_TO}'`);
+    hits.push(path);
+    // Only `text` is written here — never senderId, senderRole or anything else.
+    await writer.queue(doc.ref, { text: MESSAGE_FIX_TO });
+  }
+
+  if (hits.length === 0) {
+    console.log();
+    console.log("!".repeat(72));
+    console.log(`NO MATCH — message text not found, check the exact wording`);
+    console.log(`Looked for a message whose trimmed text is exactly: '${MESSAGE_FIX_FROM}'`);
+    console.log(`Scanned ${scanned} message(s). Nothing was changed by this pass.`);
+    console.log("!".repeat(72));
+  } else if (hits.length > 1) {
+    console.log();
+    console.log(`WARNING: ${hits.length} documents matched, expected 1. All are listed above.`);
+  }
+
+  const committed = await writer.flush();
+  return { label: "message text", scanned, changes: hits.length, committed, skipped: 0 };
+}
+
 // --- 4. threads.coachName / .athleteName --------------------------------
 
 async function backfillThreads(names) {
@@ -296,6 +353,7 @@ async function main() {
   results.push(await backfillVideos(names));
   results.push(await backfillComments(names));
   results.push(await backfillCommentText());
+  results.push(await backfillMessageText());
   results.push(await backfillThreads(names));
 
   console.log();
