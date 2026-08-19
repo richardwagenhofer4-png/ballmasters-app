@@ -323,10 +323,7 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
           </svg>
           All videos
         </Link>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xl">⚽</span>
-          <span className="text-sm font-bold text-white">Ballmasters</span>
-        </div>
+        <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         {watched ? (
           <div className="flex items-center gap-1 text-xs font-medium" style={{ color: "#4ade80" }}>
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
