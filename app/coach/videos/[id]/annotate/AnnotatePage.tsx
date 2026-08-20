@@ -7,7 +7,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import CommentsSection from "@/components/CommentsSection";
-import { renderAnnotations, getContentRect, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
+import { renderAnnotations, getContentRect, textFontSizePx, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 export type { DrawingType, Drawing, AnnotationFrame };
@@ -840,9 +840,16 @@ export default function AnnotatePage() {
       return {
         left: `${((textInput.x * cr.width + cr.offsetX) / video.clientWidth) * 100}%`,
         top: `${((textInput.y * cr.height + cr.offsetY) / video.clientHeight) * 100}%`,
+        // Same height the canvas draw is handed at line ~209, through the same
+        // helper, so what the coach types is the size they get on confirm.
+        fontSize: `${textFontSizePx(cr.height)}px`,
       };
     }
-    return { left: `${textInput.x * 100}%`, top: `${textInput.y * 100}%` };
+    return {
+      left: `${textInput.x * 100}%`,
+      top: `${textInput.y * 100}%`,
+      fontSize: `${textFontSizePx(video?.clientHeight ?? 0)}px`,
+    };
   })();
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -952,7 +959,7 @@ export default function AnnotatePage() {
               border: "none",
               outline: "none",
               color,
-              fontSize: "16px",
+              fontSize: textOverlayPos.fontSize,
               fontWeight: "bold",
               textShadow: "0 0 4px black, 0 0 4px black",
               minWidth: "80px",

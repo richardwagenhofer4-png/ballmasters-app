@@ -33,6 +33,15 @@ export function getContentRect(
   return { offsetX, offsetY, width, height };
 }
 
+/**
+ * Font size in CSS pixels for a text annotation drawn over a content rect of
+ * height `h`. Exported so the live input in the editor and the canvas draw can
+ * never drift apart — they must agree or the text jumps size on confirm.
+ */
+export function textFontSizePx(h: number): number {
+  return Math.max(14, Math.round(h * 0.045));
+}
+
 export interface Drawing {
   id: string;
   type: DrawingType;
@@ -116,13 +125,26 @@ export function renderAnnotations(
         ctx.stroke();
         break;
 
-      case "text":
+      case "text": {
         if (d.tx == null) break;
-        ctx.font = `bold ${Math.max(14, Math.round(h * 0.045))}px sans-serif`;
+        const fontSize = textFontSizePx(h);
+        ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.shadowColor = "rgba(0,0,0,0.85)";
         ctx.shadowBlur = 5;
-        ctx.fillText(d.label ?? "", d.tx * w, d.ty! * h);
+        const label = d.label ?? "";
+        // Keep the whole string inside the frame. This is a DRAW-time clamp
+        // only: the stored tx/ty are untouched, so saved annotations keep
+        // meaning exactly what they meant before.
+        const pad = 8 * (w / 1000);
+        const textWidth = ctx.measureText(label).width; // needs ctx.font set above
+        // The Math.max on each upper bound keeps the range non-empty when the
+        // string is wider (or the frame shorter) than the padding allows;
+        // without it the clamp would push the text off the opposite edge.
+        const x = Math.min(Math.max(d.tx * w, pad), Math.max(pad, w - textWidth - pad));
+        const y = Math.min(Math.max(d.ty! * h, fontSize + pad), Math.max(fontSize + pad, h - pad));
+        ctx.fillText(label, x, y);
         break;
+      }
     }
     ctx.restore();
   }
