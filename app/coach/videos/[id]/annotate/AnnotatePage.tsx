@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -1325,7 +1326,13 @@ export default function AnnotatePage() {
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <button
-                onClick={() => window.open(`/student/videos/${id}`, "_blank")}
+                onClick={() => {
+                  // In the Capacitor shell window.open hands the URL to the
+                  // system browser, throwing the coach out into Safari. On
+                  // desktop web the new tab is what we want, so keep it there.
+                  if (Capacitor.isNativePlatform()) router.push(`/student/videos/${id}`);
+                  else window.open(`/student/videos/${id}`, "_blank");
+                }}
                 style={{
                   width: "100%",
                   padding: "12px",
