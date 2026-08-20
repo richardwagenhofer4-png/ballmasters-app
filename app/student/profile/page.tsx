@@ -235,6 +235,29 @@ export default function StudentProfilePage() {
         </div>
 
         <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Legal &amp; Support</p>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+            {[
+              { href: "/privacy", label: "Privacy Policy" },
+              { href: "/terms", label: "Terms of Service" },
+              { href: "/ai-disclosure", label: "AI Disclosure" },
+              { href: "/support", label: "Support" },
+            ].map(item => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                {item.label}
+                <svg className="h-4 w-4 ml-auto text-gray-300 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clipRule="evenodd" />
+                </svg>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div>
           <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Danger Zone</p>
           <button
             onClick={() => { setShowDeleteConfirm(true); setDeleteConfirmText(""); setDeleteError(""); setTimeout(() => deleteInputRef.current?.focus(), 50); }}
