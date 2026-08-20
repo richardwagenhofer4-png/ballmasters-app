@@ -1250,7 +1250,7 @@ export default function AnnotatePage() {
         <div
           style={{
             position: "fixed",
-            top: 16,
+            top: "calc(16px + env(safe-area-inset-top))",
             left: "50%",
             transform: "translateX(-50%)",
             zIndex: 60,
@@ -1374,6 +1374,10 @@ export default function AnnotatePage() {
               alignItems: "center",
               justifyContent: "space-between",
               padding: "12px 16px",
+              // Inline, not a class: this overlay is position:fixed and escapes
+              // both globals.css safe-area rules, and the attribute-selector
+              // approach does not survive minification in the iOS WKWebView.
+              paddingTop: "calc(12px + env(safe-area-inset-top))",
               backgroundColor: "#111827",
               borderBottom: "1px solid #1f2937",
               flexShrink: 0,
