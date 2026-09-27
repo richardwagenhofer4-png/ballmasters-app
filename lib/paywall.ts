@@ -85,11 +85,16 @@ function ensureListening() {
       setCurrent(parseAppConfig(snap.exists() ? snap.data() : null));
     },
     () => {
-      // The listener is dead after an error; a later subscriber restarts it.
+      // The listener is dead after an error. Restart it in a minute while
+      // anything is still watching (a long-open app must still see the flip);
+      // otherwise the next subscriber restarts it.
       live = false;
       stopListening = null;
       lastErrorAt = Date.now();
       setCurrent(current ?? readPersisted() ?? PAYWALL_OFF);
+      setTimeout(() => {
+        if (listeners.size > 0) ensureListening();
+      }, RETRY_AFTER_ERROR_MS + 100);
     }
   );
 }
