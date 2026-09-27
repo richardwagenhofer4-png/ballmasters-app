@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, collection, getDocs, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, collection, getDocs, getDoc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import CommentsSection from "@/components/CommentsSection";
 import { renderAnnotations, getContentRect, textFontSizePx, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
@@ -111,6 +111,9 @@ export default function AnnotatePage() {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewModeAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewPausedAtRef = useRef<number | null>(null);
+  // Last known videos/{id}.hasBreakdown. A ref, not state: syncHasBreakdown()
+  // also runs from the recorder's onstop closure, which would see stale state.
+  const hasBreakdownRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
 
@@ -136,6 +139,7 @@ export default function AnnotatePage() {
         if (!res.ok) throw new Error("Failed to load video");
         const data = await res.json();
         setVideo(data);
+        hasBreakdownRef.current = data.hasBreakdown;
         if (data.videoUrl) {
           setVideoUrl(data.videoUrl);
         } else if (data.type === "drill_comparison" || data.coachVideoKey) {
@@ -371,6 +375,21 @@ export default function AnnotatePage() {
   }
 
   // ── Firestore ops ───────────────────────────────────────────────────────────
+  // Keeps videos/{id}.hasBreakdown in step with the annotations + voiceover
+  // subcollections. Access-plan athletes can't read those subcollections, so
+  // this flag is how their app knows to show the "Coach breakdown on this
+  // clip" upgrade panel. Best-effort: a failed write never blocks the coach's
+  // save, and scripts/backfill-has-breakdown.mjs can recompute it.
+  async function syncHasBreakdown(value: boolean) {
+    if (hasBreakdownRef.current === value) return;
+    try {
+      await updateDoc(doc(db, "videos", id), { hasBreakdown: value });
+      hasBreakdownRef.current = value;
+    } catch (err) {
+      console.error("[annotate] failed to update hasBreakdown:", err);
+    }
+  }
+
   async function saveAnnotation() {
     if (!uid || drawings.length === 0) return;
     const t = Math.round((videoRef.current?.currentTime ?? 0) * 10) / 10;
@@ -388,6 +407,7 @@ export default function AnnotatePage() {
       });
       setToast(`Annotation saved at ${fmt(t)}`);
       setTimeout(() => setToast(null), 2000);
+      await syncHasBreakdown(true);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -397,11 +417,13 @@ export default function AnnotatePage() {
 
   async function deleteAnnotation(annot: AnnotationFrame) {
     await deleteDoc(doc(db, "videos", id, "annotations", annot.id));
+    const remaining = annotationsRef.current.filter(a => a.id !== annot.id);
     setAnnotations(prev => prev.filter(a => a.id !== annot.id));
     if (Math.abs((videoRef.current?.currentTime ?? 0) - annot.timestamp) < 0.5) {
       setDrawings([]);
       setPauseOnPlay(false);
     }
+    if (remaining.length === 0 && !voiceover) await syncHasBreakdown(false);
   }
 
   async function togglePauseOnPlay(annot: AnnotationFrame) {
@@ -606,6 +628,7 @@ export default function AnnotatePage() {
       previewBlobUrlRef.current = URL.createObjectURL(blob);
       previewAudioRef.current = null;
       setVoiceover(meta);
+      await syncHasBreakdown(true);
     } catch (err) {
       setVoiceoverError((err as Error).message);
     } finally {
@@ -674,6 +697,7 @@ export default function AnnotatePage() {
       if (videoRef.current) videoRef.current.muted = false;
       setVoiceover(null);
       setPreviewing(false);
+      if (annotationsRef.current.length === 0) await syncHasBreakdown(false);
     } catch (err) {
       setVoiceoverError((err as Error).message);
     }
