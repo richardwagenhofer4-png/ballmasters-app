@@ -724,6 +724,20 @@ export default function AnnotatePage() {
 
   // ── Preview mode handlers ───────────────────────────────────────────────────
   async function openPreview() {
+    // The overlay has its own player; the editor's must fall silent underneath
+    // it. Pause the editor video, stop a running voiceover preview (and undo its
+    // ducking), and cancel a pending record countdown, which would otherwise
+    // start the editor video when it reaches zero. A take already recording is
+    // held, not stopped — pausing the video pauses the recorder with it.
+    const editorVideo = videoRef.current;
+    editorVideo?.pause();
+    if (previewing) {
+      previewAudioRef.current?.pause();
+      if (editorVideo) editorVideo.muted = false;
+      setPreviewing(false);
+    }
+    if (countdown !== null) countdownCancelledRef.current = true;
+
     if (voiceover && !previewModeAudioRef.current) {
       try {
         let src: string;
