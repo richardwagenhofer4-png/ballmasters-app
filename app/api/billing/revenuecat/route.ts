@@ -13,13 +13,18 @@
 //     "access" → Access, nothing active → none. An unexpired admin grant is
 //     never downgraded.
 // Every authenticated event is written to billingEvents/{event.id}. A repeat
-// delivery of the same id is acknowledged and changes nothing (idempotent);
-// events older than the last one applied to an entitlement are ignored for
-// that entitlement (out-of-order delivery).
+// delivery of the same id is acknowledged and changes nothing (idempotent) —
+// unless the first delivery found no matching user, in which case it is
+// processed again (e.g. RevenueCat's "resend" after the account exists).
+// Events older than the last one applied to an entitlement are ignored for
+// that entitlement (out-of-order delivery). The user is looked up by
+// app_user_id, then original_app_user_id, then aliases: a purchase made
+// before Purchases.logIn() arrives under an anonymous id with the real uid
+// among its aliases.
 
 import type { NextRequest } from "next/server";
 import { createHash, timingSafeEqual } from "crypto";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, type DocumentData, type DocumentReference } from "firebase-admin/firestore";
 import { getAdminFirestore } from "@/lib/firebaseAdmin";
 import { isPaywallEnabledServer } from "@/lib/paywall.server";
 import {
@@ -55,10 +60,16 @@ const EXPIRATION_EVENTS = new Set(["EXPIRATION"]);
 
 const SAFE_ID = /^[A-Za-z0-9_\-:.]{1,200}$/;
 
+// Outcomes where nothing was applied because no user matched; a redelivery
+// of the same event id is processed again instead of counting as a duplicate.
+const RETRYABLE_OUTCOMES = new Set(["unknown_user", "no_user_id"]);
+
 interface RcEvent {
   id?: unknown;
   type?: unknown;
   app_user_id?: unknown;
+  original_app_user_id?: unknown;
+  aliases?: unknown;
   entitlement_ids?: unknown;
   entitlement_id?: unknown;
   expiration_at_ms?: unknown;
@@ -128,9 +139,17 @@ export async function POST(request: NextRequest) {
   const eventAtMs = num(event.event_timestamp_ms) ?? nowMs;
   const { known: entIds, all: allEntIds } = entitlementIdsOf(event);
 
-  // Only real Firebase uids map to a user doc; RevenueCat anonymous ids
-  // ($RCAnonymousID:...) mean the app never logged the user in.
-  const uid = appUserId && !appUserId.startsWith("$RCAnonymousID") && SAFE_ID.test(appUserId) ? appUserId : null;
+  // Firebase uids this event could belong to, in order of preference. Only
+  // real uids map to a user doc; RevenueCat anonymous ids ($RCAnonymousID:...)
+  // never do.
+  const candidateUids = [
+    ...new Set(
+      [event.app_user_id, event.original_app_user_id, ...(Array.isArray(event.aliases) ? event.aliases : [])].filter(
+        (x): x is string =>
+          typeof x === "string" && !x.startsWith("$RCAnonymousID") && SAFE_ID.test(x) && x !== "." && x !== ".."
+      )
+    ),
+  ].slice(0, 10);
 
   try {
     const db = getAdminFirestore();
@@ -139,17 +158,31 @@ export async function POST(request: NextRequest) {
 
     const outcome = await db.runTransaction(async tx => {
       const existing = await tx.get(eventRef);
-      if (existing.exists) return "duplicate";
+      const previousOutcome = existing.exists ? (existing.data()?.outcome as string | undefined) : undefined;
+      if (existing.exists && !RETRYABLE_OUTCOMES.has(previousOutcome ?? "")) return "duplicate";
 
-      const userRef = uid ? db.collection("users").doc(uid) : null;
-      const userSnap = userRef ? await tx.get(userRef) : null;
-      const user = userSnap?.exists ? userSnap.data() : undefined;
+      let userRef: DocumentReference | null = null;
+      let user: DocumentData | undefined;
+      if (type !== "TEST") {
+        for (const candidate of candidateUids) {
+          const ref = db.collection("users").doc(candidate);
+          const snap = await tx.get(ref);
+          if (snap.exists) {
+            userRef = ref;
+            user = snap.data();
+            break;
+          }
+        }
+      }
 
       const audit: Record<string, unknown> = {
         source: "revenuecat",
         eventId,
         type,
         appUserId,
+        candidateUids,
+        resolvedUid: userRef?.id ?? null,
+        previousOutcome: previousOutcome ?? null,
         productId,
         periodType,
         entitlementIds: allEntIds,
@@ -167,7 +200,7 @@ export async function POST(request: NextRequest) {
       if (type === "TEST") {
         result = "test";
       } else if (!userRef || !user) {
-        result = uid ? "unknown_user" : "no_user_id";
+        result = candidateUids.length > 0 ? "unknown_user" : "no_user_id";
       } else {
         const isGrant = GRANT_EVENTS.has(type);
         const isCancel = CANCEL_EVENTS.has(type);
