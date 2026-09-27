@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, onSnapshot, query, where, type QueryDocumentSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
@@ -141,7 +141,15 @@ export default function CoachDashboard() {
   const greeting = getGreeting();
 
   useEffect(() => {
+    // The athletes list is a live listener (bug 1): an athlete assigned to
+    // this coach while the dashboard is open, or while the app sits in the
+    // background, now appears without a reload. Only changed docs are re-read.
+    // Videos and comments are still read once per visit.
+    let unsubStudents: (() => void) | null = null;
+    let disposed = false;
     const unsub = onAuthStateChanged(auth, async (user) => {
+      unsubStudents?.();
+      unsubStudents = null;
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
 
@@ -162,16 +170,33 @@ export default function CoachDashboard() {
           ? collection(db, "videos")
           : query(collection(db, "videos"), where("coachId", "==", user.uid));
 
-        const [studentsSnap, videosSnap] = await Promise.all([
-          getDocs(studentsQuery),
-          getDocs(videosQuery),
-        ]);
-
-        const studentDocs: StudentData[] = studentsSnap.docs.map(d => ({
+        const toStudent = (d: QueryDocumentSnapshot): StudentData => ({
           id: d.id,
           fullName: (d.data().fullName as string) ?? "Athlete",
           email: (d.data().email as string) ?? "",
-        }));
+        });
+        // Settles on the first snapshot, so the initial render still waits for
+        // the athletes exactly as the one-shot read did.
+        if (disposed) return; // unmounted during the profile read — don't leak a listener
+        const firstStudents = new Promise<void>((resolve, reject) => {
+          let settled = false;
+          unsubStudents = onSnapshot(
+            studentsQuery,
+            snap => {
+              setStudents(snap.docs.map(toStudent));
+              if (!settled) { settled = true; resolve(); }
+            },
+            err => {
+              if (!settled) { settled = true; reject(err); }
+              else console.error("[dashboard] athletes listener", err);
+            }
+          );
+        });
+
+        const [, videosSnap] = await Promise.all([
+          firstStudents,
+          getDocs(videosQuery),
+        ]);
 
         const videoDocs: VideoData[] = videosSnap.docs.map(d => ({
           id: d.id,
@@ -184,7 +209,6 @@ export default function CoachDashboard() {
           coachVideoKey: d.data().coachVideoKey as string | undefined,
         }));
 
-        setStudents(studentDocs);
         setVideos(videoDocs);
         setLoading(false);
 
@@ -213,7 +237,11 @@ export default function CoachDashboard() {
         setLoading(false);
       }
     });
-    return unsub;
+    return () => {
+      disposed = true;
+      unsub();
+      unsubStudents?.();
+    };
   }, [router]);
 
   const studentStats = useMemo<StudentStat[]>(() => {
