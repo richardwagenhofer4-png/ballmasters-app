@@ -12,9 +12,56 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['coach', 'admin'];
     }
 
+    // ---------------------------------------------------------------------
+    // Paywall (Build 1.1). The switch is config/app.paywallEnabled. While the
+    // doc is missing, or the field is absent/false, paywallAllows() is true
+    // and every rule that uses it evaluates exactly as it did before.
+    // exists() runs first so a missing config doc never reaches get(), which
+    // would error (and an error denies).
+    // ---------------------------------------------------------------------
+    function paywallOn() {
+      return exists(/databases/$(database)/documents/config/app)
+        && get(/databases/$(database)/documents/config/app).data.get('paywallEnabled', false) == true;
+    }
+
+    // The caller's effective plan is in `plans`: coaches and admins always
+    // pass; anyone else needs a plan field in the set that has not expired
+    // (a null planExpiresAt means no end date).
+    function callerHasPlan(plans) {
+      let u = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return u.get('role', '') in ['coach', 'admin']
+        || (
+          u.get('plan', 'none') in plans
+          && (u.get('planExpiresAt', null) == null || u.get('planExpiresAt', null) > request.time)
+        );
+    }
+
+    function paywallAllows(plans) {
+      return !paywallOn() || callerHasPlan(plans);
+    }
+
+    // Same test the app uses (lib/entitlements.ts isDrillComparison).
+    function isDrillComparison(v) {
+      return v.get('type', '') == 'drill_comparison'
+        || (v.get('coachVideoKey', null) != null && v.get('studentVideoKey', null) != null);
+    }
+
+    // users/{uid} fields only the server (Admin SDK: the RevenueCat webhook
+    // and /api/admin/plan) may write. Keep in sync with PLAN_FIELDS in
+    // lib/entitlements.ts. Locked for the owner regardless of the switch: no
+    // existing client write touches these keys, and a switch-dependent lock
+    // would let anyone pre-set plan: 'coached' on themselves before launch.
+    function planFields() {
+      return ['plan', 'planSource', 'planExpiresAt', 'planProductId', 'planIsTrial',
+              'planWillRenew', 'rcAppUserId', 'revenuecat', 'adminGrant'];
+    }
+
     match /users/{userId} {
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.keys().hasAny(planFields());
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(planFields());
       allow read: if request.auth != null && resource.data.role in ['coach', 'admin'];
       allow read: if request.auth != null
         && resource.data.coachId == request.auth.uid;
@@ -56,20 +103,36 @@ service cloud.firestore {
         && request.resource.data.coachId == request.auth.uid;
       allow read, update, delete: if request.auth != null
         && resource.data.coachId == request.auth.uid;
-      allow read: if request.auth != null
-        && request.auth.uid in resource.data.studentIds;
+      // Students. With the paywall on, listing needs an active plan (Access or
+      // Coached) and fetching a single drill comparison needs Coached. list is
+      // deliberately type-agnostic: rules are not filters, so a type check here
+      // would fail an Access athlete's whole library query instead of letting
+      // the app show drill cards as locked. Listing exposes no media — playback
+      // URLs are only minted server-side after a rules-checked get
+      // (/api/videos/[id] reads the doc with the athlete's own token).
+      allow list: if request.auth != null
+        && request.auth.uid in resource.data.studentIds
+        && paywallAllows(['access', 'coached']);
+      allow get: if request.auth != null
+        && request.auth.uid in resource.data.studentIds
+        && paywallAllows(['access', 'coached'])
+        && (!isDrillComparison(resource.data) || paywallAllows(['coached']));
       allow update: if request.auth != null
         && request.auth.uid in resource.data.studentIds
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewedBy'])
         && request.resource.data.viewedBy.hasAll(resource.data.viewedBy)
         && request.resource.data.viewedBy.size() == resource.data.viewedBy.size() + 1;
 
+      // Coach breakdowns (drawings + voiceover) are Coached-only for students
+      // once the paywall is on. Access athletes learn a clip has one from the
+      // denormalised videos/{id}.hasBreakdown flag instead.
       match /annotations/{annotationId} {
         allow read, write: if isAdmin();
         allow read, write: if request.auth != null
           && get(/databases/$(database)/documents/videos/$(videoId)).data.coachId == request.auth.uid;
         allow read: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds;
+          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds
+          && paywallAllows(['coached']);
       }
 
       match /voiceover/{docId} {
@@ -77,7 +140,8 @@ service cloud.firestore {
         allow read, write: if request.auth != null
           && get(/databases/$(database)/documents/videos/$(videoId)).data.coachId == request.auth.uid;
         allow read: if request.auth != null
-          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds;
+          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds
+          && paywallAllows(['coached']);
       }
 
       match /comments/{commentId} {
@@ -113,13 +177,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // 1-to-1 messaging threads
+    // 1-to-1 messaging threads. With the paywall on, the athlete side needs
+    // Coached ("direct line to your coach"); the coach side is never gated.
     match /threads/{threadId} {
       // The thread doc is readable/writable by the coach or the athlete in the thread
       allow read, write: if request.auth != null
         && (
           resource.data.coachId == request.auth.uid
-          || resource.data.athleteId == request.auth.uid
+          || (resource.data.athleteId == request.auth.uid && paywallAllows(['coached']))
         );
       // Allow create when the doc doesn't exist yet — validate the ids match the caller.
       // Coach side additionally requires the caller to be the athlete's resolved
@@ -138,19 +203,25 @@ service cloud.firestore {
               )
             )
           )
-          || request.resource.data.athleteId == request.auth.uid
+          || (request.resource.data.athleteId == request.auth.uid && paywallAllows(['coached']))
         );
 
       match /messages/{messageId} {
         allow read: if request.auth != null
           && (
             get(/databases/$(database)/documents/threads/$(threadId)).data.coachId == request.auth.uid
-            || get(/databases/$(database)/documents/threads/$(threadId)).data.athleteId == request.auth.uid
+            || (
+              get(/databases/$(database)/documents/threads/$(threadId)).data.athleteId == request.auth.uid
+              && paywallAllows(['coached'])
+            )
           );
         allow create: if request.auth != null
           && (
             get(/databases/$(database)/documents/threads/$(threadId)).data.coachId == request.auth.uid
-            || get(/databases/$(database)/documents/threads/$(threadId)).data.athleteId == request.auth.uid
+            || (
+              get(/databases/$(database)/documents/threads/$(threadId)).data.athleteId == request.auth.uid
+              && paywallAllows(['coached'])
+            )
           )
           && request.resource.data.senderId == request.auth.uid;
       }
@@ -161,6 +232,17 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
+
+    // Feature switches (config/app: paywallEnabled, planToolsEnabled).
+    // Readable by signed-in clients; flipped only from the Firebase console
+    // or the Admin SDK, never from the app.
+    match /config/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // billingEvents/{eventId} (RevenueCat webhook + admin plan grant audit
+    // log) has no match on purpose: server-only via the Admin SDK.
 
     // In-app notifications — each user can only read/update their own; creates are
     // constrained so an authed user can't spoof a notification to themselves and
