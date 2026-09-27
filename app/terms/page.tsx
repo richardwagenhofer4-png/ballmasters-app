@@ -42,7 +42,7 @@ export default function TermsPage() {
               Terms of Service
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: August 11, 2026
+              Last updated: September 27, 2026
             </p>
           </div>
 
@@ -89,12 +89,58 @@ export default function TermsPage() {
           <p className={p}>
             We may suspend or terminate access for violation of these Terms. You may delete your account at any time in the App.
           </p>
-          <ReviewBlock>
-            Add fees/subscription/refund terms if paid subscriptions are introduced.
-          </ReviewBlock>
 
-          {/* 7. DISCLAIMERS */}
-          <H2 num={7}>Disclaimers and Limitation of Liability</H2>
+          {/* 7. SUBSCRIPTIONS */}
+          <H2 num={7}>Subscriptions</H2>
+          <p className={p}>
+            Some features of the App need a paid subscription. There are two plans:
+          </p>
+          <ul className="mt-2 space-y-2.5 list-disc list-outside ml-4">
+            <li className={li}>
+              <span className="font-semibold">Access</span>{" "}&mdash; every training session on video. $49.00 per month, or $490.00 per year.
+            </li>
+            <li className={li}>
+              <span className="font-semibold">Coached</span>{" "}&mdash; everything in Access, plus your coach&rsquo;s breakdowns of your videos, coach demo vs. your attempt (drill comparisons), and messaging with your coach. $99.00 per month, or $990.00 per year.
+            </li>
+          </ul>
+          <ul className="mt-3 space-y-2.5 list-disc list-outside ml-4">
+            <li className={li}>
+              <span className="font-semibold">Where you buy.</span>{" "}Subscriptions are bought in the Ball Masters iPhone app with your Apple ID. Apple takes the payment and bills you. Prices are in US dollars; Apple may add taxes where they apply.
+            </li>
+            <li className={li}>
+              <span className="font-semibold">Free trial.</span>{" "}Monthly plans start with a 7-day free trial if you are eligible (Apple allows one free trial per Apple ID). If you don&rsquo;t cancel at least 24 hours before the trial ends, your subscription starts and you are charged the monthly price. Annual plans don&rsquo;t have a free trial.
+            </li>
+            <li className={li}>
+              <span className="font-semibold">Automatic renewal.</span>{" "}Your subscription renews automatically at the end of each month or year until you cancel. Apple charges the renewal to your Apple ID within the 24 hours before the current period ends, unless you cancel at least 24 hours before it ends.
+            </li>
+            <li className={li}>
+              <span className="font-semibold">How to cancel.</span>{" "}On your iPhone, open Settings, tap your name, tap Subscriptions, choose Ball Masters, then tap Cancel Subscription. You can also get there from &ldquo;Manage subscription&rdquo; on your profile in the App. Cancelling stops future renewals; you keep your plan until the end of the period you have already paid for.
+            </li>
+            <li className={li}>
+              <span className="font-semibold">Changing plans.</span>{" "}You can switch between Access and Coached, or between monthly and yearly, in the same Subscriptions screen. Apple decides when the change takes effect (usually straight away for an upgrade and at your next renewal for a downgrade).
+            </li>
+            <li className={li}>
+              <span className="font-semibold">Deleting your account does not cancel your subscription.</span>{" "}Apple keeps billing until you cancel in Settings, so cancel there first.
+            </li>
+            <li className={li}>
+              <span className="font-semibold">Free access from us.</span>{" "}We may give an account a plan at no charge for a set time (for example, for families in a pilot). When that time ends, the paid features stop unless you subscribe.
+            </li>
+          </ul>
+
+          {/* 8. REFUNDS */}
+          <H2 num={8}>Refunds</H2>
+          <p className={p}>
+            Payments are handled by Apple under the App Store&rsquo;s terms, so refunds are too. We can&rsquo;t issue refunds ourselves and we never see your payment details. To ask for a refund, go to reportaproblem.apple.com or contact Apple Support; Apple decides refund requests under its own policies. If Apple refunds a payment, the plan it paid for ends.
+          </p>
+
+          {/* 9. CHANGES TO PRICE */}
+          <H2 num={9}>Changes to Price</H2>
+          <p className={p}>
+            We may change subscription prices from time to time. If the price of your subscription goes up, you will be told in advance, as Apple&rsquo;s rules require, and Apple may ask you to agree to the new price before it applies to you. If you don&rsquo;t agree, your subscription ends at the end of the period you have already paid for. A price change never applies to a period you have already paid for.
+          </p>
+
+          {/* 10. DISCLAIMERS */}
+          <H2 num={10}>Disclaimers and Limitation of Liability</H2>
           <p className={p}>
             The App is provided &ldquo;as is&rdquo; without warranties. To the fullest extent permitted by law, we are not liable for indirect or consequential damages, and our total liability is limited to the greater of the fees paid in the preceding 12 months, or USD $100.
           </p>
@@ -102,8 +148,8 @@ export default function TermsPage() {
             This section needs attorney drafting.
           </ReviewBlock>
 
-          {/* 8. GOVERNING LAW */}
-          <H2 num={8}>Governing Law</H2>
+          {/* 11. GOVERNING LAW */}
+          <H2 num={11}>Governing Law</H2>
           <p className={p}>
             These Terms are governed by the laws of the State of Florida, without regard to conflict-of-laws rules.
           </p>
@@ -111,8 +157,8 @@ export default function TermsPage() {
             Confirm governing law and jurisdiction.
           </ReviewBlock>
 
-          {/* 9. CONTACT */}
-          <H2 num={9}>Contact</H2>
+          {/* 12. CONTACT */}
+          <H2 num={12}>Contact</H2>
           <p className={p}>
             support@rwappventures.com
           </p>
