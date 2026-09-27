@@ -330,7 +330,7 @@ export default function StudentProfilePage() {
       setPlanFields({
         plan: data.plan,
         planSource: data.planSource,
-        planExpiresAt: data.planExpiresAt ?? null,
+        planExpiresAt: data.planExpiresAt ? new Date(data.planExpiresAt) : null,
         planProductId: data.planProductId ?? null,
         planIsTrial: data.planIsTrial ?? false,
         planWillRenew: data.planWillRenew ?? null,

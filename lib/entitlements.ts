@@ -77,6 +77,17 @@ export function toDate(value: unknown): Date | null {
 }
 
 /**
+ * Only a real timestamp (Firestore Timestamp or Date) counts as an expiry:
+ * in firestore.rules `planExpiresAt > request.time` errors — and so denies —
+ * for a string or number, e.g. a date typed into the console as text.
+ */
+function timestampToDate(value: unknown): Date | null {
+  if (value instanceof Date) return toDate(value);
+  if (value && typeof value === "object") return toDate(value);
+  return null;
+}
+
+/**
  * The plan a user actually has right now. Coaches and admins always count as
  * Coached (they are never gated). An expired plan is "none". Mirrors the
  * callerHasPlan() check in firestore.rules: a present-but-unreadable expiry
@@ -87,9 +98,27 @@ export function effectivePlan(user: PlanFields | null | undefined, now: Date = n
   if (user.role === "coach" || user.role === "admin") return "coached";
   if (!isPaidPlan(user.plan)) return "none";
   if (user.planExpiresAt == null) return user.plan;
-  const expires = toDate(user.planExpiresAt);
+  const expires = timestampToDate(user.planExpiresAt);
   if (!expires || expires.getTime() <= now.getTime()) return "none";
   return user.plan;
+}
+
+/**
+ * True when the user doc still holds an active plan source — a staff grant or
+ * a RevenueCat entitlement. Paired with effectivePlan() === "none" it means the
+ * top-level fields went stale (their winning source expired first) and the
+ * plan should be re-resolved server-side (/api/billing/refresh).
+ */
+export function hasActivePlanSource(user: Record<string, unknown> | null | undefined, now: Date = new Date()): boolean {
+  const running = (expiresAt: unknown) =>
+    expiresAt == null || (timestampToDate(expiresAt)?.getTime() ?? 0) > now.getTime();
+  const grant = user?.adminGrant as { plan?: unknown; expiresAt?: unknown } | null | undefined;
+  if (grant && isPaidPlan(grant.plan) && running(grant.expiresAt)) return true;
+  const rc = user?.revenuecat as { entitlements?: Record<string, { active?: unknown; expiresAt?: unknown } | undefined> } | undefined;
+  return (["access", "coached"] as const).some(id => {
+    const e = rc?.entitlements?.[id];
+    return !!e && e.active === true && running(e.expiresAt);
+  });
 }
 
 export function canSeeVideos(plan: Plan): boolean {
