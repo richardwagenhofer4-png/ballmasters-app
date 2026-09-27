@@ -138,9 +138,10 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
   const [busy, setBusy] = useState<null | "purchase" | "restore" | "redeem">(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null);
 
-  // An Access member on the plain paywall has only an upgrade to make.
-  const mode: PaywallMode =
-    requestedMode === "upgrade" || (ent.plan === "access" && !ent.isStaff) ? "upgrade" : "subscribe";
+  // For athletes the mode follows their plan: Access can only upgrade, and
+  // someone with no plan sees both plans even on an "upgrade" link. The
+  // requested mode only matters to a coach or admin previewing the screen.
+  const mode: PaywallMode = ent.isStaff ? requestedMode : ent.plan === "access" ? "upgrade" : "subscribe";
   const plan: PaidPlan = mode === "upgrade" ? "coached" : selected;
   const product = productFor(plan, period);
 

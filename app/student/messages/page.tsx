@@ -19,6 +19,8 @@ import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import InitialsAvatar from "@/components/InitialsAvatar";
 import { getOrCreateThread, markThreadRead, sendMessage, threadId as makeThreadId } from "@/lib/messaging";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
+import { LockIcon, NavLockDot } from "@/components/PlanLock";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,6 +102,10 @@ export default function StudentMessagesPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const { newVideo, newMessage, notifications, markRead } = useNotificationCounts();
 
+  // Paywall (switch on only): messaging your coach is part of Coached.
+  const ent = useEntitlements();
+  const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -120,6 +126,8 @@ export default function StudentMessagesPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
+    // Locked: don't bootstrap a thread the rules would refuse anyway.
+    if (messagingLocked) return;
 
     const currentUid = user.uid;
     setUid(currentUid);
@@ -189,7 +197,7 @@ export default function StudentMessagesPage() {
         setLoading(false);
       }
     })();
-  }, [authLoading, user, router]);
+  }, [authLoading, user, router, messagingLocked]);
 
   // Real-time messages listener
   useEffect(() => {
@@ -248,6 +256,61 @@ export default function StudentMessagesPage() {
     setInputText(e.target.value);
     e.target.style.height = "auto";
     e.target.style.height = e.target.scrollHeight + "px";
+  }
+
+  const bottomNav = (
+      <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        {NAV_ITEMS.map(item => {
+          const isActive = pathname === item.href;
+          const badge =
+            item.href === "/student/messages" ? newMessage :
+            item.href === "/student/videos" ? newVideo : 0;
+          const locked = messagingLocked && item.href === "/student/messages";
+          return (
+            <Link key={item.href} href={locked ? UPGRADE_HREF : item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
+              <div className="relative">
+                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
+                {locked ? <NavLockDot /> : badge > 0 && (
+                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
+                    {badge > 9 ? "9+" : badge}
+                  </span>
+                )}
+              </div>
+              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+  );
+
+  if (messagingLocked) {
+    return (
+      <main className="min-h-screen flex flex-col" style={{ backgroundColor: "#001c48" }}>
+        <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-4 px-4 shrink-0">
+          <div className="flex items-center gap-2 mb-3">
+            <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
+          </div>
+          <h1 className="text-2xl font-extrabold text-white">Messages</h1>
+        </div>
+        <div className="flex-1 bg-gray-50 px-4 pt-16 pb-24 flex flex-col items-center text-center">
+          <div className="mb-4 h-14 w-14 rounded-full flex items-center justify-center" style={{ backgroundColor: "rgba(0,28,72,0.08)" }}>
+            <LockIcon className="h-6 w-6" style={{ color: "#001c48" }} />
+          </div>
+          <p className="text-base font-bold text-gray-900">A direct line to your coach</p>
+          <p className="text-sm text-gray-500 mt-1 max-w-xs leading-snug">
+            Messaging your coach is part of the Coached plan, along with coach breakdowns and drill comparisons.
+          </p>
+          <Link
+            href={UPGRADE_HREF}
+            className="mt-5 inline-flex items-center justify-center min-h-11 rounded-xl px-6 text-sm font-bold text-white transition active:opacity-80"
+            style={{ backgroundColor: "#001c48" }}
+          >
+            See Coached
+          </Link>
+        </div>
+        {bottomNav}
+      </main>
+    );
   }
 
   if (authLoading || loading || redirecting) {
@@ -444,27 +507,7 @@ export default function StudentMessagesPage() {
       )}
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        {NAV_ITEMS.map(item => {
-          const isActive = pathname === item.href;
-          const badge =
-            item.href === "/student/messages" ? newMessage :
-            item.href === "/student/videos" ? newVideo : 0;
-          return (
-            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
-              <div className="relative">
-                <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
-                {badge > 0 && (
-                  <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
-                    {badge > 9 ? "9+" : badge}
-                  </span>
-                )}
-              </div>
-              <span className={`text-xs ${isActive ? "font-semibold" : "text-gray-500"}`}>{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      {bottomNav}
     </main>
   );
 }

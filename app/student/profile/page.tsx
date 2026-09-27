@@ -11,6 +11,16 @@ import { clearAuthCookies } from "@/lib/cookies";
 import { useRef } from "react";
 import InitialsAvatar, { AVATAR_OPTIONS } from "@/components/InitialsAvatar";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { SUBSCRIBE_HREF, UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
+import { restorePurchases, type BillingResult } from "@/lib/billing";
+import { planName } from "@/lib/plans";
+import { NavLockDot } from "@/components/PlanLock";
+
+const MANAGE_SUBSCRIPTIONS_URL = "https://apps.apple.com/account/subscriptions";
+
+function formatPlanDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 
 function HomeIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="currentColor"><path d="M11.47 3.841a.75.75 0 011.06 0l8.69 8.69a.75.75 0 101.06-1.061l-1.97-1.97V6a.75.75 0 00-.75-.75h-1.5a.75.75 0 00-.75.75v1.78L13.5 5.409a3 3 0 00-3 0L2.19 11.47a.75.75 0 001.061 1.06l8.219-8.69z" /><path d="M12 5.432l8.159 8.159c.03.03.06.058.091.086v6.198c0 1.035-.84 1.875-1.875 1.875H15a.75.75 0 01-.75-.75v-4.5a.75.75 0 00-.75-.75h-3a.75.75 0 00-.75.75V21a.75.75 0 01-.75.75H5.625a1.875 1.875 0 01-1.875-1.875v-6.198a2.29 2.29 0 00.091-.086L12 5.432z" /></svg>;
@@ -51,6 +61,13 @@ export default function StudentProfilePage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const deleteInputRef = useRef<HTMLInputElement>(null);
+
+  // Paywall (switch on only): the "Your plan" section and the Messages lock.
+  const ent = useEntitlements();
+  const showPlan = ent.paywallEnabled && ent.ready && !ent.isStaff && ent.plan !== null;
+  const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+  const [restoring, setRestoring] = useState(false);
+  const [restoreMsg, setRestoreMsg] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -99,6 +116,23 @@ export default function StudentProfilePage() {
     await signOut(auth);
     clearAuthCookies();
     router.push("/login");
+  }
+
+  async function handleRestorePurchases() {
+    if (restoring) return;
+    setRestoring(true);
+    setRestoreMsg(null);
+    let result: BillingResult;
+    try {
+      result = await restorePurchases();
+    } catch {
+      result = { ok: false, reason: "error", message: "Something went wrong. Please try again." };
+    }
+    if (result.ok) setRestoreMsg({ tone: "ok", text: "Purchases restored." });
+    else if (result.reason !== "cancelled") {
+      setRestoreMsg({ tone: result.reason === "unavailable" ? "info" : "error", text: result.message });
+    }
+    setRestoring(false);
   }
 
   async function handleDeleteAccount() {
@@ -221,6 +255,58 @@ export default function StudentProfilePage() {
           </div>
         </div>
 
+        {showPlan && ent.plan !== null && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Your plan</p>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+              <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{ent.plan === "none" ? "No plan" : planName(ent.plan)}</p>
+                  {ent.plan !== "none" && ent.planExpiresAt && (
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {ent.planSource === "revenuecat" && ent.planWillRenew !== false ? "Renews" : "Expires"}{" "}
+                      {formatPlanDate(ent.planExpiresAt)}
+                    </p>
+                  )}
+                </div>
+                {ent.plan !== "coached" && (
+                  <Link
+                    href={ent.plan === "none" ? SUBSCRIBE_HREF : UPGRADE_HREF}
+                    className="shrink-0 min-h-11 inline-flex items-center text-sm font-semibold"
+                    style={{ color: "#001c48" }}
+                  >
+                    {ent.plan === "none" ? "Choose a plan" : "Upgrade"}
+                  </Link>
+                )}
+              </div>
+              <a
+                href={MANAGE_SUBSCRIPTIONS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
+              >
+                Manage subscription
+                <svg className="h-4 w-4 ml-auto text-gray-300 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path fillRule="evenodd" d="M4.25 5.5a.75.75 0 00-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 00.75-.75v-4a.75.75 0 011.5 0v4A2.25 2.25 0 0112.75 17h-8.5A2.25 2.25 0 012 14.75v-8.5A2.25 2.25 0 014.25 4h5a.75.75 0 010 1.5h-5zm7.25-.75a.75.75 0 01.75-.75h3.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V6.56l-5.22 5.22a.75.75 0 11-1.06-1.06l5.22-5.22h-1.69a.75.75 0 01-.75-.75z" clipRule="evenodd" />
+                </svg>
+              </a>
+              <button
+                type="button"
+                onClick={handleRestorePurchases}
+                disabled={restoring}
+                className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition text-left disabled:opacity-60"
+              >
+                {restoring ? "Restoring…" : "Restore purchases"}
+              </button>
+            </div>
+            {restoreMsg && (
+              <p className={`text-xs mt-2 ${restoreMsg.tone === "ok" ? "text-green-600" : restoreMsg.tone === "error" ? "text-red-600" : "text-gray-500"}`}>
+                {restoreMsg.text}
+              </p>
+            )}
+          </div>
+        )}
+
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</p>
           <button
@@ -323,11 +409,12 @@ export default function StudentProfilePage() {
           const badge =
             item.href === "/student/videos" ? newVideo :
             item.href === "/student/messages" ? newMessage : 0;
+          const locked = messagingLocked && item.href === "/student/messages";
           return (
-            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
+            <Link key={item.href} href={locked ? UPGRADE_HREF : item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">
                 <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
-                {badge > 0 && (
+                {locked ? <NavLockDot /> : badge > 0 && (
                   <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
                     {badge > 9 ? "9+" : badge}
                   </span>
