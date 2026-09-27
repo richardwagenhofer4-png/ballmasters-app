@@ -35,6 +35,8 @@ export interface Entitlements {
   canSeeVideos: boolean;
   canSeeBreakdowns: boolean;
   canMessage: boolean;
+  /** Coach or admin viewing a student screen — never gated. Only known while the switch is on. */
+  isStaff: boolean;
 }
 
 export const UNLOCKED: Entitlements = {
@@ -47,9 +49,11 @@ export const UNLOCKED: Entitlements = {
   canSeeVideos: true,
   canSeeBreakdowns: true,
   canMessage: true,
+  isStaff: false,
 };
 
-const EntitlementsContext = createContext<Entitlements>(UNLOCKED);
+/** Exported for tests/previews that need a fixed value; app code uses EntitlementsProvider. */
+export const EntitlementsContext = createContext<Entitlements>(UNLOCKED);
 
 interface Loaded {
   uid: string;
@@ -113,6 +117,7 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
         canSeeVideos: false,
         canSeeBreakdowns: false,
         canMessage: false,
+        isStaff: false,
       };
     }
     const d = current.data;
@@ -126,6 +131,7 @@ export function EntitlementsProvider({ children }: { children: React.ReactNode }
       canSeeVideos: canSeeVideos(current.plan),
       canSeeBreakdowns: canSeeBreakdowns(current.plan),
       canMessage: canMessage(current.plan),
+      isStaff: d?.role === "coach" || d?.role === "admin",
     };
   }, [paywallEnabled, uid, authLoading, current]);
 
