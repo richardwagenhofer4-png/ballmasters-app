@@ -10,6 +10,9 @@ import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { planToolsVisible, useAppConfig } from "@/lib/paywall";
+import { pickPlanFields, type PlanFields } from "@/lib/entitlements";
+import PlanBadge from "@/components/PlanBadge";
 
 interface Student {
   id: string;
@@ -17,6 +20,7 @@ interface Student {
   email: string;
   avatarId: string;
   joinedStr: string;
+  planFields: PlanFields;
 }
 
 interface StudentStat {
@@ -75,6 +79,8 @@ export default function StudentsListPage() {
   const { user, loading: authLoading } = useAuth();
   const [viewMode, setViewMode] = useViewMode("coach-students");
   const { newComment, newMessage } = useNotificationCounts();
+  // Plan badges: shown once the paywall is live (or plan tools are previewed).
+  const showPlans = planToolsVisible(useAppConfig());
 
   const [loading, setLoading] = useState(true);
   const [students, setStudents] = useState<Student[]>([]);
@@ -122,6 +128,7 @@ export default function StudentsListPage() {
             email: (d.data().email as string) ?? "",
             avatarId: (d.data().avatarId as string) ?? "",
             joinedStr: formatJoinDate(d.data().createdAt),
+            planFields: pickPlanFields(d.data()),
           }))
           .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
@@ -274,7 +281,14 @@ export default function StudentsListPage() {
                       >
                         <InitialsAvatar name={s.fullName} id={s.id} size={36} variant="student" avatarId={s.avatarId || undefined} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
+                          {showPlans ? (
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
+                              <PlanBadge user={s.planFields} size="xs" />
+                            </div>
+                          ) : (
+                            <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
+                          )}
                           <p className="text-xs text-gray-400 truncate">{s.email}</p>
                           {s.joinedStr && <p className="text-xs text-gray-300 truncate">Joined {s.joinedStr}</p>}
                         </div>
@@ -304,7 +318,14 @@ export default function StudentsListPage() {
                         <div className="flex items-center gap-3 mb-3">
                           <InitialsAvatar name={s.fullName} id={s.id} size={52} variant="student" avatarId={s.avatarId || undefined} />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-gray-900 truncate">{s.fullName}</p>
+                            {showPlans ? (
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-sm font-bold text-gray-900 truncate">{s.fullName}</p>
+                                <PlanBadge user={s.planFields} size="xs" />
+                              </div>
+                            ) : (
+                              <p className="text-sm font-bold text-gray-900 truncate">{s.fullName}</p>
+                            )}
                             <p className="text-xs text-gray-400 truncate">{s.email}</p>
                             {s.joinedStr && <p className="text-xs text-gray-300 mt-0.5">Joined {s.joinedStr}</p>}
                           </div>
@@ -347,6 +368,7 @@ export default function StudentsListPage() {
                       <div className="bg-white rounded-xl border border-gray-200 px-3 py-4 flex flex-col items-center text-center hover:bg-gray-50 active:bg-gray-100 transition">
                         <InitialsAvatar name={s.fullName} id={s.id} size={48} variant="student" avatarId={s.avatarId || undefined} />
                         <p className="text-sm font-bold text-gray-900 mt-2 truncate w-full">{s.fullName}</p>
+                        {showPlans && <div className="mt-1"><PlanBadge user={s.planFields} size="xs" /></div>}
                         {s.joinedStr && <p className="text-xs text-gray-300 mt-0.5">Joined {s.joinedStr}</p>}
                         {st && (
                           <p className="text-xs text-gray-500 mt-2">

@@ -152,6 +152,18 @@ export function pickWinningPlan(candidates: PlanCandidate[], now: Date = new Dat
 // Coach-facing badge
 // ---------------------------------------------------------------------------
 
+/** The plan fields off a users/{uid} doc a screen has already loaded. */
+export function pickPlanFields(data: Record<string, unknown> | undefined | null): PlanFields {
+  return {
+    plan: data?.plan,
+    planSource: data?.planSource,
+    planExpiresAt: data?.planExpiresAt,
+    planProductId: data?.planProductId,
+    planIsTrial: data?.planIsTrial,
+    planWillRenew: data?.planWillRenew,
+  };
+}
+
 /**
  * Short label for coach screens: "None", "Access", "Access · trial",
  * "Coached", "Coached · annual", … Derived only from the stored plan fields.

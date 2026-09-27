@@ -7,11 +7,14 @@ import { collection, doc, getDoc, getDocs, query, where } from "firebase/firesto
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
+import { planToolsVisible, useAppConfig } from "@/lib/paywall";
+import { pickPlanFields, type PlanFields } from "@/lib/entitlements";
+import PlanBadge from "@/components/PlanBadge";
 
 const MAX_BYTES = 500 * 1024 * 1024;
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/webm", "video/mov"];
 
-type Student = { id: string; fullName: string; email: string };
+type Student = { id: string; fullName: string; email: string; planFields: PlanFields };
 type UploadStatus = "idle" | "requesting" | "uploading" | "saving" | "success" | "error";
 type Mode = "standard" | "drill_comparison";
 type Layout = "side_by_side" | "stacked" | "tabs";
@@ -147,6 +150,8 @@ export default function UploadPage() {
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [studentsLoading, setStudentsLoading] = useState(true);
+  // Plan badges in the picker: shown once the paywall is live (or plan tools are previewed).
+  const showPlans = planToolsVisible(useAppConfig());
 
   const [progress, setProgress] = useState(0);
   const [coachProgress, setCoachProgress] = useState(0);
@@ -177,6 +182,7 @@ export default function UploadPage() {
             id: d.id,
             fullName: (d.data().fullName as string) ?? "Unknown",
             email: (d.data().email as string) ?? "",
+            planFields: pickPlanFields(d.data()),
           }))
         );
       } catch (err) {
@@ -649,7 +655,14 @@ export default function UploadPage() {
                             className="h-4 w-4 rounded accent-emerald-700 disabled:opacity-60"
                           />
                           <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-800 truncate">{s.fullName}</p>
+                            {showPlans ? (
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 truncate">{s.fullName}</p>
+                                <PlanBadge user={s.planFields} size="xs" />
+                              </div>
+                            ) : (
+                              <p className="text-sm font-medium text-gray-800 truncate">{s.fullName}</p>
+                            )}
                             <p className="text-xs text-gray-400 truncate">{s.email}</p>
                           </div>
                         </label>

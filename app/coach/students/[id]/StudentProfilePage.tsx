@@ -12,6 +12,9 @@ import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { planToolsVisible, useAppConfig } from "@/lib/paywall";
+import { isPaidPlan, pickPlanFields, toDate, type PlanFields } from "@/lib/entitlements";
+import PlanBadge, { describePlan } from "@/components/PlanBadge";
 
 // ---------------------------------------------------------------------------
 // Nav Icons
@@ -52,6 +55,7 @@ interface StudentDoc {
   guardianManaged?: boolean;
   guardianName?: string;
   guardianEmail?: string;
+  adminGrant?: { plan?: unknown; expiresAt?: unknown } | null;
 }
 
 interface CoachOption {
@@ -68,6 +72,11 @@ interface VideoDoc {
   studentIds: string[];
   type?: string;
   coachVideoKey?: string;
+}
+
+/** YYYY-MM-DD in local time, for <input type="date">. */
+function toDateInputValue(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function abbreviateName(name: string): string {
@@ -146,6 +155,17 @@ export default function StudentProfilePage() {
   const [sending, setSending] = useState(false);
   const [composeError, setComposeError] = useState("");
 
+  // Plan card + badge (coach or admin): shown once the paywall is live, or
+  // earlier when config/app.planToolsEnabled is set so pilot grants can be
+  // made before launch. Saving goes through /api/admin/plan.
+  const showPlans = planToolsVisible(useAppConfig());
+  const [planFields, setPlanFields] = useState<PlanFields>({});
+  const [adminGrant, setAdminGrant] = useState<{ plan: string; expiresAt: Date | null } | null>(null);
+  const [planInput, setPlanInput] = useState<"none" | "access" | "coached">("none");
+  const [expiryInput, setExpiryInput] = useState("");
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [planMsg, setPlanMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
@@ -180,6 +200,14 @@ export default function StudentProfilePage() {
 
         const studentData = studentSnap.data() as StudentDoc;
         setStudent(studentData);
+        setPlanFields(pickPlanFields(studentSnap.data()));
+        const grant = studentData.adminGrant;
+        if (grant && isPaidPlan(grant.plan)) {
+          const grantExpiry = toDate(grant.expiresAt);
+          setAdminGrant({ plan: grant.plan, expiresAt: grantExpiry });
+          setPlanInput(grant.plan);
+          setExpiryInput(grantExpiry ? toDateInputValue(grantExpiry) : "");
+        }
 
         // Set for every viewer (was previously admin-only).
         setAthleteCoachId(studentData.coachId ?? null);
@@ -272,6 +300,55 @@ export default function StudentProfilePage() {
     }
   }
 
+  async function handleSavePlan() {
+    if (!user || savingPlan) return;
+    setSavingPlan(true);
+    setPlanMsg(null);
+    try {
+      // A date means "through the end of that day", local time.
+      const expiresAt = planInput !== "none" && expiryInput
+        ? new Date(`${expiryInput}T23:59:59`).toISOString()
+        : null;
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ uid: id, plan: planInput, expiresAt }),
+      });
+      const data = await res.json() as {
+        error?: string;
+        plan?: string;
+        planSource?: string;
+        planExpiresAt?: string | null;
+        planProductId?: string | null;
+        planIsTrial?: boolean;
+        planWillRenew?: boolean | null;
+        adminGrant?: { plan: string; expiresAt: string | null } | null;
+        supersededBySubscription?: boolean;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Could not save the plan");
+      setPlanFields({
+        plan: data.plan,
+        planSource: data.planSource,
+        planExpiresAt: data.planExpiresAt ?? null,
+        planProductId: data.planProductId ?? null,
+        planIsTrial: data.planIsTrial ?? false,
+        planWillRenew: data.planWillRenew ?? null,
+      });
+      setAdminGrant(data.adminGrant ? { plan: data.adminGrant.plan, expiresAt: toDate(data.adminGrant.expiresAt) } : null);
+      setPlanMsg({
+        ok: true,
+        text: data.supersededBySubscription
+          ? "Saved. Their App Store subscription is on an equal or higher plan, so it stays in effect; this grant applies if it lapses."
+          : "Plan saved.",
+      });
+    } catch (err) {
+      setPlanMsg({ ok: false, text: err instanceof Error ? err.message : "Could not save the plan" });
+    } finally {
+      setSavingPlan(false);
+    }
+  }
+
   async function handleSendMessage() {
     const text = composeText.trim();
     if (!user || !student || !text || sending) return;
@@ -343,6 +420,11 @@ export default function StudentProfilePage() {
             <div>
               <h1 className="text-xl font-extrabold text-white leading-tight">{student.fullName}</h1>
               <p className="text-sm" style={{ color: "rgba(1,255,249,0.7)" }}>{student.email}</p>
+              {showPlans && (
+                <div className="mt-1.5">
+                  <PlanBadge user={planFields} />
+                </div>
+              )}
               {(student.guardianManaged || !!(student.guardianEmail || student.guardianName)) && (
                 <span
                   className="inline-flex items-center gap-1 mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full"
@@ -435,6 +517,66 @@ export default function StudentProfilePage() {
                 Delete This Athlete
               </button>
             </div>
+          </section>
+        )}
+
+        {/* Plan (coach or admin) */}
+        {showPlans && (
+          <section className="bg-white rounded-xl border border-gray-200 px-4 py-4">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">Plan</h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <PlanBadge user={planFields} />
+              <span className="text-xs text-gray-500">{describePlan(planFields)}</span>
+            </div>
+            {adminGrant && planFields.planSource !== "admin" && (
+              <p className="text-xs text-gray-500 mt-2">
+                Staff grant on file: {adminGrant.plan === "coached" ? "Coached" : "Access"}
+                {adminGrant.expiresAt
+                  ? ` until ${adminGrant.expiresAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                  : ", no end date"}
+                {" "}— applies if the App Store subscription lapses.
+              </p>
+            )}
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-500 mb-1">Grant plan</span>
+                <select
+                  value={planInput}
+                  onChange={e => setPlanInput(e.target.value as "none" | "access" | "coached")}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-400 transition"
+                >
+                  <option value="none">None</option>
+                  <option value="access">Access</option>
+                  <option value="coached">Coached</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-medium text-gray-500 mb-1">Ends (optional)</span>
+                <input
+                  type="date"
+                  value={planInput === "none" ? "" : expiryInput}
+                  onChange={e => setExpiryInput(e.target.value)}
+                  disabled={planInput === "none"}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:border-blue-400 transition disabled:bg-gray-50 disabled:text-gray-400"
+                />
+              </label>
+              <button
+                onClick={handleSavePlan}
+                disabled={savingPlan}
+                className="self-end rounded-lg px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-40"
+                style={{ backgroundColor: "#001c48" }}
+              >
+                {savingPlan ? "Saving…" : "Save"}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              Leave the date empty for no end date. Choosing None removes a staff grant. This never touches App Store billing.
+            </p>
+            {planMsg && (
+              <p className={`text-xs mt-2 font-medium ${planMsg.ok ? "" : "text-red-600"}`} style={planMsg.ok ? { color: "#15803d" } : undefined}>
+                {planMsg.text}
+              </p>
+            )}
           </section>
         )}
 
