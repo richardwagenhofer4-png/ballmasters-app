@@ -73,9 +73,13 @@ export default function VideoPlayerPage() {
   // Paywall (switch on only): Access members don't get the coach's breakdown
   // (annotations + voiceover) or drill comparisons; messaging is Coached too.
   const ent = useEntitlements();
-  const breakdownsLocked = ent.paywallEnabled && !ent.canSeeBreakdowns;
-  const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+  const paywallOn = ent.paywallEnabled;
+  const breakdownsLocked = paywallOn && !ent.canSeeBreakdowns;
+  const messagingLocked = paywallOn && !ent.canMessage;
   const [redirecting, setRedirecting] = useState(false);
+  // The rules refused the breakdown although the app thought it was allowed
+  // (e.g. the plan ran out a moment ago): show the locked panel, not an error.
+  const [breakdownDenied, setBreakdownDenied] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastPausedAt = useRef<number | null>(null);
@@ -103,6 +107,7 @@ export default function VideoPlayerPage() {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
+      let loadingBreakdown = false;
 
       // Load student's display name
       const userSnap = await getDoc(doc(db, "users", user.uid));
@@ -172,6 +177,7 @@ export default function VideoPlayerPage() {
           // Access members can't read the breakdown (the rules refuse it);
           // the locked panel below the player uses meta.hasBreakdown instead.
           if (breakdownsLocked) return;
+          loadingBreakdown = true;
 
           // Load coach annotations (subcollection — rules allow student reads)
           const annotSnap = await getDocs(collection(db, "videos", id, "annotations"));
@@ -204,6 +210,10 @@ export default function VideoPlayerPage() {
           }
         }
       } catch (err: unknown) {
+        if (paywallOn && loadingBreakdown && (err as { code?: string }).code === "permission-denied") {
+          setBreakdownDenied(true);
+          return;
+        }
         console.error("[video-player]", err);
         setError((err as Error).message ?? "Failed to load video.");
       } finally {
@@ -211,7 +221,7 @@ export default function VideoPlayerPage() {
       }
     });
     return unsub;
-  }, [id, router, breakdownsLocked]);
+  }, [id, router, breakdownsLocked, paywallOn]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -564,7 +574,7 @@ export default function VideoPlayerPage() {
       <div className="flex-1 overflow-y-auto pb-20">
 
       {/* Paywall: the coach's breakdown on this clip is part of Coached */}
-      {breakdownsLocked && meta?.hasBreakdown && (
+      {(breakdownsLocked || breakdownDenied) && meta?.hasBreakdown && (
         <div className="bg-gray-900 border-b border-gray-800 px-4 py-4">
           <div
             className="rounded-xl px-4 py-4 flex items-start gap-3"
