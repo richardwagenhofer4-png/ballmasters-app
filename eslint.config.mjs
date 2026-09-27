@@ -16,34 +16,39 @@ const eslintConfig = defineConfig([
     // web assets — generated files, not source we lint.
     "ios/**",
   ]),
-  // Pre-existing violations of the React Compiler rules (and one unescaped
-  // entity) in files written before these rules were enabled. Downgraded to
-  // warnings for exactly these files so `npm run lint` passes without
-  // rewriting working code; every other file keeps them as errors. Remove a
-  // file from this list once it has been brought up to the rules.
+  // Pre-existing violations in code written before these rules were enabled,
+  // downgraded to warnings for exactly the files that trip each rule so
+  // `npm run lint` passes without rewriting working code. Every other file —
+  // and every other rule in these files — stays an error. Remove an entry
+  // once its file has been brought up to the rule.
   {
     files: [
-      "app/coach/dashboard/page.tsx",
       "app/coach/invite/page.tsx",
       "app/coach/layout.tsx",
       "app/coach/messages/page.tsx",
-      "app/coach/videos/[[]id]/clips/ClipsPage.tsx",
-      "app/coach/videos/[[]id]/drill/DrillViewPage.tsx",
       "app/login/page.tsx",
-      "app/register/RegisterForm.tsx",
-      "app/student/dashboard/page.tsx",
       "app/student/messages/page.tsx",
       "app/student/profile/page.tsx",
       "components/DeleteAccountModal.tsx",
       "lib/NotificationsContext.tsx",
     ],
-    rules: {
-      "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/purity": "warn",
-      "react-hooks/static-components": "warn",
-      "react-hooks/rules-of-hooks": "warn",
-      "react/no-unescaped-entities": "warn",
-    },
+    rules: { "react-hooks/set-state-in-effect": "warn" },
+  },
+  {
+    files: ["app/coach/dashboard/page.tsx", "app/student/dashboard/page.tsx"],
+    rules: { "react-hooks/purity": "warn" },
+  },
+  {
+    files: ["app/coach/videos/[[]id]/drill/DrillViewPage.tsx"],
+    rules: { "react-hooks/static-components": "warn" },
+  },
+  {
+    files: ["app/coach/videos/[[]id]/clips/ClipsPage.tsx"],
+    rules: { "react/no-unescaped-entities": "warn" },
+  },
+  {
+    files: ["app/register/RegisterForm.tsx"],
+    rules: { "react-hooks/rules-of-hooks": "warn" },
   },
 ]);
 
