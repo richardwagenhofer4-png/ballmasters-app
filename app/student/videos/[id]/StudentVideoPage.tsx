@@ -4,12 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, onSnapshot, setDoc, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, onSnapshot, setDoc, deleteDoc, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { renderAnnotations, getContentRect, type AnnotationFrame } from "@/lib/annotations";
 import CommentsSection from "@/components/CommentsSection";
 import DrillComparisonPlayer from "@/components/DrillComparisonPlayer";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
+import { isDrillComparison } from "@/lib/entitlements";
+import { LockIcon, NavLockDot } from "@/components/PlanLock";
 
 const REACTIONS = [
   { emoji: "👍", label: "Good" },
@@ -32,6 +35,7 @@ interface VideoMeta {
   type?: string;
   layout?: "side_by_side" | "stacked" | "tabs";
   syncPlayback?: boolean;
+  hasBreakdown?: boolean;
 }
 
 interface VoiceoverMeta {
@@ -66,6 +70,12 @@ export default function VideoPlayerPage() {
   const router = useRouter();
   const pathname = usePathname();
   const { newVideo, newMessage, notifications, markRead } = useNotificationCounts();
+  // Paywall (switch on only): Access members don't get the coach's breakdown
+  // (annotations + voiceover) or drill comparisons; messaging is Coached too.
+  const ent = useEntitlements();
+  const breakdownsLocked = ent.paywallEnabled && !ent.canSeeBreakdowns;
+  const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+  const [redirecting, setRedirecting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const lastPausedAt = useRef<number | null>(null);
@@ -107,10 +117,34 @@ export default function VideoPlayerPage() {
       });
 
       try {
-        const snap = await getDoc(doc(db, "videos", id));
+        let snap;
+        try {
+          snap = await getDoc(doc(db, "videos", id));
+        } catch (err) {
+          // With the paywall on, the rules refuse an Access member a drill
+          // comparison. If that's what this is (it is in their library), open
+          // the upgrade paywall instead of the player.
+          if (breakdownsLocked && (err as { code?: string }).code === "permission-denied") {
+            const mine = await getDocs(query(collection(db, "videos"), where("studentIds", "array-contains", user.uid)));
+            const target = mine.docs.find(d => d.id === id);
+            if (target && isDrillComparison(target.data())) {
+              setRedirecting(true);
+              router.replace(UPGRADE_HREF);
+              return;
+            }
+          }
+          throw err;
+        }
         if (!snap.exists()) {
           setError("Video not found.");
           setLoading(false);
+          return;
+        }
+        // Belt and braces: never play a drill comparison for an Access member,
+        // even if the rules in force happen to allow the read.
+        if (breakdownsLocked && isDrillComparison(snap.data())) {
+          setRedirecting(true);
+          router.replace(UPGRADE_HREF);
           return;
         }
         const data = { id: snap.id, ...(snap.data() as Omit<VideoMeta, "id">) };
@@ -134,6 +168,10 @@ export default function VideoPlayerPage() {
           });
         } else {
           setVideoUrl(resData.videoUrl as string);
+
+          // Access members can't read the breakdown (the rules refuse it);
+          // the locked panel below the player uses meta.hasBreakdown instead.
+          if (breakdownsLocked) return;
 
           // Load coach annotations (subcollection — rules allow student reads)
           const annotSnap = await getDocs(collection(db, "videos", id, "annotations"));
@@ -173,7 +211,7 @@ export default function VideoPlayerPage() {
       }
     });
     return unsub;
-  }, [id, router]);
+  }, [id, router, breakdownsLocked]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -358,7 +396,7 @@ export default function VideoPlayerPage() {
     syncVoiceover(videoRef.current?.paused ?? true);
   }
 
-  if (loading) {
+  if (loading || redirecting) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">
         <svg className="h-10 w-10 animate-spin text-white opacity-40" viewBox="0 0 24 24" fill="none">
@@ -525,6 +563,31 @@ export default function VideoPlayerPage() {
       {/* Scrollable content below video */}
       <div className="flex-1 overflow-y-auto pb-20">
 
+      {/* Paywall: the coach's breakdown on this clip is part of Coached */}
+      {breakdownsLocked && meta?.hasBreakdown && (
+        <div className="bg-gray-900 border-b border-gray-800 px-4 py-4">
+          <div
+            className="rounded-xl px-4 py-4 flex items-start gap-3"
+            style={{ backgroundColor: "rgba(1,255,249,0.07)", border: "1px solid rgba(1,255,249,0.25)" }}
+          >
+            <LockIcon className="h-5 w-5 shrink-0 mt-0.5" style={{ color: "#01fff9" }} />
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-white">Coach breakdown on this clip</h2>
+              <p className="text-sm text-gray-300 mt-1 leading-snug">
+                Your coach added drawings and feedback to this video. Upgrade to Coached to watch it with their breakdown.
+              </p>
+              <Link
+                href={UPGRADE_HREF}
+                className="mt-3 inline-flex items-center justify-center min-h-11 rounded-lg px-5 text-sm font-bold transition active:opacity-80"
+                style={{ backgroundColor: "#01fff9", color: "#001c48" }}
+              >
+                See Coached
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Metadata panel */}
       <div className="bg-gray-900 px-6 py-5">
         <h1 className="text-lg font-bold text-white leading-snug mb-1">
@@ -601,11 +664,12 @@ export default function VideoPlayerPage() {
           const badge =
             item.href === "/student/videos" ? newVideo :
             item.href === "/student/messages" ? newMessage : 0;
+          const locked = messagingLocked && item.href === "/student/messages";
           return (
-            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
+            <Link key={item.href} href={locked ? UPGRADE_HREF : item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">
                 <span className={isActive ? "" : "text-gray-500"}>{item.icon}</span>
-                {badge > 0 && (
+                {locked ? <NavLockDot /> : badge > 0 && (
                   <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
                     {badge > 9 ? "9+" : badge}
                   </span>

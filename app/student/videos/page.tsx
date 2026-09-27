@@ -10,6 +10,9 @@ import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
+import { isDrillComparison } from "@/lib/entitlements";
+import { CoachedLockBadge, LockIcon, NavLockDot } from "@/components/PlanLock";
 
 interface Video {
   id: string;
@@ -21,6 +24,9 @@ interface Video {
   viewedBy: string[];
   createdAt: string;
   status: string;
+  type?: string;
+  coachVideoKey?: string;
+  studentVideoKey?: string;
 }
 
 function formatDate(iso: string): string {
@@ -87,6 +93,13 @@ export default function StudentVideosPage() {
   const [avatarId, setAvatarId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Paywall (switch on only): drill comparisons and messaging are Coached.
+  const ent = useEntitlements();
+  const drillsLocked = ent.paywallEnabled && !ent.canSeeBreakdowns;
+  const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+  const isLocked = (v: Video) => drillsLocked && isDrillComparison(v);
+  const videoHref = (v: Video) => (isLocked(v) ? UPGRADE_HREF : `/student/videos/${v.id}`);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -160,7 +173,7 @@ export default function StudentVideosPage() {
             {videos.map((video, i) => {
               const watched = uid ? (video.viewedBy ?? []).includes(uid) : false;
               return (
-                <Link key={video.id} href={`/student/videos/${video.id}`}>
+                <Link key={video.id} href={videoHref(video)}>
                   <div
                     className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition"
                     style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}
@@ -172,12 +185,14 @@ export default function StudentVideosPage() {
                       <p className="text-sm font-bold text-gray-900 truncate">{video.title}</p>
                       <VideoMetaRows v={video} studentName={studentName} uid={uid!} avatarId={avatarId} size={26} />
                     </div>
+                    {isLocked(video) ? <CoachedLockBadge /> : (
                     <span
                       className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
                       style={watched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}
                     >
                       {watched ? "Watched" : "New"}
                     </span>
+                    )}
                   </div>
                 </Link>
               );
@@ -189,7 +204,7 @@ export default function StudentVideosPage() {
               const watched = uid ? (video.viewedBy ?? []).includes(uid) : false;
               return (
                 <div key={video.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  <Link href={`/student/videos/${video.id}`}>
+                  <Link href={videoHref(video)}>
                     <div className="flex items-center justify-center h-16" style={{ backgroundColor: watched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}>
                       <svg className="h-7 w-7" style={{ color: watched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
                         <path fillRule="evenodd" d="M4.5 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L7.28 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
@@ -197,12 +212,14 @@ export default function StudentVideosPage() {
                     </div>
                   </Link>
                   <div className="p-2.5">
-                    <Link href={`/student/videos/${video.id}`}>
+                    <Link href={videoHref(video)}>
                       <div className="flex items-start gap-1 mb-0.5">
                         <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug flex-1 min-w-0 hover:underline">{video.title}</p>
+                        {isLocked(video) ? <CoachedLockBadge /> : (
                         <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full" style={watched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
                           {watched ? "✓" : "New"}
                         </span>
+                        )}
                       </div>
                     </Link>
                     <VideoMetaRows v={video} studentName={studentName} uid={uid!} avatarId={avatarId} size={24} abbreviate />
@@ -220,26 +237,30 @@ export default function StudentVideosPage() {
                   <div className="p-4 pb-3">
                     <div className="flex items-start gap-2">
                       <div className="flex-1 min-w-0">
-                        <Link href={`/student/videos/${video.id}`}>
+                        <Link href={videoHref(video)}>
                           <h3 className="text-sm font-bold text-gray-900 truncate hover:underline">{video.title}</h3>
                         </Link>
                         <VideoMetaRows v={video} studentName={studentName} uid={uid!} avatarId={avatarId} size={26} />
                       </div>
+                      {isLocked(video) ? <CoachedLockBadge /> : (
                       <span
                         className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full"
                         style={watched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}
                       >
                         {watched ? "Watched" : "New"}
                       </span>
+                      )}
                     </div>
                   </div>
                   <div className="border-t border-gray-100">
-                    <Link href={`/student/videos/${video.id}`}>
+                    <Link href={videoHref(video)}>
                       <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                        {isLocked(video) ? <LockIcon className="h-3.5 w-3.5" /> : (
                         <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L8.029 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
                         </svg>
-                        Watch
+                        )}
+                        {isLocked(video) ? "Unlock with Coached" : "Watch"}
                       </button>
                     </Link>
                   </div>
@@ -256,11 +277,12 @@ export default function StudentVideosPage() {
           const badge =
             item.href === "/student/videos" ? newVideo :
             item.href === "/student/messages" ? newMessage : 0;
+          const locked = messagingLocked && item.href === "/student/messages";
           return (
-            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
+            <Link key={item.href} href={locked ? UPGRADE_HREF : item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : undefined}>
               <div className="relative">
                 <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
-                {badge > 0 && (
+                {locked ? <NavLockDot /> : badge > 0 && (
                   <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
                     {badge > 9 ? "9+" : badge}
                   </span>

@@ -11,6 +11,9 @@ import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
 import InitialsAvatar from "@/components/InitialsAvatar";
+import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
+import { isDrillComparison } from "@/lib/entitlements";
+import { CoachedLockBadge, LockIcon, NavLockDot } from "@/components/PlanLock";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +26,7 @@ interface Video {
   viewedBy: string[];
   createdAt: string;
   type?: string;
+  drill: boolean;
 }
 
 function abbreviateName(name: string): string {
@@ -146,6 +150,13 @@ export default function StudentDashboard() {
   const greeting = getGreeting();
   const [viewMode, setViewMode] = useViewMode("student-dashboard");
 
+  // Paywall (switch on only): drill comparisons and messaging are Coached.
+  const ent = useEntitlements();
+  const drillsLocked = ent.paywallEnabled && !ent.canSeeBreakdowns;
+  const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+  const isLocked = (v: Video) => drillsLocked && v.drill;
+  const videoHref = (v: Video) => (isLocked(v) ? UPGRADE_HREF : `/student/videos/${v.id}`);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
@@ -168,6 +179,7 @@ export default function StudentDashboard() {
           viewedBy: (d.data().viewedBy as string[]) ?? [],
           createdAt: (d.data().createdAt as string) ?? "",
           type: d.data().type as string | undefined,
+          drill: isDrillComparison(d.data()),
         }));
 
         setVideos(videoDocs);
@@ -293,14 +305,19 @@ export default function StudentDashboard() {
                 label: "All Videos", href: "/student/videos",
                 icon: <svg className="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h1.5C5.496 19.5 6 18.996 6 18.375m-3.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-1.5A1.125 1.125 0 0118 18.375M20.625 4.5H3.375m17.25 0c.621 0 1.125.504 1.125 1.125M20.625 4.5h-1.5C18.504 4.5 18 5.004 18 5.625m3.75 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 4.5c-.621 0-1.125.504-1.125 1.125M3.375 4.5h1.5C5.496 4.5 6 5.004 6 5.625m-3.75 0v1.5c0 .621.504 1.125 1.125 1.125m0 0h1.5m-1.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m1.5-3.75C6.504 8.25 7 7.746 7 7.125v-1.5M4.875 8.25C5.496 8.25 6 8.754 6 9.375v1.5m0-5.25v5.25m0-5.25C6 5.004 6.504 4.5 7.125 4.5h9.75c.621 0 1.125.504 1.125 1.125m1.125 2.625h1.5m-1.5 0A1.125 1.125 0 0118 7.125v-1.5m1.125 2.625c-.621 0-1.125.504-1.125 1.125v1.5m2.625-2.625c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M18 5.625v5.25M7.125 12h9.75m-9.75 0A1.125 1.125 0 016 10.875M7.125 12C6.504 12 6 12.504 6 13.125m0-2.25C6 11.496 5.496 12 4.875 12M18 10.875c0 .621-.504 1.125-1.125 1.125M18 10.875c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-7.5 0h7.5" /></svg>,
               },
-            ].map(action => (
-              <Link key={action.href} href={action.href}>
-                <div className="rounded-xl p-4 flex flex-col items-center justify-center gap-2 active:opacity-80 transition shadow-sm h-full" style={{ backgroundColor: "#001c48" }}>
+            ].map(action => {
+              const locked = messagingLocked && action.href === "/student/messages";
+              return (
+              <Link key={action.href} href={locked ? UPGRADE_HREF : action.href}>
+                <div className={`${locked ? "relative " : ""}rounded-xl p-4 flex flex-col items-center justify-center gap-2 active:opacity-80 transition shadow-sm h-full`} style={{ backgroundColor: "#001c48" }}>
+                  {locked && <LockIcon className="absolute top-2.5 right-2.5 h-3.5 w-3.5" style={{ color: "#01fff9" }} />}
                   {action.icon}
                   <span className="text-xs font-semibold text-white text-center leading-tight">{action.label}</span>
+                  {locked && <span className="text-[10px] font-semibold leading-none" style={{ color: "rgba(1,255,249,0.8)" }}>Coached plan</span>}
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -376,7 +393,7 @@ export default function StudentDashboard() {
                     const isWatched = uid ? v.viewedBy.includes(uid) : false;
                     return (
                       <div key={v.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                        <Link href={`/student/videos/${v.id}`}>
+                        <Link href={videoHref(v)}>
                           <div className="flex items-center justify-center h-16" style={{ backgroundColor: isWatched ? "#f9fafb" : "rgba(1,255,249,0.08)" }}>
                             <svg className="h-7 w-7" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
                               <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
@@ -384,12 +401,14 @@ export default function StudentDashboard() {
                           </div>
                         </Link>
                         <div className="p-2.5">
-                          <Link href={`/student/videos/${v.id}`}>
+                          <Link href={videoHref(v)}>
                             <div className="flex items-start gap-1 mb-0.5">
                               <p className="text-xs font-bold text-gray-900 line-clamp-2 leading-snug flex-1 min-w-0 hover:underline">{v.title}</p>
+                              {isLocked(v) ? <CoachedLockBadge /> : (
                               <span className="shrink-0 text-xs font-bold px-1.5 py-0.5 rounded-full" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
                                 {isWatched ? "✓" : "New"}
                               </span>
+                              )}
                             </div>
                           </Link>
                           <VideoMetaRows v={v} studentName={studentName} uid={uid!} avatarId={avatarId} size={24} abbreviate />
@@ -403,7 +422,7 @@ export default function StudentDashboard() {
                   {continueWatching.map((v, i) => {
                     const isWatched = uid ? v.viewedBy.includes(uid) : false;
                     return (
-                      <Link key={v.id} href={`/student/videos/${v.id}`}>
+                      <Link key={v.id} href={videoHref(v)}>
                         <div className="flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition" style={{ borderTop: i > 0 ? "1px solid #f3f4f6" : undefined }}>
                           <svg className="h-4 w-4 shrink-0" style={{ color: isWatched ? "#d1d5db" : "#001c48" }} viewBox="0 0 24 24" fill="currentColor">
                             <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
@@ -412,9 +431,11 @@ export default function StudentDashboard() {
                             <p className="text-sm font-bold text-gray-900 truncate">{v.title}</p>
                             <VideoMetaRows v={v} studentName={studentName} uid={uid!} avatarId={avatarId} size={26} />
                           </div>
+                          {isLocked(v) ? <CoachedLockBadge /> : (
                           <span className="shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
                             {isWatched ? "Watched" : "New"}
                           </span>
+                          )}
                         </div>
                       </Link>
                     );
@@ -429,23 +450,27 @@ export default function StudentDashboard() {
                         <div className="p-4 pb-3">
                           <div className="flex items-start gap-2">
                             <div className="flex-1 min-w-0">
-                              <Link href={`/student/videos/${v.id}`}>
+                              <Link href={videoHref(v)}>
                                 <h3 className="text-sm font-bold text-gray-900 truncate hover:underline">{v.title}</h3>
                               </Link>
                               <VideoMetaRows v={v} studentName={studentName} uid={uid!} avatarId={avatarId} size={26} />
                             </div>
+                            {isLocked(v) ? <CoachedLockBadge /> : (
                             <span className="shrink-0 text-xs font-semibold px-1.5 py-0.5 rounded-full" style={isWatched ? { backgroundColor: "#f3f4f6", color: "#9ca3af" } : { backgroundColor: "#01fff9", color: "#001c48" }}>
                               {isWatched ? "Watched" : "New"}
                             </span>
+                            )}
                           </div>
                         </div>
                         <div className="border-t border-gray-100">
-                          <Link href={`/student/videos/${v.id}`}>
+                          <Link href={videoHref(v)}>
                             <button className="w-full py-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition flex items-center justify-center gap-1">
+                              {isLocked(v) ? <LockIcon className="h-3.5 w-3.5" /> : (
                               <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-1.427 1.529-2.33 2.779-1.643l11.54 6.347c1.295.712 1.295 2.573 0 3.286L8.029 19.99c-1.25.687-2.779-.217-2.779-1.643V5.653z" />
                               </svg>
-                              Watch
+                              )}
+                              {isLocked(v) ? "Unlock with Coached" : "Watch"}
                             </button>
                           </Link>
                         </div>
@@ -476,11 +501,12 @@ export default function StudentDashboard() {
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
           const badge = item.href === "/student/videos" ? newVideo : item.href === "/student/messages" ? newMessage : 0;
+          const locked = messagingLocked && item.href === "/student/messages";
           return (
-            <Link key={item.href} href={item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
+            <Link key={item.href} href={locked ? UPGRADE_HREF : item.href} className="flex-1 flex flex-col items-center py-2.5 gap-0.5 transition" style={isActive ? { color: "#01fff9" } : {}}>
               <div className="relative">
                 <item.Icon className={`h-5 w-5 ${isActive ? "" : "text-gray-500"}`} />
-                {badge > 0 && (
+                {locked ? <NavLockDot /> : badge > 0 && (
                   <span className="absolute -top-1 -right-1.5 h-4 min-w-[16px] flex items-center justify-center rounded-full px-0.5" style={{ backgroundColor: "#01fff9", color: "#001c48", fontSize: "9px", fontWeight: 700 }}>
                     {badge > 9 ? "9+" : badge}
                   </span>
