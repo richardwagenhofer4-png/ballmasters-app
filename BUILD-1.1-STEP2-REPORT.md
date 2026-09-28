@@ -225,3 +225,197 @@ The four untracked scripts that were already in `scripts/` before this work (`di
 - A user can still edit their own `dateOfBirth`, guardian fields, `email` field and `needsCoachAssignment`. `dateOfBirth` feeds the under-13 transcription gate. Consider locking them the same way.
 - The `inviteCodes` / `coachInvites` rules still let any signed-in user append themselves to a code's `usedBy`, or mark an unused coach invite as used by themselves. Registration no longer needs either. Someone holding a leaked link could burn it, but can no longer become a coach through it. These client rules can be removed.
 
+
+---
+
+## 9. Native build
+
+**Status:** 1.1 (4) is ready for Richard to archive. There's one TestFlight build's worth of native work: purchases (RevenueCat), Sign in with Apple plus Google back, and push notifications.
+
+**Proof run:**
+- `npm run build` ✅ and `npm run lint` ✅ (0 errors).
+- `xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath /tmp/bm-dd build` → **BUILD SUCCEEDED**, 0 errors.
+- The built app reports 1.1 (4) and `UIBackgroundModes: remote-notification`. Its processed entitlements are `aps-environment: development` and `com.apple.developer.applesignin: [Default]`, on `5BK9783699.com.ballmasters.app`.
+- A final `npx cap sync ios` still has `server.url = https://ballmasters-app.vercel.app` in `ios/App/App/capacitor.config.json`.
+
+Nothing was pushed, archived, uploaded or deployed. The switch is still off.
+
+### The one rule behind every web change: gate on the binary, not the platform
+
+The iPhone app is a WebView over the live site, so **every installed build runs the same web code**. That includes 1.0 (build 3), which has the Firebase Authentication plugin (Google only) but none of the 1.1 plugins. `lib/nativeApp.ts` therefore gates each new feature on its plugin actually being in the binary (`Capacitor.isPluginAvailable`), never on `isNativePlatform()` alone:
+
+| Feature | Lights up when | Web | 1.0 app | 1.1 app |
+|---|---|---|---|---|
+| Purchases (RevenueCat) | `Purchases` plugin present | "Subscribe in the iPhone app" (as before) | "Update Ball Masters from the App Store to subscribe" | ✅ |
+| Sign in with Apple / Google buttons | `Purchases` + `FirebaseMessaging` present (marks the 1.1 binary, the first with Apple configured) | hidden — email/password only, as today | hidden. Google alone is what 4.8 rejected | ✅ |
+| Push (token, prompt, taps, toggle) | `FirebaseMessaging` present | unchanged (web-push code untouched) | nothing | ✅ |
+
+So with this branch deployed and the switch off, the login and register pages on the web and in 1.0 look exactly as they do today (checked at 390px). Server-side changes are also invisible to anyone without 1.1, as described below.
+
+### Packages added (exact versions, pinned like the existing auth plugin)
+
+| Package | Version | Why this major |
+|---|---|---|
+| `@revenuecat/purchases-capacitor` | **13.6.1** | 12.x and 13.x are the majors whose `peerDependencies` declare `@capacitor/core >=8.0.0`; 10.x and 11.x say `>=7`. 13.6.1 is current. It ships a `Package.swift` (SPM) and pulls `purchases-hybrid-common` 19.3.1 → `purchases-ios-spm` 5.90.2. |
+| `@capacitor-firebase/messaging` | **8.3.0** | The same release as the installed `@capacitor-firebase/authentication` 8.3.0 (peer `@capacitor/core >=8`, `firebase ^12.6`). Both pin `firebase-ios-sdk` `upToNextMajor(12.7.0)`, so SPM resolves **one** Firebase (12.16.0, the pin already in `Package.resolved`). 8.5.2 exists, but matching the auth plugin's release avoids drift. |
+
+- `npm ls`: a single `@capacitor/core` 8.4.1 and a single `firebase` 12.13.0, with nothing nested.
+- `Package.resolved` only gained the two RevenueCat packages; every existing pin is unchanged.
+- The existing `patch-package` patch (Facebook SDK stripped from the auth plugin) still applies.
+
+### Part A — Purchases
+
+- **`lib/billing.ts`** (web path unchanged):
+  - `configurePurchases()` runs once per launch with `NEXT_PUBLIC_REVENUECAT_IOS_KEY` (never hard-coded).
+  - `syncBillingUser()` is wired into `AuthProvider`, so the RevenueCat user always mirrors the Firebase user: `logIn(uid)` on sign-in, `logOut()` on sign-out (skipped when anonymous). The webhook's `app_user_id` is therefore the uid.
+- **`getOfferings()`** reads offering `default` and its packages `coached_monthly`, `coached_annual`, `access_monthly`, `access_annual`. It maps them to `lib/plans.ts` by product id and returns StoreKit's **localized price strings**; `plans.ts` stays the web fallback.
+  - Trial eligibility uses `checkTrialOrIntroductoryPriceEligibility` on the monthly products. The CTA reads "Start 7-day free trial" only when the status is ELIGIBLE; unknown or ineligible shows "Subscribe", with matching fine print.
+- **`purchase(packageId)`, `restorePurchases()` and `presentCodeRedemption()`** (Apple offer codes) all go through the SDK. Each then calls `/api/billing/refresh`.
+  - A customer-info listener also refreshes on entitlement changes: renewals, redeemed codes, Ask to Buy approvals.
+  - An upgrade from Access to Coached is a normal purchase of the Coached package; Apple prorates within the group.
+  - Plain-English messages for:
+    - user cancelled (silent);
+    - Ask to Buy / pending;
+    - "already has this subscription → Restore";
+    - "subscription belongs to a different Ball Masters account";
+    - purchases restricted by Screen Time;
+    - offline;
+    - store error;
+    - product unavailable.
+- **`/api/billing/refresh`**: with `REVENUECAT_SECRET_API_KEY` set, it first reads the user's entitlements from RevenueCat's REST API (`GET /v1/subscribers/{uid}`), so a purchase unlocks **before** the webhook arrives. Without the key it behaves as before. Staff skip the call.
+- **StoreKit test file** `ios/App/BallMasters.storekit`:
+  - the four product IDs, at $49 / $490 / $99 / $990;
+  - one group "Ball Masters", with Coached at level 1 above Access at level 2;
+  - a free one-week introductory offer on both monthly products.
+
+  It's referenced from a **new shared scheme** (`App.xcodeproj/xcshareddata/xcschemes/App.xcscheme`), **Run action only**. Archive uses Release, which never loads a StoreKit file.
+
+### Part B — Sign in with Apple + Google back
+
+- Commit 3919c29 is **reverted** as it asked. It's adapted rather than verbatim: the restored Google sign-up used the client profile writes that §8 removed, so it now goes through `/api/register` via a `createProfile()` helper shared with email sign-up.
+- **Apple**:
+  - `providers: ['google.com','apple.com']` in `capacitor.config.ts`.
+  - `lib/socialSignIn.ts` calls `signInWithApple({ skipNativeAuth: true })`, so the Apple ID token's one-time nonce is consumed once, by the JS SDK, which signs in with `OAuthProvider('apple.com')`.
+  - Google is exactly as build 3 did it.
+- **Buttons** (`components/SocialSignInButtons.tsx`): Apple first, black, Apple logo, "Sign in with Apple" / "Sign up with Apple"; Google second at the same size. Apple is at least as prominent, per the HIG.
+- **Register**: one handler for both providers. It runs the form's checks minus email/password, with the name required because Apple gives the web no name. Then the same invite pre-flight and the **same `/api/register`** call, so role and `coachId` stay server-side. It's still hidden for under-13 accounts, as before.
+- **Login**: an Apple or Google account with no Ball Masters profile is signed out and told to use the coach's invite link, instead of landing on "Account setup required".
+- **iOS**: `App/App.entitlements` has `com.apple.developer.applesignin`. The Google `REVERSED_CLIENT_ID` URL scheme in `Info.plist` is untouched.
+
+### Part C — Push notifications
+
+- **`components/NativePushBridge.tsx`** (root layout, renders nothing):
+  - saves the FCM token to `users/{uid}.fcmToken` through the same own-doc `setDoc(…, {merge:true})` path the web uses, plus `fcmTokenSource: "ios"`;
+  - refreshes it on `tokenReceived`;
+  - asks for permission **the first time a student opens a `/student` screen after login** (once per user per install, never at launch);
+  - opens a tapped notification's `data.url` (a video or the messages thread). The plugin retains cold-start taps until the listener attaches.
+- **Toggle** (`components/NotificationsToggle.tsx`) on the student profile and coach settings, only in the 1.1 app. It stores `users/{uid}.notificationsEnabled`; if iOS permission is denied, it points to iPhone Settings.
+- **Server sender respects it.** `/api/notifications/send` now takes `recipientIds`, and the server:
+  - reads the tokens and skips `notificationsEnabled === false`;
+  - keeps the old limit that a coach reaches only their own athletes;
+  - adds `data.url` and an APNs sound;
+  - removes dead tokens.
+
+  The old `{tokens}` body still works.
+- **New `/api/notifications/message`** sends "Message from <name>" to the other person in a thread. It only reaches **iPhone-app tokens**, so web-push users see no change. It only pushes the caller's own newest message, once. Opted-out users are skipped, and so are Access athletes who can't open messages when the paywall is on. `sendMessage()` calls it.
+- **iOS**:
+  - `aps-environment` in the entitlements;
+  - `UIBackgroundModes → remote-notification` in `Info.plist`;
+  - `AppDelegate` forwards APNs registration success/failure and remote notifications to Capacitor, and lets `Auth.auth().canHandle(url)` go first. This is the wiring the messaging plugin's README requires alongside the auth plugin.
+- The web-push code (`lib/notifications.ts` `requestNotificationPermission`) is kept.
+
+### Part D — Build identity
+
+- `CURRENT_PROJECT_VERSION = 4` and `MARKETING_VERSION = 1.1`, both occurrences.
+- Bundle ID untouched (`com.ballmasters.app`: pbxproj ×2, `capacitor.config.ts`).
+
+### Every file touched in this step
+
+Web and config:
+- `package.json`, `package-lock.json`, `capacitor.config.ts`, `.env.example`
+- new: `lib/nativeApp.ts`, `lib/revenuecatApi.server.ts`, `lib/socialSignIn.ts`, `lib/push.ts`, `components/SocialSignInButtons.tsx`, `components/NativePushBridge.tsx`, `components/NotificationsToggle.tsx`, `app/api/notifications/message/route.ts`
+- changed: `lib/billing.ts`, `lib/AuthContext.tsx`, `lib/notifications.ts`, `lib/messaging.ts`, `app/api/billing/refresh/route.ts`, `app/api/notifications/send/route.ts`, `components/Paywall.tsx`, `app/login/page.tsx`, `app/register/RegisterForm.tsx`, `app/layout.tsx`, `app/student/profile/page.tsx`, `app/coach/settings/page.tsx`, `scripts/test-paywall-rules.mjs`, this report
+
+iOS:
+- new: `ios/App/App/App.entitlements`, `ios/App/BallMasters.storekit`, `ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme`
+- changed: `ios/App/App/Info.plist`, `ios/App/App/AppDelegate.swift`, `ios/App/App.xcodeproj/project.pbxproj`, `ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`, `ios/App/CapApp-SPM/Package.swift` (generated by `cap sync`), `ios/App/CapApp-SPM/.gitignore`
+
+Generated and git-ignored (recreated by `npx cap sync ios`): `ios/App/App/capacitor.config.json` and `ios/App/CapApp-SPM/symlinks/`. The latter is an absolute-path symlink the messaging plugin's SPM option creates.
+
+### Tests run
+
+- **Emulator rules suite**: **265/265**, including the new own-doc writes (`fcmToken` + `fcmTokenSource`, `notificationsEnabled`). The switch-off student matrix is still identical to `main`'s rules (132/132).
+- **Route harness** (in-memory Firestore, scratch only): **53/53**, adding checks for:
+  - refresh via a mocked RevenueCat API: fresh purchase, upgrade, fallback when RevenueCat is down;
+  - `/api/notifications/send`: own athletes only, opt-out, dead-token cleanup, legacy body;
+  - `/api/notifications/message`: once only, thread members only, iPhone tokens only, message untouched for web-only recipients, opt-out, paywall gating.
+- **Visual**: the Apple/Google buttons at 390px. The web login still shows email/password only.
+
+### Console prerequisites (Richard / Cowork)
+
+- [ ] **Firebase Console → Authentication → Sign-in method → Apple → Enable.** Native iOS sign-in needs only the toggle; the Services ID and key fields are for web/Android. Without it, Apple sign-in fails.
+- [ ] **Apple Developer → Identifiers → com.ballmasters.app**: *Sign In with Apple* and *Push Notifications* on. Xcode's automatic signing usually adds them from the entitlements file at archive time; if signing complains, tick them in the portal.
+- [ ] **APNs Auth Key (.p8)**:
+  1. Apple Developer → Keys → + → Apple Push Notifications service (APNs) → download the .p8 and note its Key ID; the Team ID is 5BK9783699.
+  2. Firebase Console → Project settings → Cloud Messaging → Apple app configuration → APNs Authentication Key → upload it.
+
+  **Without it, tokens issue but nothing arrives.**
+- [ ] **Vercel env**, then redeploy (the public key is inlined at build time):
+  - `NEXT_PUBLIC_REVENUECAT_IOS_KEY`: RevenueCat → Project → API keys → the App Store public key, `appl_…`.
+  - `REVENUECAT_SECRET_API_KEY`: a v1 secret key, `sk_…`, for instant unlock.
+  - `REVENUECAT_WEBHOOK_SECRET`: from Step 2.
+- [ ] **RevenueCat**:
+  - the App Store app for `com.ballmasters.app` with its App Store Connect In-App Purchase key;
+  - the four products imported;
+  - entitlements **`access`** and **`coached`**: the Coached products grant `coached` (and may also grant `access`), the Access products grant `access`;
+  - offering **`default`** with custom package identifiers exactly `coached_monthly`, `coached_annual`, `access_monthly`, `access_annual`;
+  - the webhook: URL `https://<domain>/api/billing/revenuecat`, Authorization `Bearer <REVENUECAT_WEBHOOK_SECRET>`.
+- [ ] **App Store Connect**:
+  - one subscription group with Coached ranked above Access;
+  - the 7-day free introductory offer on both monthly products;
+  - Paid Apps agreement active;
+  - attach the four subscriptions to version 1.1 when submitting.
+- [ ] **Local purchase testing** against `BallMasters.storekit`: RevenueCat can only validate those local receipts after its StoreKit test certificate is uploaded (open the .storekit in Xcode → Editor → Save Public Certificate → upload in RevenueCat's app settings, per RevenueCat's StoreKit-testing docs). TestFlight uses the real sandbox and doesn't need this.
+
+### Exact Xcode steps to archive
+
+1. In the repo: `npm install` (only if `node_modules` is missing), then `npx cap sync ios`. It regenerates the git-ignored `capacitor.config.json` and the SPM symlink. Check `server.url` is still there:
+
+   `node -e 'console.log(require("./ios/App/App/capacitor.config.json").server)'`
+
+   It must print the vercel.app URL.
+2. Open **`ios/App/App.xcodeproj`** in Xcode 26. Wait for "Resolving Package Graph" to finish; the first time it downloads Firebase and RevenueCat.
+3. Scheme **App**, destination **Any iOS Device (arm64)**.
+4. **Remove the StoreKit config from Run**: Product → Scheme → Edit Scheme… → Run → Options → StoreKit Configuration → **None** → Close.
+   - Archive never uses it (Release), so this is belt-and-braces.
+   - It edits the shared scheme file; either discard that change afterwards or set it back to `BallMasters.storekit` for local purchase testing.
+5. Target **App** → **Signing & Capabilities**: Team 5BK9783699, automatic signing. You should see **Sign in with Apple**, **Push Notifications** and **Background Modes → Remote notifications**. If a capability shows a signing error, click the fix (it registers the capability on the App ID).
+6. Target **App** → **General**: Version **1.1**, Build **4**.
+7. **Product → Archive.**
+8. Organizer → select the archive → **Distribute App** → **App Store Connect** → **Upload** (automatic signing). App Store distribution signing swaps `aps-environment` to production.
+9. In App Store Connect: attach the subscriptions to 1.1, then TestFlight.
+
+### Decisions where the brief was silent
+
+1. **Gating on plugin presence** (the table above). The sign-in buttons use "both 1.1 plugins present" as the marker for the first binary with Apple configured.
+2. **Google on the web is gone**. Before 3919c29 it had a popup path; the brief says the web offers email/password only.
+3. **Apple uses `skipNativeAuth: true`** (single-use nonce). Google is unchanged from build 3 to avoid regressions.
+4. **Social sign-up requires the form's name and, for coaches, the age field**, because `/api/register` validates them. The pre-3919c29 Google flow took Google's display name and no coach age.
+5. **Social login without a profile** signs out and shows a message rather than going to `/incomplete-profile`. The orphan Firebase Auth user isn't deleted; registering with the invite link reuses it.
+6. **RevenueCat is configured with the current Firebase uid when already known**, then `logIn`/`logOut` keep them in step.
+7. **Trial CTA only on ELIGIBLE**; unknown shows "Subscribe". While store data loads, the in-app CTA reads "Loading…" and is disabled.
+8. **Instant unlock needs `REVENUECAT_SECRET_API_KEY`** on the server. The client never sends purchase data to the server; the server asks RevenueCat.
+9. **Push permission is asked for students automatically**, gated on the client-set role cookie. Coaches turn it on with the settings toggle.
+10. **Message pushes were added** so "deep link into the thread" has something to open. They go to iPhone-app tokens only; the existing video pushes still reach web-push users too.
+11. **`fcmTokenSource: "ios"`** is written alongside the existing `fcmToken` field. `notificationsEnabled` defaults to on when absent.
+12. **A shared scheme was created** (none existed; Xcode's auto-generated scheme lived in the ignored `xcuserdata`). The StoreKit file is on the Run action only.
+13. **The `.storekit` file was written by hand** as JSON (format version 4), using the key names read out of Xcode 26's StoreKit plugin.
+14. **The SPM `symlinks/` folder is git-ignored**, since it holds an absolute, machine-specific path.
+
+### Could not verify
+
+- **Nothing ran on a device or simulator.** The Apple and Google sheets, RevenueCat purchases (even against the StoreKit file), trial eligibility, offer-code redemption, Ask to Buy, and push delivery and taps are all unexercised. There's no RevenueCat key or APNs key here, and I didn't sign in anywhere real.
+- **The `.storekit` file hasn't been opened in Xcode's StoreKit editor.** If Xcode offers to update it, accept. If Edit Scheme shows the StoreKit Configuration as missing, re-select `ios/App/BallMasters.storekit` there; the scheme uses the path `../../BallMasters.storekit`.
+- **RevenueCat offering and package identifiers** must match the dashboard exactly (`default`, `coached_monthly`, …). A mismatch shows the catalog prices and "This plan isn't available to buy right now."
+- **RevenueCat REST response parsing** (`entitlements`, `subscriptions`, `period_type`, `unsubscribe_detected_at`, …) follows RevenueCat's v1 API and was only tested against a mocked response.
+- **The `Auth.auth().canHandle(url)` line** the messaging README requires compiles, but is untested at runtime.
