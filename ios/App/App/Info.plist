@@ -53,6 +53,10 @@
 	<string>Ball Masters uses your camera to record training videos to upload for coaching feedback.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Ball Masters accesses your photo library so you can upload existing training videos for coaching feedback.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
