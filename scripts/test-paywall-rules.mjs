@@ -159,6 +159,10 @@ if (!ONLY_SWITCH_OFF) {
     await check(`${name} · student renames self`, true, () => setDoc(doc(me, "users/none"), { fullName: "New Name" }, { merge: true }));
     await check(`${name} · student saves fcmToken`, true, () => setDoc(doc(me, "users/none"), { fcmToken: "t" }, { merge: true }));
     await check(`${name} · student lastActiveAt`, true, () => updateDoc(doc(me, "users/none"), { lastActiveAt: serverTimestamp() }));
+    // iPhone app 1.1 push: token + source, and the notifications toggle.
+    await check(`${name} · student saves app push token`, true, () => setDoc(doc(me, "users/none"), { fcmToken: "t2", fcmTokenSource: "ios" }, { merge: true }));
+    await check(`${name} · student turns notifications off`, true, () => setDoc(doc(me, "users/none"), { notificationsEnabled: false }, { merge: true }));
+    await check(`${name} · coach turns notifications off`, true, () => setDoc(doc(as("coach"), "users/coach"), { notificationsEnabled: false }, { merge: true }));
     for (const field of ["plan", "planSource", "planExpiresAt", "planProductId", "planIsTrial", "planWillRenew", "rcAppUserId", "revenuecat", "adminGrant"]) {
       await check(`${name} · student writes own ${field}`, false, () => setDoc(doc(me, "users/none"), { [field]: "coached" }, { merge: true }));
     }
