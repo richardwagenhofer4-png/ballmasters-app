@@ -10,8 +10,10 @@
 //   2. Switch ON: none / expired → no videos, breakdowns or messaging;
 //      Access → videos (list + standard get) only; Coached → everything;
 //      coaches and admins unaffected.
-//   3. Always: a user can't write plan/billing fields on their own doc, but
-//      ordinary profile writes still work; config/app is read-only.
+//   3. Always: a user can't create or delete a users doc (their own
+//      included), or change their own role, coachId or plan/billing fields;
+//      ordinary profile writes still work; admins can still update users;
+//      config/app is read-only.
 //
 // Needs Java 11+ and the Firebase CLI. One-time, without touching package.json:
 //   npm i --no-save @firebase/rules-unit-testing
@@ -28,6 +30,8 @@ import {
   Timestamp,
   addDoc,
   collection,
+  deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -158,14 +162,33 @@ if (!ONLY_SWITCH_OFF) {
     for (const field of ["plan", "planSource", "planExpiresAt", "planProductId", "planIsTrial", "planWillRenew", "rcAppUserId", "revenuecat", "adminGrant"]) {
       await check(`${name} · student writes own ${field}`, false, () => setDoc(doc(me, "users/none"), { [field]: "coached" }, { merge: true }));
     }
-    await check(`${name} · new user creates profile`, true, () => setDoc(doc(as("newbie"), "users/newbie"), { uid: "newbie", role: "student", fullName: "N" }));
+    // Role hardening: profiles are created/deleted server-side only.
+    await check(`${name} · new user creates own profile`, false, () => setDoc(doc(as("newbie"), "users/newbie"), { uid: "newbie", role: "student", fullName: "N" }));
+    await check(`${name} · new user creates own profile as coach`, false, () => setDoc(doc(as("newbie"), "users/newbie"), { uid: "newbie", role: "coach", fullName: "N" }));
     await check(`${name} · new user creates profile with a plan`, false, () => setDoc(doc(as("newbie2"), "users/newbie2"), { uid: "newbie2", role: "student", plan: "coached" }));
+    await check(`${name} · admin creates a profile from the client`, false, () => setDoc(doc(as("admin"), "users/newbie3"), { uid: "newbie3", role: "student" }));
+    await check(`${name} · student makes self coach`, false, () => setDoc(doc(me, "users/none"), { role: "coach" }, { merge: true }));
+    await check(`${name} · student makes self admin`, false, () => updateDoc(doc(me, "users/none"), { role: "admin" }));
+    await check(`${name} · coach makes self admin`, false, () => updateDoc(doc(as("coach"), "users/coach"), { role: "admin" }));
+    await check(`${name} · student removes own role`, false, () => updateDoc(doc(me, "users/none"), { role: deleteField() }));
+    await check(`${name} · student changes own coachId`, false, () => updateDoc(doc(me, "users/none"), { coachId: "coach2" }));
+    await check(`${name} · student removes own coachId`, false, () => updateDoc(doc(me, "users/none"), { coachId: deleteField() }));
+    await check(`${name} · student renames self alongside a role change`, false, () => setDoc(doc(me, "users/none"), { fullName: "X", role: "coach" }, { merge: true }));
+    await check(`${name} · student picks an avatar`, true, () => setDoc(doc(me, "users/none"), { avatarId: "a1" }, { merge: true }));
+    await check(`${name} · coach saves currentInviteCode`, true, () => updateDoc(doc(as("coach"), "users/coach"), { currentInviteCode: "ABCD1234" }));
+    await check(`${name} · coach renames self`, true, () => setDoc(doc(as("coach"), "users/coach"), { fullName: "Coach Two" }, { merge: true }));
+    await check(`${name} · admin assigns a coach`, true, () => setDoc(doc(as("admin"), "users/none"), { coachId: "coach", needsCoachAssignment: false }, { merge: true }));
+    await check(`${name} · admin changes a role`, true, () => updateDoc(doc(as("admin"), "users/expired"), { role: "coach" }));
     await check(`${name} · admin sets a student's plan`, true, () => updateDoc(doc(as("admin"), "users/none"), { plan: "access" }));
     await check(`${name} · signed-in read config/app`, true, () => getDoc(doc(me, "config/app")));
     await check(`${name} · signed-out read config/app`, false, () => getDoc(doc(env.unauthenticatedContext().firestore(), "config/app")));
     await check(`${name} · student writes config/app`, false, () => setDoc(doc(me, "config/app"), { paywallEnabled: false }));
     await check(`${name} · admin writes config/app from the client`, false, () => setDoc(doc(as("admin"), "config/app"), { paywallEnabled: false }));
     await check(`${name} · student reads billingEvents`, false, () => getDoc(doc(me, "billingEvents/x")));
+    // Deletes last: if one were (wrongly) allowed it must not skew the checks above.
+    await check(`${name} · student deletes own profile`, false, () => deleteDoc(doc(me, "users/none")));
+    await check(`${name} · coach deletes own profile`, false, () => deleteDoc(doc(as("coach"), "users/coach")));
+    await check(`${name} · admin deletes a profile from the client`, false, () => deleteDoc(doc(as("admin"), "users/none")));
   }
 }
 

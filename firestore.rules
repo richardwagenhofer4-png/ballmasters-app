@@ -46,22 +46,34 @@ service cloud.firestore {
         || (v.get('coachVideoKey', null) != null && v.get('studentVideoKey', null) != null);
     }
 
-    // users/{uid} fields only the server (Admin SDK: the RevenueCat webhook
-    // and /api/admin/plan) may write. Keep in sync with PLAN_FIELDS in
-    // lib/entitlements.ts. Locked for the owner regardless of the switch: no
-    // existing client write touches these keys, and a switch-dependent lock
-    // would let anyone pre-set plan: 'coached' on themselves before launch.
+    // users/{uid} plan fields only the server (Admin SDK: the RevenueCat
+    // webhook, /api/admin/plan, /api/billing/refresh) may write. Keep in sync
+    // with PLAN_FIELDS in lib/entitlements.ts. Locked for the owner regardless
+    // of the switch: no client write touches these keys, and a
+    // switch-dependent lock would let anyone pre-set plan: 'coached' on
+    // themselves before launch.
     function planFields() {
       return ['plan', 'planSource', 'planExpiresAt', 'planProductId', 'planIsTrial',
               'planWillRenew', 'rcAppUserId', 'revenuecat', 'adminGrant'];
     }
 
+    // What a user may never change on their own doc: who they are (role),
+    // who coaches them (coachId), and the plan/billing fields. Admins still
+    // can (the isAdmin() rule below), e.g. the Coach Assignment card.
+    function selfLockedFields() {
+      return planFields().concat(['role', 'coachId']);
+    }
+
     match /users/{userId} {
-      allow create: if request.auth != null && request.auth.uid == userId
-        && !request.resource.data.keys().hasAny(planFields());
-      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      // Profiles are only created by /api/register, which decides role and
+      // coachId from the invite that was used, and only deleted by
+      // /api/delete-account — both via the Admin SDK, which bypasses these
+      // rules. No client may create or delete a users doc, its own included
+      // (otherwise delete + re-create would reset role/coachId).
+      allow create, delete: if false;
+      allow read: if request.auth != null && request.auth.uid == userId;
       allow update: if request.auth != null && request.auth.uid == userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(planFields());
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(selfLockedFields());
       allow read: if request.auth != null && resource.data.role in ['coach', 'admin'];
       allow read: if request.auth != null
         && resource.data.coachId == request.auth.uid;
