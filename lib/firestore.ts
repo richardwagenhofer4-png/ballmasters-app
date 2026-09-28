@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export type UserRole = "student" | "coach" | "admin";
@@ -24,47 +24,9 @@ export interface UserProfile {
   needsCoachAssignment?: boolean;
 }
 
-export async function saveUserProfile(
-  profile: Omit<UserProfile, "createdAt" | "school"> & { coachId?: string }
-): Promise<void> {
-  console.log("[saveUserProfile] called with:", {
-    uid: profile.uid,
-    email: profile.email,
-    role: profile.role,
-    age: profile.age,
-  });
-
-  const ref = doc(db, "users", profile.uid);
-  const data: Record<string, unknown> = {
-    uid: profile.uid,
-    email: profile.email,
-    fullName: profile.fullName,
-    role: profile.role,
-    age: profile.age ?? null,
-    school: "ballmasters",
-    createdAt: serverTimestamp(),
-  };
-  if (profile.parentEmail) data.parentEmail = profile.parentEmail;
-  if (profile.coachId) data.coachId = profile.coachId;
-  if (profile.dateOfBirth) data.dateOfBirth = profile.dateOfBirth;
-  if (profile.termsConsentAt) data.termsConsentAt = profile.termsConsentAt;
-  if (profile.termsConsentVersion) data.termsConsentVersion = profile.termsConsentVersion;
-  if (profile.guardianManaged) data.guardianManaged = profile.guardianManaged;
-  if (profile.guardianName) data.guardianName = profile.guardianName;
-  if (profile.guardianEmail) data.guardianEmail = profile.guardianEmail;
-  if (profile.guardianConsentAt) data.guardianConsentAt = profile.guardianConsentAt;
-  if (profile.guardianConsentVersion) data.guardianConsentVersion = profile.guardianConsentVersion;
-  if (profile.needsCoachAssignment) data.needsCoachAssignment = profile.needsCoachAssignment;
-
-  console.log("[saveUserProfile] writing to Firestore path: users/" + profile.uid);
-  try {
-    await setDoc(ref, data);
-    console.log("[saveUserProfile] write succeeded");
-  } catch (err) {
-    console.error("[saveUserProfile] write FAILED:", err);
-    throw err;
-  }
-}
+// users/{uid} profiles are created server-side only, by /api/register
+// (firestore.rules refuse client creates). There is deliberately no client
+// writer here.
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   const ref = doc(db, "users", uid);

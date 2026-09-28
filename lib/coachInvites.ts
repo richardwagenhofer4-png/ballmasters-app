@@ -1,4 +1,4 @@
-import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 function makeToken(): string {
@@ -31,9 +31,5 @@ export async function validateCoachInvite(
   return { valid: true, email: data.email as string };
 }
 
-export async function useCoachInvite(token: string, uid: string): Promise<void> {
-  await updateDoc(doc(db, "coachInvites", token), {
-    usedBy: uid,
-    usedAt: serverTimestamp(),
-  });
-}
+// Marking an invite used happens server-side in /api/register, in the same
+// transaction that creates the coach's profile.

@@ -4,12 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, serverTimestamp } from "firebase/firestore";
-import { saveUserProfile } from "@/lib/firestore";
+import { auth } from "@/lib/firebase";
 import { setAuthCookies } from "@/lib/cookies";
-import { validateInviteCode, recordCodeUsage } from "@/lib/inviteCodes";
-import { validateCoachInvite, useCoachInvite } from "@/lib/coachInvites";
+import { validateInviteCode } from "@/lib/inviteCodes";
+import { validateCoachInvite } from "@/lib/coachInvites";
 import { getAge } from "@/lib/age";
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
@@ -144,6 +142,8 @@ export default function RegisterForm() {
       const ageNum = isStudentPath ? (athleteAge ?? 0) : parseInt(age, 10);
       const code = inviteCode.trim().toUpperCase();
 
+      // Pre-flight only, so a bad invite fails before an Auth account exists.
+      // /api/register re-checks both and is what actually decides the role.
       if (coachInviteToken) {
         const result = await validateCoachInvite(coachInviteToken);
         if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
@@ -162,55 +162,38 @@ export default function RegisterForm() {
       // displayName is always the athlete's name
       await updateProfile(credential.user, { displayName: fullName.trim() });
 
-      let coachId: string | undefined;
-      if (role === "student" && code) {
-        try {
-          const codeSnap = await getDoc(doc(db, "inviteCodes", code));
-          if (codeSnap.exists()) {
-            coachId = codeSnap.data().createdBy as string | undefined;
-          }
-        } catch (err) {
-          console.warn("[register] could not look up coachId from invite code:", err);
-        }
-      }
-
-      await saveUserProfile({
-        uid: credential.user.uid,
-        email: credential.user.email ?? loginEmail,
-        fullName: fullName.trim(),
-        role: role as "student" | "coach",
-        age: ageNum,
-        termsConsentAt: serverTimestamp(),
-        termsConsentVersion: "v1",
-        ...(isStudentPath ? { dateOfBirth } : {}),
-        ...(isMinor ? {
-          guardianManaged: true,
-          guardianName: guardianName.trim(),
-          guardianEmail: loginEmail,
-          guardianConsentAt: serverTimestamp(),
-          guardianConsentVersion: "v1",
-        } : {}),
-        ...(coachId ? { coachId } : {}),
-        // A student whose coach could not be resolved (lookup threw, code doc
-        // missing, or createdBy absent) is flagged so an admin can assign one.
-        // Never flag coaches — they legitimately have no coachId.
-        ...(role === "student" && !coachId ? { needsCoachAssignment: true } : {}),
+      // The server writes the profile: it decides role and coachId from the
+      // invite, marks the coach invite used / records the code's use in the
+      // same transaction, and writes the same fields this form used to.
+      const idToken = await credential.user.getIdToken();
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          fullName: fullName.trim(),
+          email: loginEmail,
+          age: ageNum,
+          ...(isStudentPath ? { dateOfBirth } : {}),
+          ...(isMinor ? { guardianName: guardianName.trim() } : {}),
+          termsConsent: termsConsentChecked,
+          guardianConsent: guardianConsentChecked,
+          ...(code ? { inviteCode: code } : {}),
+          ...(coachInviteToken ? { coachInviteToken } : {}),
+        }),
       });
-
-      if (coachInviteToken) {
-        await useCoachInvite(coachInviteToken, credential.user.uid);
-      }
-      if (code) {
-        await recordCodeUsage(code, credential.user.uid);
+      const saved = (await res.json().catch(() => ({}))) as { role?: string; error?: string };
+      if (!res.ok) {
+        throw Object.assign(new Error(saved.error ?? "Unable to save your profile."), { code: "register/rejected" });
       }
 
-      setAuthCookies(role);
+      setAuthCookies(saved.role ?? role);
       console.log("[register] complete — redirecting to /dashboard");
       router.push("/dashboard");
     } catch (err: unknown) {
       const fe = err as { code?: string; message?: string };
       console.error("[register] error:", fe.code, fe.message, err);
       if (fe.code?.startsWith("auth/")) setError(getAuthError(fe.code));
+      else if (fe.code === "register/rejected") setError(fe.message ?? "Unable to save your profile.");
       else if (fe.code === "permission-denied") setError("Unable to save your profile. Firestore permissions are not configured.");
       else setError(`Registration error: ${fe.message ?? "Unknown error"}`);
     } finally {

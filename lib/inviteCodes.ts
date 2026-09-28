@@ -3,7 +3,6 @@ import {
   setDoc,
   getDoc,
   updateDoc,
-  arrayUnion,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -69,8 +68,5 @@ export async function validateInviteCode(
   return { valid: true };
 }
 
-export async function recordCodeUsage(code: string, uid: string): Promise<void> {
-  await updateDoc(doc(db, "inviteCodes", code.toUpperCase()), {
-    usedBy: arrayUnion(uid),
-  });
-}
+// Recording a code's use happens server-side in /api/register, in the same
+// transaction that creates the athlete's profile.

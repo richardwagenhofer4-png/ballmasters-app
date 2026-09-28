@@ -46,10 +46,6 @@ const eslintConfig = defineConfig([
     files: ["app/coach/videos/[[]id]/clips/ClipsPage.tsx"],
     rules: { "react/no-unescaped-entities": "warn" },
   },
-  {
-    files: ["app/register/RegisterForm.tsx"],
-    rules: { "react-hooks/rules-of-hooks": "warn" },
-  },
 ]);
 
 export default eslintConfig;
