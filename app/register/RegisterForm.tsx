@@ -3,30 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  createUserWithEmailAndPassword,
-  updateProfile,
-  signInWithPopup,
-  signInWithCredential,
-  GoogleAuthProvider,
-  type User,
-} from "firebase/auth";
-import { Capacitor } from "@capacitor/core";
-import { FirebaseAuthentication } from "@capacitor-firebase/authentication";
+import { createUserWithEmailAndPassword, updateProfile, type User } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { setAuthCookies } from "@/lib/cookies";
 import { validateInviteCode } from "@/lib/inviteCodes";
 import { validateCoachInvite } from "@/lib/coachInvites";
 import { getAge } from "@/lib/age";
-
-const googleProvider = new GoogleAuthProvider();
+import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type SocialProvider } from "@/lib/socialSignIn";
+import SocialSignInButtons from "@/components/SocialSignInButtons";
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "An account with this email already exists.",
   "auth/invalid-email": "Please enter a valid email address.",
   "auth/weak-password": "Password must be at least 6 characters.",
-  "auth/popup-closed-by-user": "Sign-up popup was closed. Please try again.",
-  "auth/cancelled-popup-request": "Sign-up was cancelled.",
+  "auth/account-exists-with-different-credential": "This email already has an account with a different sign-in method. Sign in the way you did before.",
   "auth/too-many-requests": "Too many attempts. Please try again later.",
 };
 
@@ -41,17 +31,6 @@ function Spinner() {
     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-    </svg>
-  );
-}
-
-function GoogleIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24">
-      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
     </svg>
   );
 }
@@ -79,7 +58,9 @@ export default function RegisterForm() {
   const [inviteCode, setInviteCode] = useState(codeFromUrl);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  // Sign up with Apple / Google: iPhone app 1.1+ only (never on the web).
+  const socialAvailable = useNativeSocialSignIn();
+  const [socialBusy, setSocialBusy] = useState<SocialProvider | null>(null);
 
   // Student-path-only fields
   const [dateOfBirth, setDateOfBirth] = useState("");
@@ -241,27 +222,33 @@ export default function RegisterForm() {
     }
   }
 
-  async function handleGoogleSignUp() {
-    if (!role) { setError("Please select a role before continuing with Google."); return; }
-    if (!termsConsentChecked) {
-      setError("Please agree to the Terms of Service, Privacy Policy, and AI Disclosure to continue.");
-      return;
-    }
+  // The form's own checks, minus email and password (Apple / Google provide
+  // the login). Not offered for under-13 accounts, so the terms box is the
+  // consent. The name field is required: Apple doesn't hand a name to the web.
+  function validateForSocial(): string {
+    if (!termsConsentChecked) return "Please agree to the Terms of Service, Privacy Policy, and AI Disclosure to continue.";
+    if (!fullName.trim()) return "Please enter your full name.";
+    if (!role) return "Please select a role.";
     if (isStudentPath) {
-      if (!dateOfBirth) {
-        setError("Please enter the athlete's date of birth before continuing with Google.");
-        return;
-      }
-      if (athleteAge === null || athleteAge < 3 || athleteAge > 100) {
-        setError("Please enter a valid date of birth (athlete must be between 3 and 100 years old).");
-        return;
-      }
+      if (!dateOfBirth) return "Please enter the athlete's date of birth.";
+      if (athleteAge === null || athleteAge < 3 || athleteAge > 100)
+        return "Please enter a valid date of birth (athlete must be between 3 and 100 years old).";
+      if (!inviteCode.trim()) return "An invite code is required to register.";
+    } else if (!age || parseInt(age, 10) < 1 || parseInt(age, 10) > 120) {
+      return "Please enter a valid age.";
     }
+    return "";
+  }
+
+  async function handleSocialSignUp(provider: SocialProvider) {
+    const validationError = validateForSocial();
+    if (validationError) { setError(validationError); return; }
     setError("");
-    setGoogleLoading(true);
+    setSocialBusy(provider);
     try {
       const code = inviteCode.trim().toUpperCase();
 
+      // Pre-flight only, as for email sign-up; /api/register decides the role.
       if (coachInviteToken) {
         const result = await validateCoachInvite(coachInviteToken);
         if (!result.valid) { setError(result.error ?? "Invalid coach invite link."); return; }
@@ -270,42 +257,30 @@ export default function RegisterForm() {
         if (!valid) return;
       }
 
-      let credential;
-      if (Capacitor.isNativePlatform()) {
-        // iOS shell: use native Google sign-in and feed the idToken into
-        // the JS SDK — signInWithPopup fails in WKWebView with "missing
-        // initial state" due to storage partitioning.
-        console.log("[register/google] using native Google sign-in (iOS shell)");
-        const result = await FirebaseAuthentication.signInWithGoogle();
-        const idToken = result.credential?.idToken;
-        if (!idToken) throw new Error("Google sign-in did not return an idToken.");
-        credential = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
-      } else {
-        console.log("[register/google] opening Google sign-in popup");
-        credential = await signInWithPopup(auth, googleProvider);
-      }
-      console.log("[register/google] signed in, uid:", credential.user.uid);
+      const credential = await nativeSocialSignIn(provider);
+      console.log(`[register/${provider}] signed in, uid:`, credential.user.uid);
 
-      // Same server path as email sign-up: /api/register decides the role.
+      // Same server path as email sign-up. An account that already has a
+      // profile just gets its stored role back.
       const savedRole = await createProfile(credential.user, {
-        fullName: fullName.trim() || credential.user.displayName || "",
+        fullName: fullName.trim(),
         email: credential.user.email ?? "",
         age: isStudentPath ? (athleteAge ?? 0) : parseInt(age, 10),
         code,
       });
 
       setAuthCookies(savedRole);
-      console.log("[register/google] complete — redirecting to /dashboard");
+      console.log(`[register/${provider}] complete — redirecting to /dashboard`);
       router.push("/dashboard");
     } catch (err: unknown) {
+      if (isSocialSignInCancel(err)) return;
       const fe = err as { code?: string; message?: string };
-      console.error("[register/google] error:", fe.code, fe.message, err);
+      console.error(`[register/${provider}] error:`, fe.code, fe.message, err);
       if (fe.code?.startsWith("auth/")) setError(getAuthError(fe.code));
       else if (fe.code === "register/rejected") setError(fe.message ?? "Unable to save your profile.");
-      else if (fe.code === "permission-denied") setError("Unable to save your profile. Firestore permissions are not configured.");
       else setError(`Registration error: ${fe.message ?? "Unknown error"}`);
     } finally {
-      setGoogleLoading(false);
+      setSocialBusy(null);
     }
   }
 
@@ -653,20 +628,15 @@ export default function RegisterForm() {
             </button>
           </form>
 
-          {/* Google sign-up — not available for under-13 guardian accounts */}
-          {!isMinor && (
+          {/* Sign up with Apple / Google — iPhone app 1.1+ only; not for under-13 guardian accounts */}
+          {socialAvailable && !isMinor && (
             <>
               <div className="my-5 flex items-center gap-3">
                 <div className="h-px flex-1 bg-gray-200" />
                 <span className="text-xs text-gray-400 font-medium">or sign up with</span>
                 <div className="h-px flex-1 bg-gray-200" />
               </div>
-
-              <button type="button" onClick={handleGoogleSignUp} disabled={googleLoading}
-                className="w-full flex items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition disabled:opacity-60 disabled:cursor-not-allowed">
-                {googleLoading ? <Spinner /> : <GoogleIcon />}
-                Continue with Google
-              </button>
+              <SocialSignInButtons mode="sign-up" busy={socialBusy} disabled={loading} onSelect={handleSocialSignUp} />
             </>
           )}
 
