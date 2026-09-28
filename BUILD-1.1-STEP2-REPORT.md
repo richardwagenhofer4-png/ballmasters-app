@@ -2,7 +2,7 @@
 
 Branch `build-1.1-paywall` (off `main`). Nothing pushed, nothing deployed, no `firebase deploy`, nothing under `ios/` touched, no `npx cap sync`.
 
-**Status:** everything in the brief is built and the switch is **off**. `npm run build` and `npm run lint` pass (lint: 0 errors). The security rules were run against the Firestore emulator: 225/225 checks pass, and the switch-off checks give identical results on `main`'s rules and on this branch's. An independent review of the full diff found no switch-off differences in the app screens; its switch-on findings are fixed (§4) except the pre-existing `role` issue (§6.1).
+**Status:** everything in the brief is built and the switch is **off**. `npm run build` and `npm run lint` pass (lint: 0 errors). The security rules were run against the Firestore emulator: 225/225 checks pass, and the switch-off checks give identical results on `main`'s rules and on this branch's. An independent review of the full diff found no switch-off differences in the app screens; its switch-on findings are fixed (§4). The pre-existing `role` hole (§6.1) is closed — see §8.
 
 ---
 
@@ -69,17 +69,17 @@ The "Add fees/subscription/refund terms" placeholder is replaced by **7 Subscrip
 
 ## 2. How to flip the switch (launch day)
 
-Order matters — rules first, switch last.
+Order matters — web build first, rules right after it, switch last. (Changed by §8: the rules now refuse client-side profile creation, so `/api/register` must be live before they are.)
 
-1. **Deploy the rules** (`firebase deploy --only firestore:rules`). With no `config/app` doc they behave exactly like today's; the emulator test proves the switch-off cases match `main`.
-2. **Deploy the web build** from this branch. The app keeps behaving as today.
+1. **Deploy the web build** from this branch. The app keeps behaving as today; sign-up now goes through `/api/register` (it uses the same `FIREBASE_ADMIN_*` env vars as `/api/delete-account`, already set on Vercel). Until step 2, the paywall switch's `config/app` read is refused by the old rules — harmless: it reads as "off" and retries once a minute.
+2. **Deploy the rules** (`firebase deploy --only firestore:rules`) right after. With no `config/app` doc the paywall parts behave exactly like today's; the emulator test proves the switch-off cases match `main`. Then **create one test account** through the invite flow to confirm sign-up works end to end.
 3. **Vercel env:** set `REVENUECAT_WEBHOOK_SECRET` (a long random string). **RevenueCat → Integrations → Webhooks:** URL `https://<your-domain>/api/billing/revenuecat`, Authorization header `Bearer <same secret>`. Send RevenueCat's test event; it should appear in `billingEvents` with `outcome: "test"`.
 4. **Backfill `hasBreakdown`** (§3).
 5. **Pilot families' free Access** — optional preview first: in the Firebase console create `config/app` with `planToolsEnabled: true` (boolean). Coaches/admins now see plan badges and the Plan card while athletes still see nothing new. On each pilot athlete's profile: Plan → Access, end date 3 months out → Save.
 6. **Flip:** Firebase console → Firestore → `config` / `app` → set `paywallEnabled` (boolean) to `true`. Rules enforce immediately; open apps pick it up live through the listener.
 7. **Roll back:** set `paywallEnabled` to `false` (or delete the doc). Takes effect immediately for rules and open apps.
 
-Before step 6, see §6 — in particular the pre-existing `role` issue.
+Before step 6, see §6.
 
 ## 3. How to run the backfill script
 
@@ -128,7 +128,7 @@ It was **not** run against any project.
 
 ## 6. Not finished / needs attention before launch
 
-1. **CRITICAL — pre-existing: users can set their own `role`.** The users rules let a user write any field on their own doc (and create/delete it), including `role`. A student can make themselves `coach` or `admin` from the browser console — which bypasses the paywall entirely (coach/admin always count as Coached) and, today, already grants the coach/admin console. Locking `role` on update alone isn't enough, because a user can also delete and re-create their own doc with any role. A real fix: stop trusting a client-written `role` — have registration set it server-side (Admin SDK, checking the coach invite) or use custom claims, and forbid `role` (and `coachId`) in client creates/updates. It predates this build and touches registration, so I left it. **Fix before flipping the switch.**
+1. ~~**CRITICAL — pre-existing: users can set their own `role`.**~~ **Fixed — see §8.** Profiles are now created only by `/api/register`, which decides `role` and `coachId` from the invite; the rules refuse client creates and deletes of `users/*` and any self-change of `role` or `coachId`.
 2. **Native purchases** (next step): RevenueCat SDK, `Purchases.logIn(firebaseUid)` so the webhook's `app_user_id` is the Firebase uid, and filling in `lib/billing.ts`. The paywall shows "Start 7-day free trial" to everyone; the native layer should check trial eligibility (Apple allows one per subscription group).
 3. **Coaches can message Access athletes** (the coach side is never gated), but those athletes can't read it. Consider showing the athlete's plan in the coach's Messages screen.
 4. **Upgrades:** the webhook assumes an App Store Access→Coached upgrade is followed by a RENEWAL/INITIAL_PURCHASE carrying the new product (PRODUCT_CHANGE itself is logged only). Verify in the sandbox during the native step.
@@ -141,7 +141,7 @@ It was **not** run against any project.
 
 New:
 - `lib/plans.ts`, `lib/entitlements.ts`, `lib/paywall.ts`, `lib/paywall.server.ts`, `lib/billing.ts`, `lib/EntitlementsContext.tsx`, `lib/planStore.server.ts`
-- `app/api/billing/revenuecat/route.ts`, `app/api/billing/refresh/route.ts`, `app/api/admin/plan/route.ts`
+- `app/api/billing/revenuecat/route.ts`, `app/api/billing/refresh/route.ts`, `app/api/admin/plan/route.ts`, `app/api/register/route.ts` (§8)
 - `app/student/layout.tsx`, `app/student/subscribe/page.tsx`
 - `components/Paywall.tsx`, `components/StudentPaywallGate.tsx`, `components/PlanLock.tsx`, `components/PlanBadge.tsx`
 - `scripts/backfill-has-breakdown.mjs`, `scripts/test-paywall-rules.mjs`
@@ -152,6 +152,76 @@ Changed:
 - `app/student/dashboard/page.tsx`, `app/student/videos/page.tsx`, `app/student/videos/[id]/StudentVideoPage.tsx`, `app/student/messages/page.tsx`, `app/student/profile/page.tsx`
 - `app/coach/dashboard/page.tsx`, `app/coach/students/page.tsx`, `app/coach/students/[id]/StudentProfilePage.tsx`, `app/coach/upload/page.tsx`, `app/coach/videos/[id]/annotate/AnnotatePage.tsx`
 - `app/terms/page.tsx`
+- `app/register/RegisterForm.tsx`, `lib/firestore.ts`, `lib/coachInvites.ts`, `lib/inviteCodes.ts` (§8)
 - `eslint.config.mjs`, `.gitignore`
 
 The four untracked scripts that were already in `scripts/` before this work (`diagnose-r2-delete.mjs`, `test-athlete-video-deletion.mjs`, `test-coach-deletion.mjs`, `test-delete-auth.mjs`) were left alone and are not committed.
+
+---
+
+## 8. Role hardening
+
+**The hole (§6.1):** any signed-in user could write `role` and `coachId` on their own `users/{uid}` doc, and could also delete it and re-create it with any role. `role` in `['coach','admin']` counts as Coached for the paywall and opens the coach/admin console. It's now closed. Clients can no longer create or delete a `users` doc, and they can't change their own `role` or `coachId`. Registration's profile write moved to the server.
+
+### Client writes to `users/*` found (before any change)
+
+| # | Where | What it wrote | Now |
+|---|---|---|---|
+| 1 | `app/register/RegisterForm.tsx` → `lib/firestore.ts` `saveUserProfile()` | **Created** `users/{uid}` with `role`, `coachId`, `needsCoachAssignment` and all profile/consent fields | **Moved to `POST /api/register`** (Admin SDK). `saveUserProfile` deleted. |
+| 1a | `RegisterForm.tsx` → `lib/coachInvites.ts` `useCoachInvite()` | `coachInvites/{token}.usedBy/usedAt` (not a users doc, but it gates `role: "coach"`) | **Moved into `/api/register`'s transaction**. Otherwise a client that skipped it could reuse one coach link for many accounts. Function deleted. |
+| 1b | `RegisterForm.tsx` → `lib/inviteCodes.ts` `recordCodeUsage()` | `inviteCodes/{code}.usedBy` += uid (gates `maxUses`) | **Moved into `/api/register`'s transaction**; function deleted. |
+| 2 | `app/coach/students/[id]/StudentProfilePage.tsx` (Coach Assignment card, admin-only UI) | `coachId`, `needsCoachAssignment: false` on an athlete | **Unchanged.** Still a client write, allowed by the existing admin update rule, which is kept as-is. |
+| 3 | `app/student/profile/page.tsx`, `app/coach/settings/page.tsx` | own `fullName`, `avatarId` | Unchanged — still allowed. |
+| 4 | `lib/notifications.ts` | own `fcmToken` (merge) | Unchanged for anyone with a profile (see "not preserved" #1). |
+| 5 | `lib/AuthContext.tsx`, `app/login/page.tsx` | own `lastActiveAt` | Unchanged — still allowed. |
+| 6 | `lib/inviteCodes.ts` `createInviteCode()` | coach's own `currentInviteCode` | Unchanged — still allowed. |
+| — | Deletes | No client deletes a users doc. Student self-delete, coach self-delete, admin delete-coach and admin delete-athlete all call `/api/delete-account`, which uses the Admin SDK — **confirmed**. | Unaffected by the new rule. |
+| — | Role changes after sign-up | None in the app. `app/coach/coaches/page.tsx` only writes `settings/general.headCoachId`; `app/admin/invite-coach` only creates `coachInvites`. | Nothing to move. An admin can still change a role (admin update rule). |
+
+### What changed
+
+- **`POST /api/register`** (`app/api/register/route.ts`, new). The client still creates the Firebase Auth account. It then POSTs the account's ID token plus the form fields: name, typed email, age, DOB, guardian name, the two consent flags, invite code and coach token. The server:
+  - verifies the token with the Admin SDK and uses the account's own email. The typed email must match it (case-insensitive).
+  - **decides `role`**: `"coach"` only with an existing, unused `coachInvites/{token}`; otherwise `"student"` with an invite code that exists, is active and is under `maxUses`. These are the same checks and error messages as `validateCoachInvite` / `validateInviteCode`.
+  - **decides `coachId`**: the code's `createdBy`, else `needsCoachAssignment: true`, exactly as before.
+  - repeats the form's validation, so a direct call can't skip it: names, the consent rules (guardian box for under-13, terms box otherwise), athlete age 3–100 (coach 1–120), and a required invite code on the student path. It also checks the submitted age against the date of birth, allowing one year of difference for timezones.
+  - in **one transaction**, marks the coach invite used (`usedBy`, `usedAt`), appends the uid to the code's `usedBy`, and `create`s the profile. The profile has exactly the fields `saveUserProfile` wrote: `uid, email, fullName, role, age, school, createdAt, termsConsentAt, termsConsentVersion: "v1"`, plus `dateOfBirth` (athletes), plus `guardianManaged, guardianName, guardianEmail, guardianConsentAt, guardianConsentVersion: "v1"` (under-13), plus `coachId` / `needsCoachAssignment`. `termsConsentAt` is still written for under-13 accounts too, as before.
+  - ignores any `role`, `coachId` or plan fields in the request, and never changes an existing profile. A retry after a lost response just returns the stored role.
+- **`RegisterForm.tsx`**: the same form, validation, read-only invite pre-checks (a bad invite still fails *before* an Auth account exists), `updateProfile`, cookies and redirect. Only the profile write changed: it's now a `fetch` to `/api/register`, and the role cookie uses the role the server returns.
+- **`firestore.rules`** (`users/{userId}`):
+  - `allow create, delete: if false` — for every client, including the owner and admins.
+  - The owner's own update may not touch `selfLockedFields()` = `planFields()` + `role` + `coachId`.
+  - Owner reads, coach/admin reads and the admin `read, update` rule are unchanged.
+- **Dead code removed**: `saveUserProfile`, `useCoachInvite`, `recordCodeUsage`. Removing the `useCoachInvite(...)` call also cleared RegisterForm's only `rules-of-hooks` warning, so its lint override is gone.
+
+### Tests
+
+- **Emulator** (`scripts/test-paywall-rules.mjs`): **259/259 pass**. New cases per switch state: self-create denied (as student and as coach), self-delete denied (student, coach), admin client create/delete denied, self role change denied (student→coach, student→admin, coach→admin, removing `role`), self `coachId` change and removal denied, a rename bundled with a role change denied. Still allowed: avatar, rename, FCM token, `lastActiveAt`, a coach's `currentInviteCode`, admin coach assignment, admin role change, admin plan edit.
+  - The same suite run against the pre-hardening rules fails exactly those 22 hole checks, so the tests really detect the hole.
+  - The student switch-off matrix is still 132/132 on both `main`'s rules and this branch's.
+- **Route harness** (in-memory Firestore, scratch only): 9 new `/api/register` checks, 41/41 overall. They cover:
+  - the exact key set of a 13+ athlete profile;
+  - the under-13 guardian fields;
+  - consent, age and email rejections;
+  - each invite-code failure message;
+  - a code without `createdBy`;
+  - a coach invite being used once and rejected on reuse;
+  - an existing profile left untouched;
+  - the coach form's prefilled code;
+  - injected `role`/`coachId`/`plan` being ignored.
+- `npm run build` ✅, `npm run lint` ✅ (0 errors).
+- **Not exercised live**: a real sign-up against Firebase Auth. There's no test project, so do the test account in §2 step 2.
+
+### Behaviour that could not be kept exactly
+
+1. **Stub profiles are no longer created.** `lib/notifications.ts` saves the FCM token with `setDoc(…, { merge: true })`. For a signed-in account *without* a profile, that used to create a stub `users` doc holding only `fcmToken`; that create is now refused. The error is caught and the function returns `false`. Accounts with a profile — everyone who registered — are unaffected.
+2. **Coach sign-up with a prefilled code that doesn't exist.** Before, the client recorded the code's use *after* saving the profile. A missing code made that step throw, so the coach saw "Registration error" even though their account had been created. Now a missing code is skipped and sign-up succeeds. The code was never validated on this path and still isn't.
+3. **New sign-up failure mode.** If an invite becomes invalid in the seconds between the form's pre-check and `/api/register` (used up, deactivated, or a coach link used by someone else), the server now refuses. The Auth account then exists without a profile — the same state any failed profile write left before. The form shows the server's message.
+4. **No client can create or delete `users` docs**, admins included. No app flow did either (deletion goes through `/api/delete-account`).
+5. A **tampered request** whose age doesn't match its date of birth (beyond ±1) is refused. The real form never sends one.
+
+### Still open (optional hardening, not needed for the paywall)
+
+- A user can still edit their own `dateOfBirth`, guardian fields, `email` field and `needsCoachAssignment`. `dateOfBirth` feeds the under-13 transcription gate. Consider locking them the same way.
+- The `inviteCodes` / `coachInvites` rules still let any signed-in user append themselves to a code's `usedBy`, or mark an unused coach invite as used by themselves. Registration no longer needs either. Someone holding a leaked link could burn it, but can no longer become a coach through it. These client rules can be removed.
+
