@@ -48,19 +48,8 @@ export async function POST(req: NextRequest) {
     }
     const recipientId = (thread.coachId === callerUid ? thread.athleteId : thread.coachId) as string;
 
-    // Claim the caller's newest message for a push, exactly once.
-    const latest = await db.runTransaction(async tx => {
-      const snap = await tx.get(threadRef.collection("messages").orderBy("createdAt", "desc").limit(1));
-      const doc = snap.docs[0];
-      if (!doc) return null;
-      const m = doc.data();
-      const createdAt = m.createdAt instanceof Timestamp ? m.createdAt.toMillis() : 0;
-      if (m.senderId !== callerUid || m.pushedAt || Date.now() - createdAt > FRESH_MS) return null;
-      tx.update(doc.ref, { pushedAt: FieldValue.serverTimestamp() });
-      return m;
-    });
-    if (!latest) return Response.json({ sent: 0, reason: "nothing_to_push" });
-
+    // Decide whether this recipient can get a push at all before touching the
+    // message, so threads with no iPhone-app recipient see no extra writes.
     const [recipientSnap, senderSnap] = await Promise.all([
       db.collection("users").doc(recipientId).get(),
       db.collection("users").doc(callerUid).get(),
@@ -74,6 +63,19 @@ export async function POST(req: NextRequest) {
     if (!recipientIsStaff && (await isPaywallEnabledServer()) && !canMessage(effectivePlan(recipient))) {
       return Response.json({ sent: 0, reason: "plan" });
     }
+
+    // Claim the caller's newest message for a push, exactly once.
+    const latest = await db.runTransaction(async tx => {
+      const snap = await tx.get(threadRef.collection("messages").orderBy("createdAt", "desc").limit(1));
+      const doc = snap.docs[0];
+      if (!doc) return null;
+      const m = doc.data();
+      const createdAt = m.createdAt instanceof Timestamp ? m.createdAt.toMillis() : 0;
+      if (m.senderId !== callerUid || m.pushedAt || Date.now() - createdAt > FRESH_MS) return null;
+      tx.update(doc.ref, { pushedAt: FieldValue.serverTimestamp() });
+      return m;
+    });
+    if (!latest) return Response.json({ sent: 0, reason: "nothing_to_push" });
 
     const sender = senderSnap.data();
     const senderName = (sender?.fullName as string | undefined) || (sender?.name as string | undefined) || "your coach";
