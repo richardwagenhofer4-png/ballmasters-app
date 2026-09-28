@@ -3,7 +3,7 @@ import {
   collection,
   serverTimestamp,
 } from "firebase/firestore";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
 // ---------------------------------------------------------------------------
@@ -110,17 +110,8 @@ export async function sendVideoNotification(
   const user = auth.currentUser;
   if (!user) return;
 
-  const tokens: string[] = [];
-  await Promise.all(
-    studentIds.map(async (sid) => {
-      const snap = await getDoc(doc(db, "users", sid));
-      const token = snap.data()?.fcmToken as string | undefined;
-      if (token) tokens.push(token);
-    })
-  );
-
-  if (!tokens.length) return;
-
+  // The server looks up each athlete's token (web push or the iPhone app) and
+  // skips anyone who turned notifications off.
   const idToken = await user.getIdToken();
   await fetch("/api/notifications/send", {
     method: "POST",
@@ -129,7 +120,7 @@ export async function sendVideoNotification(
       Authorization: `Bearer ${idToken}`,
     },
     body: JSON.stringify({
-      tokens,
+      recipientIds: studentIds,
       title: "New video from your coach",
       body: `${videoTitle} is ready to watch`,
       url: `/student/videos/${videoId}`,

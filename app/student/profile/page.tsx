@@ -15,6 +15,7 @@ import { SUBSCRIBE_HREF, UPGRADE_HREF, useEntitlements } from "@/lib/Entitlement
 import { restorePurchases, type BillingResult } from "@/lib/billing";
 import { planName } from "@/lib/plans";
 import { NavLockDot } from "@/components/PlanLock";
+import NotificationsToggle from "@/components/NotificationsToggle";
 
 const MANAGE_SUBSCRIPTIONS_URL = "https://apps.apple.com/account/subscriptions";
 
@@ -306,6 +307,9 @@ export default function StudentProfilePage() {
             )}
           </div>
         )}
+
+        {/* iPhone app 1.1+ only; renders nothing elsewhere */}
+        <NotificationsToggle />
 
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Account</p>

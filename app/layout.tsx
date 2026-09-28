@@ -3,6 +3,7 @@ import { Anton, Poppins } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { NotificationsProvider } from "@/lib/NotificationsContext";
+import NativePushBridge from "@/components/NativePushBridge";
 
 const anton = Anton({
   weight: "400",
@@ -46,7 +47,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body className="min-h-full flex flex-col"><AuthProvider><NotificationsProvider>{children}</NotificationsProvider></AuthProvider></body>
+      <body className="min-h-full flex flex-col"><AuthProvider><NotificationsProvider><NativePushBridge />{children}</NotificationsProvider></AuthProvider></body>
     </html>
   );
 }

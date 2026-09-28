@@ -7,7 +7,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { createNotification } from "@/lib/notifications";
 
 export function threadId(coachId: string, athleteId: string): string {
@@ -61,6 +61,9 @@ export async function sendMessage(
     [unreadField]: increment(1),
   });
 
+  // Push to the other person's iPhone app (1.1+ only; the server decides).
+  void pushNewMessage(tid);
+
   if (senderName) {
     const parts = tid.split("__");
     const recipientId = senderRole === "coach" ? parts[1] : parts[0];
@@ -73,6 +76,21 @@ export async function sendMessage(
       link: senderRole === "coach" ? "/student/messages" : "/coach/messages",
       meta: { threadId: tid },
     }).catch(console.error);
+  }
+}
+
+async function pushNewMessage(tid: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) return;
+  try {
+    const idToken = await user.getIdToken();
+    await fetch("/api/notifications/message", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ threadId: tid }),
+    });
+  } catch (err) {
+    console.error("[messaging] push request failed", err);
   }
 }
 
