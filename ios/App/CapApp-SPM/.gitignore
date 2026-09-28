@@ -7,3 +7,7 @@ DerivedData/
 .swiftpm/config/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
+
+# Created by `npx cap sync ios` (absolute path, machine-specific) for the
+# @capacitor-firebase/messaging SPM symlink option in capacitor.config.ts.
+/symlinks
