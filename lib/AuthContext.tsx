@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { syncBillingUser } from "@/lib/billing";
 
 interface AuthContextType {
   user: User | null;
@@ -63,6 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
       clearTimeout(timeout);
       if (u) markLastActive(u.uid);
+      // iPhone app 1.1+: keep RevenueCat's user identical to the Firebase
+      // user (logIn / logOut). A no-op on the web and in older app builds.
+      void syncBillingUser(u?.uid ?? null);
     });
     return () => {
       unsub();

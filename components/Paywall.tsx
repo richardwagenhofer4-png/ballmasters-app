@@ -9,8 +9,11 @@
 // redeem / terms / privacy) so the screen works one-handed at 390px; the plan
 // cards above it are tappable anywhere.
 //
-// Purchases go through lib/billing.ts. On the web there is no native billing,
-// so the CTA is replaced by "Subscribe in the Ball Masters iPhone app".
+// Purchases go through lib/billing.ts. In the iPhone app (1.1+) prices are
+// StoreKit's localized strings and the free-trial CTA only appears when this
+// Apple ID is still eligible. On the web there is no native billing, so the
+// CTA is replaced by "Subscribe in the Ball Masters iPhone app" and prices
+// come from the USD catalog; in an older app build it asks for an update.
 // Nothing here renders while the paywall switch is off — the route redirects
 // to the dashboard.
 
@@ -21,11 +24,14 @@ import { useAppConfig } from "@/lib/paywall";
 import { useEntitlements } from "@/lib/EntitlementsContext";
 import { ANNUAL_SAVINGS_LABEL, PLANS, productFor, type BillingPeriod, type PaidPlan } from "@/lib/plans";
 import {
+  getOfferings,
   presentCodeRedemption,
   purchase,
   restorePurchases,
   useNativeBillingAvailable,
+  useNativeBillingNeedsUpdate,
   type BillingResult,
+  type Offer,
 } from "@/lib/billing";
 
 export type PaywallMode = "subscribe" | "upgrade";
@@ -52,21 +58,34 @@ function CheckIcon({ color }: { color: string }) {
   );
 }
 
+/** What to show for one plan/period: the store's offer when loaded, else the catalog. */
+function priceOf(offers: Offer[] | null, plan: PaidPlan, period: BillingPeriod) {
+  const catalog = productFor(plan, period);
+  const offer = offers?.find(o => o.plan === plan && o.period === period) ?? null;
+  return {
+    offer,
+    priceString: offer?.priceString ?? catalog.price,
+    unit: offer?.unit ?? catalog.unit,
+    trialDays: offer ? offer.trialDays : catalog.trialDays,
+  };
+}
+
 function PlanCard({
   plan,
-  period,
+  priceString,
+  unit,
   selected,
   selectable,
   onSelect,
 }: {
   plan: PaidPlan;
-  period: BillingPeriod;
+  priceString: string;
+  unit: string;
   selected: boolean;
   selectable: boolean;
   onSelect: () => void;
 }) {
   const copy = PLANS[plan];
-  const product = productFor(plan, period);
   // Coached is the primary card: navy, with the badge. Access is a plain card.
   const primary = plan === "coached";
   const ring = selected ? `0 0 0 3px ${primary ? CYAN : NAVY}` : undefined;
@@ -99,9 +118,9 @@ function PlanCard({
       </div>
       <p className="mt-3 leading-none">
         <span className={`text-2xl font-extrabold ${primary ? "text-white" : ""}`} style={primary ? undefined : { color: NAVY }}>
-          {product.price}
+          {priceString}
         </span>
-        <span className={`text-sm ${primary ? "text-white/70" : "text-gray-500"}`}>/{product.unit}</span>
+        <span className={`text-sm ${primary ? "text-white/70" : "text-gray-500"}`}>/{unit}</span>
       </p>
       <ul className="mt-3 space-y-1.5">
         {copy.bullets.map(b => (
@@ -132,6 +151,9 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
   const config = useAppConfig();
   const ent = useEntitlements();
   const native = useNativeBillingAvailable();
+  const needsUpdate = useNativeBillingNeedsUpdate();
+  // Store prices / trial eligibility (the catalog on the web). null = loading.
+  const [offers, setOffers] = useState<Offer[] | null>(null);
 
   const [period, setPeriod] = useState<BillingPeriod>("monthly");
   const [selected, setSelected] = useState<PaidPlan>("coached");
@@ -143,7 +165,7 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
   // requested mode only matters to a coach or admin previewing the screen.
   const mode: PaywallMode = ent.isStaff ? requestedMode : ent.plan === "access" ? "upgrade" : "subscribe";
   const plan: PaidPlan = mode === "upgrade" ? "coached" : selected;
-  const product = productFor(plan, period);
+  const shown = priceOf(offers, plan, period);
 
   const paywallOff = config !== null && !config.paywallEnabled;
   // Nothing left to buy (e.g. the webhook just confirmed a purchase): into the app.
@@ -153,6 +175,16 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
     if (paywallOff || satisfied) router.replace("/student/dashboard");
   }, [paywallOff, satisfied, router]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getOfferings().then(o => {
+      if (!cancelled) setOffers(o);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (config === null || paywallOff || !ent.ready || satisfied) return <Spinner />;
 
   async function run(kind: "purchase" | "restore" | "redeem", action: () => Promise<BillingResult>) {
@@ -161,11 +193,14 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
     try {
       const result = await action();
       if (result.ok) {
-        // The plan itself arrives via the RevenueCat webhook; the entitlements
-        // listener sees it and the effect above moves on.
-        setNotice({ tone: "ok", text: kind === "restore" ? "Purchases restored. Unlocking…" : "Thanks! Unlocking your plan…" });
+        // billing.ts has asked the server to re-read the subscription; the
+        // entitlements listener sees the new plan and the effect above moves on.
+        setNotice({
+          tone: "ok",
+          text: result.message ?? (kind === "restore" ? "Purchases restored. Unlocking…" : "Thanks! Unlocking your plan…"),
+        });
       } else if (result.reason !== "cancelled") {
-        setNotice({ tone: result.reason === "unavailable" ? "info" : "error", text: result.message });
+        setNotice({ tone: result.reason === "error" ? "error" : "info", text: result.message });
       }
     } catch {
       setNotice({ tone: "error", text: "Something went wrong. Please try again." });
@@ -179,10 +214,16 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
     else router.push("/student/dashboard");
   }
 
-  const ctaLabel = product.trialDays ? `Start ${product.trialDays}-day free trial` : "Subscribe";
-  const finePrint = product.trialDays
-    ? `${product.trialDays}-day free trial, then ${product.price}/${product.unit}. Auto-renews until cancelled in Settings.`
-    : `${product.price}/${product.unit}. Auto-renews until cancelled in Settings.`;
+  // In the app, wait for the store before promising a trial or taking a tap.
+  const storeLoading = native && offers === null;
+  const ctaLabel = storeLoading
+    ? "Loading…"
+    : shown.trialDays
+    ? `Start ${shown.trialDays}-day free trial`
+    : "Subscribe";
+  const finePrint = shown.trialDays && !storeLoading
+    ? `${shown.trialDays}-day free trial, then ${shown.priceString}/${shown.unit}. Auto-renews until cancelled in Settings.`
+    : `${shown.priceString}/${shown.unit}. Auto-renews until cancelled in Settings.`;
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
@@ -219,11 +260,26 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
             </p>
           )}
           {mode === "upgrade" ? (
-            <PlanCard plan="coached" period={period} selected selectable={false} onSelect={() => {}} />
+            <PlanCard
+              plan="coached"
+              priceString={priceOf(offers, "coached", period).priceString}
+              unit={priceOf(offers, "coached", period).unit}
+              selected
+              selectable={false}
+              onSelect={() => {}}
+            />
           ) : (
             <div role="radiogroup" aria-label="Plan" className="space-y-4">
               {(["coached", "access"] as const).map(p => (
-                <PlanCard key={p} plan={p} period={period} selected={selected === p} selectable onSelect={() => setSelected(p)} />
+                <PlanCard
+                  key={p}
+                  plan={p}
+                  priceString={priceOf(offers, p, period).priceString}
+                  unit={priceOf(offers, p, period).unit}
+                  selected={selected === p}
+                  selectable
+                  onSelect={() => setSelected(p)}
+                />
               ))}
             </div>
           )}
@@ -263,8 +319,8 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
           {native ? (
             <button
               type="button"
-              onClick={() => run("purchase", () => purchase(product.id))}
-              disabled={busy !== null}
+              onClick={() => run("purchase", () => purchase(shown.offer?.packageId ?? null))}
+              disabled={busy !== null || storeLoading}
               className="mt-3 w-full h-12 rounded-xl text-base font-bold text-white transition active:opacity-80 disabled:opacity-60"
               style={{ backgroundColor: NAVY }}
             >
@@ -272,7 +328,7 @@ export default function Paywall({ mode: requestedMode }: { mode: PaywallMode }) 
             </button>
           ) : (
             <div className="mt-3 w-full rounded-xl px-4 py-3 text-center text-sm font-semibold" style={{ backgroundColor: "rgba(0,28,72,0.07)", color: NAVY }}>
-              Subscribe in the Ball Masters iPhone app
+              {needsUpdate ? "Update Ball Masters from the App Store to subscribe" : "Subscribe in the Ball Masters iPhone app"}
             </div>
           )}
 
