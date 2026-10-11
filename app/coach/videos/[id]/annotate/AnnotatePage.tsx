@@ -8,7 +8,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, collection, getDocs, getDoc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import CommentsSection from "@/components/CommentsSection";
-import { renderAnnotations, getContentRect, textFontSizePx, type DrawingType, type Drawing, type AnnotationFrame } from "@/lib/annotations";
+import { renderAnnotations, getContentRect, textFontSizePx, type DrawingType, type Drawing, type AnnotationFrame, type TextSize } from "@/lib/annotations";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 
 export type { DrawingType, Drawing, AnnotationFrame };
@@ -48,6 +48,12 @@ const COLORS = [
   { value: "#111827", label: "Black" },
 ];
 
+const TEXT_SIZES: { value: TextSize; label: string; title: string }[] = [
+  { value: "s", label: "S", title: "Small text" },
+  { value: "m", label: "M", title: "Medium text" },
+  { value: "l", label: "L", title: "Large text" },
+];
+
 const TOOLS: { type: DrawingType; label: string; icon: string }[] = [
   { type: "arrow", label: "Arrow", icon: "→" },
   { type: "line", label: "Line", icon: "╱" },
@@ -81,6 +87,7 @@ export default function AnnotatePage() {
   const [showDoneModal, setShowDoneModal] = useState(false);
   const [textInput, setTextInput] = useState({ x: 0, y: 0, visible: false });
   const [textValue, setTextValue] = useState("");
+  const [textSize, setTextSize] = useState<TextSize>("m");
   const [voiceover, setVoiceover] = useState<VoiceoverMeta | null>(null);
   const [recordingState, setRecordingState] = useState<"idle" | "recording" | "stopping" | "uploading">("idle");
   const [recordingTimer, setRecordingTimer] = useState(0);
@@ -359,6 +366,7 @@ export default function AnnotatePage() {
         strokeWidth: 3.5 / contentW,
         tx: textInput.x, ty: textInput.y,
         label: textValue.trim(),
+        textSize,
       }]);
     }
     setTextInput({ x: 0, y: 0, visible: false });
@@ -881,13 +889,13 @@ export default function AnnotatePage() {
         top: `${((textInput.y * cr.height + cr.offsetY) / video.clientHeight) * 100}%`,
         // Same height the canvas draw is handed at line ~209, through the same
         // helper, so what the coach types is the size they get on confirm.
-        fontSize: `${textFontSizePx(cr.height)}px`,
+        fontSize: `${textFontSizePx(cr.height, textSize)}px`,
       };
     }
     return {
       left: `${textInput.x * 100}%`,
       top: `${textInput.y * 100}%`,
-      fontSize: `${textFontSizePx(video?.clientHeight ?? 0)}px`,
+      fontSize: `${textFontSizePx(video?.clientHeight ?? 0, textSize)}px`,
     };
   })();
 
@@ -1066,6 +1074,34 @@ export default function AnnotatePage() {
               </button>
             ))}
           </div>
+
+          {drawingMode && tool === "text" && (
+            <>
+              <div className="w-px h-5 bg-gray-700 shrink-0" />
+              {/* S / M / L — the same size feeds the live input and the canvas
+                  draw (textFontSizePx). mouseDown is held so picking a size
+                  while typing doesn't blur the input and confirm the text. */}
+              <div className="flex items-center gap-1" role="group" aria-label="Text size">
+                {TEXT_SIZES.map(sz => (
+                  <button
+                    key={sz.value}
+                    type="button"
+                    title={sz.title}
+                    aria-pressed={textSize === sz.value}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => setTextSize(sz.value)}
+                    className="h-8 w-8 rounded-lg text-xs font-bold transition"
+                    style={{
+                      backgroundColor: textSize === sz.value ? "#001c48" : "#374151",
+                      color: textSize === sz.value ? "white" : "#9ca3af",
+                    }}
+                  >
+                    {sz.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="w-px h-5 bg-gray-700 shrink-0" />
 

@@ -33,13 +33,28 @@ export function getContentRect(
   return { offsetX, offsetY, width, height };
 }
 
+export type TextSize = "s" | "m" | "l";
+
+/**
+ * Text annotation sizes as a fraction of the video's rendered height
+ * (the content rect, not the element box).
+ */
+export const TEXT_SIZE_FRACTION: Record<TextSize, number> = { s: 0.024, m: 0.032, l: 0.042 };
+
+/** Smallest text we ever draw, in CSS pixels, so S stays legible on small players. */
+const MIN_TEXT_PX = 11;
+
 /**
  * Font size in CSS pixels for a text annotation drawn over a content rect of
  * height `h`. Exported so the live input in the editor and the canvas draw can
  * never drift apart — they must agree or the text jumps size on confirm.
+ * A drawing saved before sizes existed has no `textSize` and draws as "m".
  */
-export function textFontSizePx(h: number): number {
-  return Math.max(14, Math.round(h * 0.045));
+export function textFontSizePx(h: number, size?: TextSize | null): number {
+  // Data comes from Firestore, so an unknown value falls back to "m" too.
+  const known = size != null && Object.prototype.hasOwnProperty.call(TEXT_SIZE_FRACTION, size);
+  const fraction = known ? TEXT_SIZE_FRACTION[size as TextSize] : TEXT_SIZE_FRACTION.m;
+  return Math.max(MIN_TEXT_PX, Math.round(h * fraction));
 }
 
 export interface Drawing {
@@ -52,6 +67,8 @@ export interface Drawing {
   cx?: number; cy?: number; r?: number;
   points?: { x: number; y: number }[];
   tx?: number; ty?: number; label?: string;
+  // Text drawings only. Absent on drawings saved before sizes existed → "m".
+  textSize?: TextSize;
 }
 
 export interface AnnotationFrame {
@@ -127,7 +144,7 @@ export function renderAnnotations(
 
       case "text": {
         if (d.tx == null) break;
-        const fontSize = textFontSizePx(h);
+        const fontSize = textFontSizePx(h, d.textSize);
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.shadowColor = "rgba(0,0,0,0.85)";
         ctx.shadowBlur = 5;
