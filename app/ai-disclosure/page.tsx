@@ -34,7 +34,7 @@ export default function AIDisclosurePage() {
               AI Disclosure &amp; Consent
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: August 11, 2026
+              Last updated: October 11, 2026
             </p>
           </div>
 
@@ -52,6 +52,10 @@ export default function AIDisclosurePage() {
             When a coach uploads a training video, the audio from that video — which may include the athlete&rsquo;s voice — may be sent to a third-party AI service (OpenAI&rsquo;s Whisper) to automatically convert speech into text. This transcript helps coaches give better feedback.
           </p>
 
+          <p className={`${p} mt-3`}>
+            <strong>Coach voiceovers.</strong> When a coach records a voiceover on a video, the same AI service turns the coach&rsquo;s own voice into captions. This happens for videos of athletes of all ages, including athletes under 13, because a voiceover is a separate recording of the coach, not the video&rsquo;s own audio. The coach reviews and edits the captions before athletes see them. Transcription of an athlete&rsquo;s own video audio stays off for athletes under 13, as before.
+          </p>
+
           {/* Consent items */}
           <h2 className="mt-8 mb-3 text-xs font-bold uppercase tracking-widest text-gray-500 border-b border-gray-200 pb-1">
             What You&rsquo;re Consenting To
@@ -61,6 +65,7 @@ export default function AIDisclosurePage() {
           </p>
           <ul className="space-y-3 list-disc list-outside ml-4">
             <li className={li}>Video audio may be processed by OpenAI&rsquo;s transcription service.</li>
+            <li className={li}>A coach&rsquo;s voiceover (the coach&rsquo;s own voice) may be transcribed by the same service to create captions, for videos of athletes of any age.</li>
             <li className={li}>This may include your own audio or, where the account is guardian-managed, that of the child for whom you are the parent or legal guardian.</li>
             <li className={li}>Transcription is disabled for users under 13, so their video audio is never sent to OpenAI.</li>
             <li className={li}>AI transcripts may contain errors and are used only to assist coaching.</li>

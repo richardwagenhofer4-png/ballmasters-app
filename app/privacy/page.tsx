@@ -42,7 +42,7 @@ export default function PrivacyPage() {
               Privacy Policy
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: August 11, 2026
+              Last updated: October 11, 2026
             </p>
           </div>
 
@@ -73,7 +73,7 @@ export default function PrivacyPage() {
             <li className={li}><strong>Account information:</strong> name, email address, role, and for athletes, the assigned coach and date of birth.</li>
             <li className={li}><strong>Profile information:</strong> a chosen avatar (icon or initials).</li>
             <li className={li}><strong>Training videos and related content:</strong> videos uploaded by coaches that may depict athletes, plus coach annotations, voiceover, comments, and reactions.</li>
-            <li className={li}><strong>Audio/transcripts:</strong> audio from videos may be transcribed to text (see &ldquo;AI Processing&rdquo;).</li>
+            <li className={li}><strong>Audio/transcripts:</strong> audio from videos, and coach voiceovers, may be transcribed to text (see &ldquo;AI Processing&rdquo;).</li>
             <li className={li}><strong>Messaging:</strong> 1-to-1 messages between an athlete (or guardian) and their coach.</li>
             <li className={li}><strong>Usage data:</strong> which videos have been watched, activity for notifications, and standard technical/diagnostic data.</li>
           </ul>
@@ -95,8 +95,12 @@ export default function PrivacyPage() {
           <p className={p}>
             The App uses a third-party AI service (OpenAI&rsquo;s Whisper API) to transcribe audio from training videos into text. This means video audio — which may include a child&rsquo;s voice — is sent to OpenAI for processing.
           </p>
+          <p className={`${p} mt-3`}>
+            It also transcribes coach voiceovers, which are recordings of the coach&rsquo;s own voice, to create captions for the video. The coach reviews and edits the captions before athletes see them.
+          </p>
           <ul className="mt-3 space-y-2.5 list-disc list-outside ml-4">
             <li className={li}>Transcription is disabled for users under 13, so their video audio is never sent to OpenAI.</li>
+            <li className={li}>A voiceover is a separate recording of the coach, not the video&rsquo;s own audio, so coach voiceovers are transcribed for videos of athletes of all ages, including under 13.</li>
             <li className={li}>Consent to this AI processing is given at sign-up — by the parent/guardian for athletes under 13, and by the athlete for those 13 and older.</li>
           </ul>
 
