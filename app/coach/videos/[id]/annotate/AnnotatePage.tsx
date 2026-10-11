@@ -10,6 +10,18 @@ import { auth, db } from "@/lib/firebase";
 import CommentsSection from "@/components/CommentsSection";
 import { renderAnnotations, getContentRect, textFontSizePx, type DrawingType, type Drawing, type AnnotationFrame, type TextSize } from "@/lib/annotations";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import {
+  CAPTION_WARN_CHARS,
+  FEEDBACK_MAX_CHARS,
+  cleanSegments,
+  sameSegments,
+  transcriptToFeedback,
+  type CaptionSegment,
+} from "@/lib/captions";
+import { loadCoachNotes } from "@/lib/captionsClient";
+import { useActiveCaption } from "@/lib/useActiveCaption";
+import CaptionOverlay from "@/components/CaptionOverlay";
+import CoachFeedback from "@/components/CoachFeedback";
 
 export type { DrawingType, Drawing, AnnotationFrame };
 export { renderAnnotations };
@@ -95,6 +107,16 @@ export default function AnnotatePage() {
   const [previewing, setPreviewing] = useState(false);
   const [voiceoverError, setVoiceoverError] = useState("");
   const [previewMode, setPreviewMode] = useState(false);
+  // Captions (made from the voiceover) and the coach's written feedback. The
+  // "saved" copies are what athletes see; the others are the editable working
+  // copies, so a fresh transcription stays a draft until the coach saves it.
+  const [captionSegs, setCaptionSegs] = useState<CaptionSegment[]>([]);
+  const [savedCaptions, setSavedCaptions] = useState<CaptionSegment[]>([]);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [savedFeedback, setSavedFeedback] = useState("");
+  const [transcribing, setTranscribing] = useState(false);
+  const [notesError, setNotesError] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,8 +143,23 @@ export default function AnnotatePage() {
   // Last known videos/{id}.hasBreakdown. A ref, not state: syncHasBreakdown()
   // also runs from the recorder's onstop closure, which would see stale state.
   const hasBreakdownRef = useRef<boolean | undefined>(undefined);
+  // Latest copies for code that runs from stale closures (the recorder's
+  // onstop → doUploadVoiceover) and for the hasBreakdown decision.
+  const voiceoverRef = useRef<VoiceoverMeta | null>(null);
+  const savedCaptionsRef = useRef<CaptionSegment[]>([]);
+  const savedFeedbackRef = useRef("");
+  const captionsCreatedAtRef = useRef<string | null>(null);
+  const transcribingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => { annotationsRef.current = annotations; }, [annotations]);
+  useEffect(() => { voiceoverRef.current = voiceover; }, [voiceover]);
+  useEffect(() => { savedCaptionsRef.current = savedCaptions; }, [savedCaptions]);
+  useEffect(() => { savedFeedbackRef.current = savedFeedback; }, [savedFeedback]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Mark new_comment notifications for this video as read when the page opens
   useEffect(() => {
@@ -169,6 +206,13 @@ export default function AnnotatePage() {
 
         const voSnap = await getDoc(doc(db, "videos", id, "voiceover", "main"));
         if (voSnap.exists()) setVoiceover(voSnap.data() as VoiceoverMeta);
+
+        const notes = await loadCoachNotes(id);
+        captionsCreatedAtRef.current = notes.captionsCreatedAt;
+        setSavedCaptions(notes.captions);
+        setCaptionSegs(notes.captions);
+        setSavedFeedback(notes.feedback);
+        setFeedbackText(notes.feedback);
       } catch (err) {
         setError((err as Error).message);
       }
@@ -388,6 +432,17 @@ export default function AnnotatePage() {
   // this flag is how their app knows to show the "Coach breakdown on this
   // clip" upgrade panel. Best-effort: a failed write never blocks the coach's
   // save, and scripts/backfill-has-breakdown.mjs can recompute it.
+  // True when ANY coach breakdown exists on this video: drawings, a voiceover,
+  // saved captions or saved feedback. Pass what has just changed, because React
+  // state (and the refs that mirror it) lags a call behind.
+  function breakdownExists(changed: { annotations?: number; voiceover?: boolean; captions?: number; feedback?: boolean } = {}) {
+    const a = changed.annotations ?? annotationsRef.current.length;
+    const v = changed.voiceover ?? voiceoverRef.current !== null;
+    const c = changed.captions ?? savedCaptionsRef.current.length;
+    const f = changed.feedback ?? savedFeedbackRef.current.length > 0;
+    return a > 0 || v || c > 0 || f;
+  }
+
   async function syncHasBreakdown(value: boolean) {
     if (hasBreakdownRef.current === value) return;
     try {
@@ -431,7 +486,7 @@ export default function AnnotatePage() {
       setDrawings([]);
       setPauseOnPlay(false);
     }
-    if (remaining.length === 0 && !voiceover) await syncHasBreakdown(false);
+    await syncHasBreakdown(breakdownExists({ annotations: remaining.length }));
   }
 
   async function togglePauseOnPlay(annot: AnnotationFrame) {
@@ -498,6 +553,9 @@ export default function AnnotatePage() {
     if (recordingState !== "idle" || countdown !== null) return;
     const video = videoRef.current;
     if (!video) return;
+    // A new take makes the captions made from the old one wrong.
+    if (voiceover && (savedCaptions.length > 0 || captionSegs.length > 0)
+      && !window.confirm("Recording again replaces your voiceover and its captions. Continue?")) return;
     setVoiceoverError("");
 
     // play() on an ended clip restarts it at 0, which would leave the anchor
@@ -636,7 +694,13 @@ export default function AnnotatePage() {
       previewBlobUrlRef.current = URL.createObjectURL(blob);
       previewAudioRef.current = null;
       setVoiceover(meta);
+      voiceoverRef.current = meta;
       await syncHasBreakdown(true);
+      // The captions of any earlier take no longer match: clear them, then
+      // draft new ones from this take. Runs from the recorder's onstop
+      // closure, so these functions only touch refs and state setters.
+      await discardCaptions();
+      void generateCaptions();
     } catch (err) {
       setVoiceoverError((err as Error).message);
     } finally {
@@ -704,10 +768,123 @@ export default function AnnotatePage() {
       previewAudioRef.current = null;
       if (videoRef.current) videoRef.current.muted = false;
       setVoiceover(null);
+      voiceoverRef.current = null;
       setPreviewing(false);
-      if (annotationsRef.current.length === 0) await syncHasBreakdown(false);
+      // Captions are made from the voiceover; they go with it.
+      await discardCaptions();
+      await syncHasBreakdown(breakdownExists({ voiceover: false }));
     } catch (err) {
       setVoiceoverError((err as Error).message);
+    }
+  }
+
+  // ── Captions + coach's feedback ──────────────────────────────────────────────
+  // Deletes the saved captions (and drops the working copy). Used when the
+  // voiceover they were made from is deleted or replaced. Returns false if the
+  // delete failed, in which case the old captions are still live.
+  async function discardCaptions(): Promise<boolean> {
+    try {
+      await deleteDoc(doc(db, "videos", id, "captions", "main"));
+    } catch (err) {
+      if (mountedRef.current) setNotesError(`Couldn't remove the old captions: ${(err as Error).message}`);
+      return false;
+    }
+    captionsCreatedAtRef.current = null;
+    savedCaptionsRef.current = [];
+    if (mountedRef.current) {
+      setSavedCaptions([]);
+      setCaptionSegs([]);
+    }
+    return true;
+  }
+
+  // Asks the server to transcribe the voiceover. The result is only a DRAFT in
+  // the editor: athletes see nothing until the coach reviews it and saves.
+  async function generateCaptions() {
+    if (!voiceoverRef.current || transcribingRef.current) return;
+    transcribingRef.current = true;
+    setTranscribing(true);
+    setNotesError("");
+    try {
+      const token = await auth.currentUser!.getIdToken();
+      const res = await fetch("/api/voiceover/transcribe", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ videoId: id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { segments?: unknown; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "The transcription service didn't answer.");
+      if (!mountedRef.current) return;
+      const segs = cleanSegments(data.segments);
+      if (segs.length === 0) {
+        setNotesError("No speech was found in the voiceover, so there are no captions to review.");
+        return;
+      }
+      setCaptionSegs(segs);
+      // Pre-fill the feedback box with the whole transcript, but never over
+      // something the coach already wrote.
+      const { text } = transcriptToFeedback(segs);
+      setFeedbackText(prev => (prev.trim() ? prev : text));
+      setToast("Captions ready — review them, then save");
+      setTimeout(() => setToast(null), 3000);
+    } catch (err) {
+      if (mountedRef.current) setNotesError(`Couldn't create captions. ${(err as Error).message}`);
+    } finally {
+      transcribingRef.current = false;
+      if (mountedRef.current) setTranscribing(false);
+    }
+  }
+
+  function regenerateCaptions() {
+    if (
+      !sameSegments(cleanSegments(captionSegs), savedCaptions) &&
+      !window.confirm("Creating captions again replaces the changes you've made to the list below. Continue?")
+    ) return;
+    void generateCaptions();
+  }
+
+  async function saveNotes() {
+    if (savingNotes) return;
+    setSavingNotes(true);
+    setNotesError("");
+    try {
+      const now = new Date().toISOString();
+      const segs = cleanSegments(captionSegs); // trims, drops emptied rows
+      const feedback = feedbackText.trim().slice(0, FEEDBACK_MAX_CHARS);
+
+      if (segs.length > 0) {
+        const createdAt = captionsCreatedAtRef.current ?? now;
+        await setDoc(doc(db, "videos", id, "captions", "main"), {
+          segments: segs,
+          source: "voiceover",
+          createdAt,
+          updatedAt: now,
+        });
+        captionsCreatedAtRef.current = createdAt;
+      } else {
+        await deleteDoc(doc(db, "videos", id, "captions", "main"));
+        captionsCreatedAtRef.current = null;
+      }
+
+      if (feedback) {
+        await setDoc(doc(db, "videos", id, "feedback", "main"), { text: feedback, updatedAt: now });
+      } else {
+        await deleteDoc(doc(db, "videos", id, "feedback", "main"));
+      }
+
+      savedCaptionsRef.current = segs;
+      savedFeedbackRef.current = feedback;
+      setSavedCaptions(segs);
+      setCaptionSegs(segs);
+      setSavedFeedback(feedback);
+      setFeedbackText(feedback);
+      setToast("Captions and feedback saved");
+      setTimeout(() => setToast(null), 2000);
+      await syncHasBreakdown(breakdownExists({ captions: segs.length, feedback: feedback.length > 0 }));
+    } catch (err) {
+      setNotesError(`Couldn't save: ${(err as Error).message}`);
+    } finally {
+      setSavingNotes(false);
     }
   }
 
@@ -746,7 +923,9 @@ export default function AnnotatePage() {
     }
     if (countdown !== null) countdownCancelledRef.current = true;
 
-    if (voiceover && !previewModeAudioRef.current) {
+    // With captions saved, athletes hear the clip's own sound and read the
+    // captions; the voiceover audio is only for videos that have no captions.
+    if (voiceover && savedCaptionsRef.current.length === 0 && !previewModeAudioRef.current) {
       try {
         let src: string;
         if (previewBlobUrlRef.current) {
@@ -822,7 +1001,7 @@ export default function AnnotatePage() {
   function handlePreviewPlay() {
     const pvid = previewVideoRef.current;
     const audio = previewModeAudioRef.current;
-    if (!pvid || !audio || !voiceover) return;
+    if (!pvid || !audio || !voiceover || savedCaptionsRef.current.length > 0) return;
     const offset = pvid.currentTime - voiceover.startTime;
     if (offset >= 0 && offset < voiceover.duration) {
       audio.currentTime = offset;
@@ -862,7 +1041,7 @@ export default function AnnotatePage() {
         }
       }
     }
-    if (!pvid.paused && previewModeAudioRef.current && voiceover) {
+    if (!pvid.paused && previewModeAudioRef.current && voiceover && savedCaptionsRef.current.length === 0) {
       const offset = t - voiceover.startTime;
       if (offset >= 0 && offset < voiceover.duration) {
         previewModeAudioRef.current.currentTime = offset;
@@ -874,6 +1053,12 @@ export default function AnnotatePage() {
       }
     }
   }
+
+  const captionsDirty = !sameSegments(cleanSegments(captionSegs), savedCaptions);
+  const feedbackDirty = feedbackText.trim() !== savedFeedback;
+  const notesDirty = captionsDirty || feedbackDirty;
+  // What an athlete would see in the preview: the SAVED captions.
+  const previewCaption = useActiveCaption(previewVideoRef, savedCaptions, previewMode);
 
   const atSavedFrame = annotations.some(
     a => Math.abs((videoRef.current?.currentTime ?? currentTime) - a.timestamp) < 0.5
@@ -1255,6 +1440,123 @@ export default function AnnotatePage() {
         )}
       </div>
 
+      {/* Captions + coach's feedback */}
+      <div className="bg-gray-800 border-t border-gray-700 px-4 py-3 shrink-0">
+        <div className="flex items-center gap-2 mb-2">
+          <svg className="h-3.5 w-3.5 text-gray-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V7a2 2 0 012-2zm3.5 4.5a2.5 2.5 0 000 5c.7 0 1.3-.3 1.8-.7l-.9-1.1a1.1 1.1 0 01-.9.4 1.1 1.1 0 010-2.2c.4 0 .7.1.9.4l.9-1.1a2.5 2.5 0 00-1.8-.7zm7 0a2.5 2.5 0 000 5c.7 0 1.3-.3 1.8-.7l-.9-1.1a1.1 1.1 0 01-.9.4 1.1 1.1 0 010-2.2c.4 0 .7.1.9.4l.9-1.1a2.5 2.5 0 00-1.8-.7z" />
+          </svg>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Captions &amp; feedback</span>
+        </div>
+
+        {/* Captions */}
+        {!voiceover ? (
+          <p className="text-xs text-gray-500">
+            Record a voiceover and captions are made from it automatically. You can also just write feedback below.
+          </p>
+        ) : transcribing ? (
+          <div className="flex items-center gap-2 text-sm text-gray-400">
+            <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            Creating captions from your voiceover…
+          </div>
+        ) : captionSegs.length === 0 ? (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => void generateCaptions()}
+              disabled={recordingState !== "idle"}
+              className="h-8 px-3 rounded-lg text-sm font-semibold text-white transition disabled:opacity-40"
+              style={{ backgroundColor: "#374151" }}
+            >
+              Create captions from voiceover
+            </button>
+            <span className="text-xs text-gray-500">Athletes then read your voiceover instead of hearing it.</span>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs mb-2" style={{ color: captionsDirty ? "#fbbf24" : "#9ca3af" }}>
+              {captionsDirty
+                ? "Review the captions, fix any words, then Save. Until you save, athletes hear your voiceover as audio instead."
+                : "Saved. Athletes watch with the clip's own sound and read these captions; your voiceover audio isn't played."}
+            </p>
+            <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+              {captionSegs.map((seg, i) => (
+                <li key={i} className="flex items-start gap-2">
+                  <button
+                    onClick={() => seekTo(seg.start)}
+                    title="Jump to this caption in the video"
+                    className="mt-1.5 w-11 shrink-0 text-left text-xs font-mono font-semibold hover:underline"
+                    style={{ color: "#01fff9" }}
+                  >
+                    {fmt(seg.start)}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <textarea
+                      value={seg.text}
+                      rows={2}
+                      aria-label={`Caption at ${fmt(seg.start)}`}
+                      onChange={e => {
+                        const text = e.target.value;
+                        setCaptionSegs(prev => prev.map((c, j) => (j === i ? { ...c, text } : c)));
+                      }}
+                      className="w-full resize-none rounded-md border border-gray-600 bg-gray-900 px-2 py-1.5 text-sm text-white focus:outline-none focus:border-gray-400"
+                    />
+                    {seg.text.length > CAPTION_WARN_CHARS && (
+                      <p className="text-xs text-amber-400">Long — athletes see two lines, so the end may be cut off. Consider shortening.</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setCaptionSegs(prev => prev.filter((_, j) => j !== i))}
+                    title="Delete this caption"
+                    aria-label={`Delete caption at ${fmt(seg.start)}`}
+                    className="mt-1 h-8 w-8 shrink-0 rounded text-gray-400 hover:text-red-400 hover:bg-gray-700 transition"
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={regenerateCaptions}
+              disabled={recordingState !== "idle"}
+              className="mt-2 text-xs text-gray-400 underline hover:text-white disabled:opacity-40"
+            >
+              Create captions again from the voiceover
+            </button>
+          </div>
+        )}
+
+        {/* Coach's feedback */}
+        <label htmlFor="coach-feedback" className="mt-3 block text-xs font-semibold text-gray-400 uppercase tracking-wide">
+          Coach&rsquo;s feedback
+        </label>
+        <textarea
+          id="coach-feedback"
+          value={feedbackText}
+          onChange={e => setFeedbackText(e.target.value)}
+          maxLength={FEEDBACK_MAX_CHARS}
+          rows={5}
+          placeholder="Written notes the athlete sees under the video. Fill in from your voiceover, or write your own."
+          className="mt-1 w-full rounded-md border border-gray-600 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-gray-400"
+        />
+        <p className="text-right text-xs text-gray-500">{feedbackText.length} / {FEEDBACK_MAX_CHARS}</p>
+
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            onClick={saveNotes}
+            disabled={!notesDirty || savingNotes}
+            className="h-8 px-4 rounded-lg text-sm font-semibold text-white transition disabled:opacity-40"
+            style={{ backgroundColor: "#001c48" }}
+          >
+            {savingNotes ? "Saving…" : "Save captions & feedback"}
+          </button>
+          {notesDirty && !savingNotes && <span className="text-xs text-amber-400">Unsaved changes</span>}
+        </div>
+        {notesError && <p className="mt-2 text-xs text-red-400">{notesError}</p>}
+      </div>
+
       {/* Annotations list */}
       <div className="flex-1 bg-white overflow-y-auto">
         {annotations.length === 0 ? (
@@ -1398,6 +1700,11 @@ export default function AnnotatePage() {
             <p style={{ fontSize: "14px", color: "#6b7280", marginBottom: "24px" }}>
               Your annotations are live on this video.
             </p>
+            {notesDirty && (
+              <p style={{ fontSize: "13px", color: "#92400e", backgroundColor: "#fef3c7", borderRadius: "8px", padding: "8px 10px", marginBottom: "16px" }}>
+                Your captions or feedback have changes that aren&rsquo;t saved yet. Athletes won&rsquo;t see them until you save.
+              </p>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
               <button
                 onClick={() => {
@@ -1438,6 +1745,14 @@ export default function AnnotatePage() {
               >
                 Back to Videos
               </Link>
+              {notesDirty && (
+                <button
+                  onClick={() => setShowDoneModal(false)}
+                  style={{ background: "none", border: "none", color: "#001c48", fontSize: "14px", fontWeight: 600, cursor: "pointer", padding: "8px" }}
+                >
+                  Keep editing
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1521,6 +1836,7 @@ export default function AnnotatePage() {
                 pointerEvents: "none",
               }}
             />
+            <CaptionOverlay text={previewCaption} />
           </div>
 
           {/* Preview info bar */}
@@ -1535,8 +1851,14 @@ export default function AnnotatePage() {
             }}
           >
             {annotations.length} annotation{annotations.length !== 1 ? "s" : ""}
-            {voiceover ? " · Voiceover included" : " · No voiceover"}
+            {savedCaptions.length > 0
+              ? " · Captions on (voiceover audio not played)"
+              : voiceover ? " · Voiceover included" : " · No voiceover"}
             {" · "}Annotations with ⏸ will auto-pause
+            {notesDirty && <div style={{ color: "#fbbf24", marginTop: 4 }}>Unsaved captions or feedback aren&rsquo;t shown in this preview.</div>}
+          </div>
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            <CoachFeedback text={savedFeedback} />
           </div>
         </div>
       )}
