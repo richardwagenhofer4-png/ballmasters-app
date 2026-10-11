@@ -419,3 +419,93 @@ Generated and git-ignored (recreated by `npx cap sync ios`): `ios/App/App/capaci
 - **RevenueCat offering and package identifiers** must match the dashboard exactly (`default`, `coached_monthly`, …). A mismatch shows the catalog prices and "This plan isn't available to buy right now."
 - **RevenueCat REST response parsing** (`entitlements`, `subscriptions`, `period_type`, `unsubscribe_detected_at`, …) follows RevenueCat's v1 API and was only tested against a mocked response.
 - **The `Auth.auth().canHandle(url)` line** the messaging README requires compiles, but is untested at runtime.
+
+
+---
+
+## 10. Step 5 fixes
+
+Three web-side fixes, web code only. Nothing under `ios/` was touched, no `npx cap sync`, nothing deployed, the paywall switch is still **off**. `npm run build` ✅ and `npm run lint` ✅ (0 errors; no new warnings from the new files). With the switch off students see no change except what is described below.
+
+### Fix A: invite link (bug 4)
+
+On `/register`, outside the iPhone app:
+- **Smart App Banner** for App Store id 6800971758 (`<meta name="apple-itunes-app" content="app-id=6800971758">`), on the register route only (`app/register/page.tsx`, Next's `metadata.itunes`). Checked in the served HTML: present on `/register`, absent on `/login`.
+- **"Get the Ball Masters app" card** above the form (`components/GetTheAppCard.tsx`): App Store button (`https://apps.apple.com/app/id6800971758`) and, when `?code=` is present, the code in large type with a **Copy code** button and "Open the app, tap Create one, and enter this code."
+- The registration form below is unchanged. Inside the native app the card renders nothing (the server render and first hydration pass also render nothing, so the app never flashes it; on the web the card appears right after hydration).
+- Rendered in a true 390px viewport with and without a code: no horizontal overflow.
+
+### Fix B: annotation text size (bug 5)
+
+- `lib/annotations.ts`: `textFontSizePx(h, size)` now uses S / M / L = 2.4% / 3.2% / 4.2% of the video height (content rect), minimum 11px. The size is stored on each text drawing as `textSize: "s" | "m" | "l"`. Missing or unknown values render as "m".
+- Annotate editor: an **S / M / L** selector appears when Drawing is on and the Text tool is active (default M). The live input and the canvas both call `textFontSizePx` with the same height and size, so the "never drift" rule holds. The selector holds `mousedown` so picking a size while typing doesn't blur the input and confirm the text early.
+- Every renderer goes through `renderAnnotations`: the coach editor, the athlete preview in the editor, `StudentVideoPage` and `DrillComparisonPlayer`. (The coach `DrillViewPage` doesn't draw annotations.)
+
+### Fix C: captions + Coach's feedback (items 6 and 11)
+
+**Coach side (annotate page)**
+- After a voiceover is saved, the editor calls the new `POST /api/voiceover/transcribe { videoId }` (`app/api/voiceover/transcribe/route.ts`, helper `lib/voiceoverCaptions.server.ts`). It downloads the voiceover from R2, normalises it with ffmpeg exactly as `/api/transcribe` does, runs OpenAI Whisper (`verbose_json`, word + segment timestamps, the same format), and returns **draft captions in video time**: a segment at voiceover time `t` goes to `startTime + t`.
+- Only a coach or admin may call it, and only for a video they own (admin: any). The **voiceover is transcribed for videos of all ages**. `app/api/transcribe/route.ts` is untouched: `UNDER13_TRANSCRIPTION_ENABLED` is still `false` and still gates the video's own audio.
+- The draft opens in a new **Captions & feedback** panel below the Voiceover section. The coach can edit each caption's text, jump to its time, delete captions, then press **Save captions & feedback**. That writes `videos/{id}/captions/main` `{ segments:[{start,end,text}], source:"voiceover", createdAt, updatedAt }`. Athletes see nothing until it is saved.
+- **Coach's feedback** text area (up to 2,000 characters, multi-line), always visible and usable with no voiceover. Saved to `videos/{id}/feedback/main` `{ text, updatedAt }`. When captions are first generated, it is pre-filled with the full transcript, but only if it is empty.
+- `hasBreakdown` now means drawings, voiceover, captions **or** feedback. The editor recomputes it (`breakdownExists`) whenever any of the four is saved or removed; `scripts/backfill-has-breakdown.mjs` checks all four (up to 4 reads per video).
+- The editor's athlete **Preview** mirrors the athlete: saved captions, the clip's own sound, no voiceover audio, and the feedback under the player. It says so when there are unsaved edits.
+
+**Student side**
+- `StudentVideoPage`: with captions the clip plays with its original sound, captions are overlaid at the bottom synced to video time (white text, dark translucent box, max 2 lines, above the control bar), and the voiceover audio is **not even requested**. A video with a voiceover but **no** captions plays exactly as before. **Coach's feedback** is shown under the player. Coaches and admins previewing see the same (the rules already let them read).
+- `DrillComparisonPlayer`: same captions (over the Coach Demo panel, synced to its time) and feedback section. See decision 12.
+- Captions and feedback are part of the locked breakdown: for Access members (switch on) neither is requested, and the existing locked panel covers them. The caption and feedback reads can never break the page: a refused read counts as "none" (`lib/captionsClient.ts`), so deploying the web build before the rules is safe.
+
+**Rules** (`firestore.rules`): `videos/{id}/captions/*` and `videos/{id}/feedback/*` have exactly voiceover's three rules: admin, the video's coach, and a student on the video only when `paywallAllows(['coached'])`. Switch off, a student can read them just as they can read voiceover.
+
+**Copy**: `app/ai-disclosure/page.tsx` (new "Coach voiceovers" paragraph and a consent bullet) and `app/privacy/page.tsx` (collection bullet, AI Processing paragraph and bullet). Plain English: coach voiceovers (the coach's own voice) are transcribed by the same AI service to create captions, for videos of all ages; the coach reviews and edits captions before athletes see them; transcription of athletes' own video audio stays off for under-13s. Both "Last updated" lines are now October 11, 2026.
+
+### Every file touched
+
+New:
+- `components/GetTheAppCard.tsx`, `components/CaptionOverlay.tsx`, `components/CoachFeedback.tsx`
+- `lib/captions.ts`, `lib/captionsClient.ts`, `lib/useActiveCaption.ts`, `lib/voiceoverCaptions.server.ts`
+- `app/api/voiceover/transcribe/route.ts`
+- `scripts/test-captions.mjs`
+
+Changed:
+- `app/register/page.tsx`, `app/register/RegisterForm.tsx`
+- `lib/annotations.ts`, `app/coach/videos/[id]/annotate/AnnotatePage.tsx`
+- `app/student/videos/[id]/StudentVideoPage.tsx`, `components/DrillComparisonPlayer.tsx`
+- `firestore.rules`, `scripts/test-paywall-rules.mjs`, `scripts/backfill-has-breakdown.mjs`
+- `lib/adminFirestoreHelpers.ts` (see decision 9)
+- `app/ai-disclosure/page.tsx`, `app/privacy/page.tsx`, this report
+
+### Tests run
+
+- `npm run build` ✅, `npm run lint` ✅ (0 errors), `tsc --noEmit` ✅.
+- **Rules emulator**: `scripts/test-paywall-rules.mjs` **395/395** (was 265). The new checks cover reads of captions and feedback for every plan with the switch off and on, coach/admin reads, coach and admin write/overwrite/delete, and denied writes for every student plan, another coach, signed-out and strangers. Against the pre-change rules, 54 of them fail, so the checks really detect a missing rule.
+- **Caption logic**: `node scripts/test-captions.mjs` **16/16**: voiceover→video time mapping, splitting long speech into ≤70-character captions, exact vs proportional timing, overlaps, minimum length, stored-data cleanup, the feedback pre-fill cut-off.
+- **In a real browser** (a throwaway page, since deleted, with a generated video): the hook shows the right caption at the right time, clamps to two lines, and the feedback card renders. Register page rendered at 390px.
+
+### Decisions where the brief was silent
+
+1. **Captions are a draft until saved.** Transcription returns a draft to the editor; the coach saves. This is how "the coach reviews and edits captions before athletes see them" holds. Until saved, athletes hear the voiceover as audio, as today. A draft is lost if the coach leaves the page without saving (the Done dialog warns, with a Keep editing button when there are unsaved changes).
+2. **Transcription starts automatically** when a voiceover is saved; a button creates (or re-creates) captions any time. Re-creating asks first if the coach has edited.
+3. **A new take or a deleted voiceover removes its captions** (their timing no longer matches), after a confirmation on re-record. Feedback is kept.
+4. **Feedback pre-fill only when the box is empty**, cut at a word boundary to 2,000 characters.
+5. **Long speech is split** into captions of at most 70 characters so each fits two lines on a phone. The editor warns above 90.
+6. **`/api/transcribe` was left alone** and the new path is separate (`/api/voiceover/transcribe`). It doesn't use that route's "first segment after 5 s means a container offset" heuristic: a voiceover that starts with silence would be wrongly shifted. OpenAI/R2 clients are created on first use, not at import.
+7. **One Save button** writes captions and feedback; emptying either deletes its document.
+8. **Both players' original sound.** `StudentVideoPage` plays the clip unmuted when captions exist. `DrillComparisonPlayer` keeps both videos muted as it always did.
+9. **Teardown:** `deleteVideoCompletely` now also deletes the `captions` and `feedback` subcollections, so deleting a video or an account removes the transcript with it.
+10. **Smart App Banner** is static metadata. Safari on iPhone shows it; the iPhone app's WebView never does.
+11. **The App Store card also shows on coach invite links** (`?coachInvite=`), without a code. The code is shown only if it is 1–32 letters, digits or dashes.
+12. **Drill comparisons** get the captions/feedback display, but the annotate editor redirects drill videos away, so there is currently no way to author captions or feedback for one. Display-ready only.
+13. **Legacy text size.** Old text drawings render as "M" (3.2%), which is smaller than the old single size (4.5%).
+14. **Tooling.** `@firebase/rules-unit-testing` 6 needs `firebase` 13, so the rules test needs `npm i --no-save @firebase/rules-unit-testing@5`. Java isn't installed here; I ran the emulator on a temporary JRE in the scratch folder (nothing installed system-wide). Running the suite against `main`'s rules now fails the 24 new captions/feedback switch-off checks, because `main` has no such rules; that is expected.
+
+### Could not verify
+
+- **A real transcription.** No call was made to OpenAI or Firebase production. The route compiles and its checks are by code review. Untested: Whisper on a real MediaRecorder file, word/segment alignment on real speech, and ffmpeg inside the Vercel function for the new route (it uses the same packages as `/api/transcribe`).
+- **The coach editor panel and the student pages with real accounts**: no test project, and I didn't sign in anywhere. They were checked by typecheck, lint and review, plus the hook/overlay harness above.
+- **On a phone:** Safari's Smart App Banner, copy-to-clipboard in Safari, the caption position over iOS's control bar, and `window.confirm` in the app shell. Captions are drawn by the page, so they disappear in iOS's native full-screen player, as annotations already do.
+
+### To ship
+
+1. Deploy the web build (safe before the rules). 2. `firebase deploy --only firestore:rules` (coaches can't save captions or feedback until it is live). 3. Run the backfill (§3) so existing videos with captions or feedback show the locked panel to Access members. Optional: the Terms page (section 5) still says only that the app transcribes "video audio"; consider a matching line.
