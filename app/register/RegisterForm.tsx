@@ -11,6 +11,7 @@ import { validateCoachInvite } from "@/lib/coachInvites";
 import { getAge } from "@/lib/age";
 import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type SocialProvider } from "@/lib/socialSignIn";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
+import GetTheAppCard from "@/components/GetTheAppCard";
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/email-already-in-use": "An account with this email already exists.",
@@ -299,6 +300,9 @@ export default function RegisterForm() {
           />
           <p className="mt-2 text-gray-500 text-sm">Create your account</p>
         </div>
+
+        {/* Web only: send people to the iPhone app (renders nothing inside it) */}
+        <GetTheAppCard code={searchParams.get("code") ?? ""} />
 
         {/* Card */}
         <div className="bg-white rounded-2xl shadow-lg p-8">
