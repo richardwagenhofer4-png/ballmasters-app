@@ -1,7 +1,8 @@
 // One-time backfill: videos/{videoId}.hasBreakdown.
 //
 // hasBreakdown is a denormalised flag: true when the video has at least one
-// doc in its annotations subcollection or a voiceover (voiceover/main).
+// doc in its annotations subcollection, a voiceover (voiceover/main), captions
+// (captions/main) or the coach's written feedback (feedback/main).
 // Access-plan athletes can't read those subcollections once the paywall is
 // on, so their app reads this flag to show the "Coach breakdown on this clip"
 // upgrade panel. The annotate editor keeps it current from now on
@@ -9,7 +10,7 @@
 // videos annotated before that existed. Safe to re-run — it only writes
 // videos whose stored value differs from what the subcollections say.
 //
-// Reads per video: at most 2 (limit(1) on each subcollection).
+// Reads per video: at most 4 (limit(1) on each subcollection).
 //
 // DRY RUN BY DEFAULT. Nothing is written unless --apply is passed. Only the
 // hasBreakdown field is ever touched.
@@ -56,11 +57,13 @@ async function main() {
   let withBreakdown = 0;
 
   for (const v of videos.docs) {
-    const [annotations, voiceover] = await Promise.all([
+    const [annotations, voiceover, captions, feedback] = await Promise.all([
       v.ref.collection("annotations").limit(1).get(),
       v.ref.collection("voiceover").limit(1).get(),
+      v.ref.collection("captions").limit(1).get(),
+      v.ref.collection("feedback").limit(1).get(),
     ]);
-    const hasBreakdown = !annotations.empty || !voiceover.empty;
+    const hasBreakdown = !annotations.empty || !voiceover.empty || !captions.empty || !feedback.empty;
     if (hasBreakdown) withBreakdown++;
 
     const stored = v.data().hasBreakdown;

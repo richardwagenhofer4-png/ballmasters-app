@@ -72,6 +72,8 @@ async function seed(config) {
     await put("videos/legacyDrill", { ...base, title: "Legacy drill", coachVideoKey: "a", studentVideoKey: "b" });
     await put("videos/std/annotations/10", { timestamp: 1, pauseOnPlay: false, drawings: [] });
     await put("videos/std/voiceover/main", { fileName: "voiceovers/x.webm", startTime: 0, duration: 3 });
+    await put("videos/std/captions/main", { segments: [{ start: 0, end: 2, text: "Keep your head up." }], source: "voiceover", createdAt: "2026-09-01T00:00:00.000Z", updatedAt: "2026-09-01T00:00:00.000Z" });
+    await put("videos/std/feedback/main", { text: "Nice work.", updatedAt: "2026-09-01T00:00:00.000Z" });
     for (const s of STUDENTS) {
       await put(`threads/coach__${s}`, { coachId: "coach", athleteId: s, coachName: "Coach", athleteName: s });
       await put(`threads/coach__${s}/messages/m1`, { senderId: "coach", senderRole: "coach", text: "hi" });
@@ -102,6 +104,8 @@ function studentOps(uid) {
     "get legacy drill (keys, no type)": [() => getDoc(doc(db, "videos/legacyDrill")), "drill"],
     "read annotations": [() => getDocs(collection(db, "videos/std/annotations")), "breakdown"],
     "read voiceover": [() => getDoc(doc(db, "videos/std/voiceover/main")), "breakdown"],
+    "read captions": [() => getDoc(doc(db, "videos/std/captions/main")), "breakdown"],
+    "read coach's feedback": [() => getDoc(doc(db, "videos/std/feedback/main")), "breakdown"],
     "read my thread": [() => getDoc(doc(db, `threads/coach__${uid}`)), "messaging"],
     "mark thread read": [() => updateDoc(doc(db, `threads/coach__${uid}`), { unreadForAthlete: 0 }), "messaging"],
     "list messages": [() => getDocs(collection(db, `threads/coach__${uid}/messages`)), "messaging"],
@@ -145,12 +149,46 @@ if (!ONLY_SWITCH_OFF) {
   await check("ON · coach · list own videos", true, () => getDocs(query(collection(coach, "videos"), where("coachId", "==", "coach"))));
   await check("ON · coach · read annotations", true, () => getDocs(collection(coach, "videos/std/annotations")));
   await check("ON · coach · read voiceover", true, () => getDoc(doc(coach, "videos/std/voiceover/main")));
+  await check("ON · coach · read captions", true, () => getDoc(doc(coach, "videos/std/captions/main")));
+  await check("ON · coach · read feedback", true, () => getDoc(doc(coach, "videos/std/feedback/main")));
   await check("ON · coach · list threads", true, () => getDocs(query(collection(coach, "threads"), where("coachId", "==", "coach"))));
   await check("ON · coach · message an Access athlete", true, () => addDoc(collection(coach, "threads/coach__access/messages"), { senderId: "coach", senderRole: "coach", text: "hi" }));
   await check("ON · coach · update own video (hasBreakdown)", true, () => updateDoc(doc(coach, "videos/std"), { hasBreakdown: true }));
   const admin = as("admin");
   await check("ON · admin · get drill", true, () => getDoc(doc(admin, "videos/drill")));
   await check("ON · admin · read annotations", true, () => getDocs(collection(admin, "videos/std/annotations")));
+  await check("ON · admin · read captions", true, () => getDoc(doc(admin, "videos/std/captions/main")));
+  await check("ON · admin · read feedback", true, () => getDoc(doc(admin, "videos/std/feedback/main")));
+
+  // --- 2b. Captions + coach's feedback: who may write, with the switch on or off
+  const captionsDoc = { segments: [{ start: 0, end: 2, text: "Hi" }], source: "voiceover", createdAt: "t", updatedAt: "t" };
+  for (const [name, config] of [["OFF", undefined], ["ON", { paywallEnabled: true }]]) {
+    for (const sub of ["captions", "feedback"]) {
+      const body = sub === "captions" ? captionsDoc : { text: "Good effort", updatedAt: "t" };
+      const path = `videos/std/${sub}/main`;
+      // The video's own coach and an admin: write, overwrite, delete.
+      for (const [who, ctx] of [["coach", as("coach")], ["admin", as("admin")]]) {
+        await seed(config);
+        await check(`${name} · ${who} · write ${sub}`, true, () => setDoc(doc(ctx, path), body));
+        await check(`${name} · ${who} · overwrite ${sub}`, true, () => setDoc(doc(ctx, path), { ...body, updatedAt: "t2" }));
+        await check(`${name} · ${who} · delete ${sub}`, true, () => deleteDoc(doc(ctx, path)));
+      }
+      // Everyone else: no writes, whatever their plan. (coach2 has no users doc; it just isn't this video's coach.)
+      await seed(config);
+      for (const who of ["coach2", ...STUDENTS]) {
+        const ctx = as(who);
+        await check(`${name} · ${who} · create ${sub}`, false, () => setDoc(doc(ctx, `videos/std/${sub}/other`), body));
+        await check(`${name} · ${who} · overwrite ${sub}`, false, () => setDoc(doc(ctx, path), body));
+        await check(`${name} · ${who} · delete ${sub}`, false, () => deleteDoc(doc(ctx, path)));
+      }
+      await check(`${name} · signed out · read ${sub}`, false, () => getDoc(doc(env.unauthenticatedContext().firestore(), path)));
+      // A student not on the video can't read it either.
+      await check(`${name} · stranger · read ${sub}`, false, () => getDoc(doc(as("stranger"), path)));
+    }
+    // The coach can keep videos/{id}.hasBreakdown in step.
+    await seed(config);
+    await check(`${name} · coach · set hasBreakdown`, true, () => updateDoc(doc(as("coach"), "videos/std"), { hasBreakdown: true }));
+  }
 
   // --- 3. Always: plan fields + config ---------------------------------------
   for (const [name, config] of [["OFF", undefined], ["ON", { paywallEnabled: true }]]) {

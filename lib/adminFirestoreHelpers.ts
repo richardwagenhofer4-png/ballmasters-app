@@ -42,8 +42,9 @@ export async function deleteVideoCompletely(db: Firestore, videoId: string): Pro
   }
   await deleteAllDocs(voiceoverSnap);
 
-  // 3. Remaining subcollections Firestore does not cascade-delete.
-  for (const sub of ["annotations", "comments", "reactions"]) {
+  // 3. Remaining subcollections Firestore does not cascade-delete (captions and
+  //    feedback are the coach's voiceover transcript and written notes).
+  for (const sub of ["annotations", "captions", "feedback", "comments", "reactions"]) {
     const snap = await videoRef.collection(sub).get();
     await deleteAllDocs(snap);
   }

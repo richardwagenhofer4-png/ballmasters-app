@@ -135,7 +135,7 @@ service cloud.firestore {
         && request.resource.data.viewedBy.hasAll(resource.data.viewedBy)
         && request.resource.data.viewedBy.size() == resource.data.viewedBy.size() + 1;
 
-      // Coach breakdowns (drawings + voiceover) are Coached-only for students
+      // Coach breakdowns (drawings, voiceover, captions, feedback) are Coached-only for students
       // once the paywall is on. Access athletes learn a clip has one from the
       // denormalised videos/{id}.hasBreakdown flag instead.
       match /annotations/{annotationId} {
@@ -148,6 +148,28 @@ service cloud.firestore {
       }
 
       match /voiceover/{docId} {
+        allow read, write: if isAdmin();
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/videos/$(videoId)).data.coachId == request.auth.uid;
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds
+          && paywallAllows(['coached']);
+      }
+
+      // Captions (made from the coach's voiceover) and the coach's written
+      // feedback are part of the same breakdown: exactly voiceover's access.
+      // Switch off, they behave as voiceover does; switch on, students need
+      // Coached.
+      match /captions/{docId} {
+        allow read, write: if isAdmin();
+        allow read, write: if request.auth != null
+          && get(/databases/$(database)/documents/videos/$(videoId)).data.coachId == request.auth.uid;
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/videos/$(videoId)).data.studentIds
+          && paywallAllows(['coached']);
+      }
+
+      match /feedback/{docId} {
         allow read, write: if isAdmin();
         allow read, write: if request.auth != null
           && get(/databases/$(database)/documents/videos/$(videoId)).data.coachId == request.auth.uid;
