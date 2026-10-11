@@ -6,6 +6,11 @@ import { collection, getDocs, onSnapshot, setDoc, deleteDoc, doc, updateDoc, arr
 import { db, auth } from "@/lib/firebase";
 import { renderAnnotations, type AnnotationFrame } from "@/lib/annotations";
 import CommentsSection from "@/components/CommentsSection";
+import CaptionOverlay from "@/components/CaptionOverlay";
+import CoachFeedback from "@/components/CoachFeedback";
+import { loadCoachNotes } from "@/lib/captionsClient";
+import { useActiveCaption } from "@/lib/useActiveCaption";
+import type { CaptionSegment } from "@/lib/captions";
 
 const REACTIONS = [
   { emoji: "👍", label: "Good" },
@@ -114,6 +119,10 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
   const reactionsUnsubRef = useRef<(() => void) | null>(null);
 
   const [annotations, setAnnotations] = useState<AnnotationFrame[]>([]);
+  // The coach's captions and written feedback, as on the single-video page.
+  // The coach demo is the clip the coach talks about, so captions follow it.
+  const [captions, setCaptions] = useState<CaptionSegment[]>([]);
+  const [feedback, setFeedback] = useState("");
   const [activeAnnotation, setActiveAnnotation] = useState<AnnotationFrame | null>(null);
   const [reactions, setReactions] = useState<Record<string, string>>({});
   const [watched, setWatched] = useState((meta.viewedBy ?? []).includes(uid));
@@ -122,6 +131,7 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
   const [studentVideoError, setStudentVideoError] = useState(false);
 
   const { layout, syncPlayback } = meta;
+  const captionText = useActiveCaption(coachRef, captions);
 
   useEffect(() => {
     async function load() {
@@ -133,6 +143,12 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
       );
     }
     load();
+
+    // Captions + feedback; a failed read just means none.
+    loadCoachNotes(videoId).then(notes => {
+      setCaptions(notes.captions);
+      setFeedback(notes.feedback);
+    });
 
     reactionsUnsubRef.current = onSnapshot(collection(db, "videos", videoId, "reactions"), (snap) => {
       const map: Record<string, string> = {};
@@ -279,6 +295,7 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
         ref={canvasRef}
         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
       />
+      {!coachVideoError && <CaptionOverlay text={captionText} bottom={44} fontSize={13} />}
       {activeAnnotation && !coachVideoError && (
         <div style={{ position: "absolute", top: 24, right: 8, backgroundColor: "rgba(0,0,0,0.68)", color: "white", borderRadius: 9999, padding: "3px 10px", fontSize: 11, fontWeight: 600, pointerEvents: "none" }}>
           ✏ Coach note
@@ -364,6 +381,9 @@ export default function DrillComparisonPlayer({ videoId, uid, userName, meta, co
             {meta.createdAt && <><span>·</span><span>{formatDate(meta.createdAt)}</span></>}
           </div>
         </div>
+
+        {/* Coach's written feedback */}
+        <CoachFeedback text={feedback} />
 
         {/* Reactions */}
         <div className="bg-gray-900 border-t border-gray-800 px-4 py-3">

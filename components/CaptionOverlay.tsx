@@ -2,7 +2,15 @@
 // dark translucent box, at most two lines. Sits above the player's own control
 // bar. The parent must be position: relative.
 
-export default function CaptionOverlay({ text, bottom = 56 }: { text: string | null; bottom?: number }) {
+export default function CaptionOverlay({
+  text,
+  bottom = 56,
+  fontSize = 15,
+}: {
+  text: string | null;
+  bottom?: number;
+  fontSize?: number;
+}) {
   if (!text) return null;
   return (
     <div
@@ -25,7 +33,7 @@ export default function CaptionOverlay({ text, bottom = 56 }: { text: string | n
           maxWidth: "100%",
           backgroundColor: "rgba(0,0,0,0.72)",
           color: "#fff",
-          fontSize: 15,
+          fontSize,
           fontWeight: 600,
           textAlign: "center",
           padding: "4px 10px",

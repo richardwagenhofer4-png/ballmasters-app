@@ -13,6 +13,11 @@ import { useNotificationCounts } from "@/lib/NotificationsContext";
 import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
 import { isDrillComparison } from "@/lib/entitlements";
 import { LockIcon, NavLockDot } from "@/components/PlanLock";
+import { loadCoachNotes } from "@/lib/captionsClient";
+import { useActiveCaption } from "@/lib/useActiveCaption";
+import type { CaptionSegment } from "@/lib/captions";
+import CaptionOverlay from "@/components/CaptionOverlay";
+import CoachFeedback from "@/components/CoachFeedback";
 
 const REACTIONS = [
   { emoji: "👍", label: "Good" },
@@ -95,12 +100,18 @@ export default function VideoPlayerPage() {
   const [activeAnnotation, setActiveAnnotation] = useState<AnnotationFrame | null>(null);
   const [voiceoverMeta, setVoiceoverMeta] = useState<VoiceoverMeta | null>(null);
   const [voiceoverActive, setVoiceoverActive] = useState(false);
+  // The coach's captions (made from their voiceover) and written feedback.
+  // With captions the clip plays with its own sound and the voiceover audio is
+  // not loaded; a video with a voiceover but no captions plays as before.
+  const [captions, setCaptions] = useState<CaptionSegment[]>([]);
+  const [feedback, setFeedback] = useState("");
   const [userName, setUserName] = useState("");
   const [reactions, setReactions] = useState<Record<string, string>>({});
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
   const hasRecordedView = useRef(false);
   const voiceoverAudioRef = useRef<HTMLAudioElement | null>(null);
   const reactionsUnsubRef = useRef<(() => void) | null>(null);
+  const captionText = useActiveCaption(videoRef, captions, !loading && !redirecting);
 
   // Load video metadata, presigned URL, and annotations
   useEffect(() => {
@@ -187,9 +198,17 @@ export default function VideoPlayerPage() {
               .sort((a, b) => a.timestamp - b.timestamp)
           );
 
-          // Load voiceover if exists
-          const voSnap = await getDoc(doc(db, "videos", id, "voiceover", "main"));
-          if (voSnap.exists()) {
+          // Captions + the coach's feedback. A failed read just means "none".
+          const notes = await loadCoachNotes(id);
+          setCaptions(notes.captions);
+          setFeedback(notes.feedback);
+
+          // Load voiceover if exists — unless the coach's captions stand in
+          // for it (original sound + captions, never both).
+          const voSnap = notes.captions.length > 0
+            ? null
+            : await getDoc(doc(db, "videos", id, "voiceover", "main"));
+          if (voSnap?.exists()) {
             const voMeta = voSnap.data() as VoiceoverMeta;
             setVoiceoverMeta(voMeta);
             const voRes = await fetch(`/api/voiceover?videoId=${id}`, {
@@ -513,6 +532,9 @@ export default function VideoPlayerPage() {
               }}
             />
 
+            {/* Coach's captions, above the player's control bar */}
+            <CaptionOverlay text={captionText} />
+
             {/* Voiceover active badge */}
             {voiceoverActive && (
               <div
@@ -597,6 +619,9 @@ export default function VideoPlayerPage() {
           </div>
         </div>
       )}
+
+      {/* Coach's written feedback (part of the breakdown: never loaded when locked) */}
+      <CoachFeedback text={feedback} />
 
       {/* Metadata panel */}
       <div className="bg-gray-900 px-6 py-5">
