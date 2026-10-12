@@ -48,10 +48,12 @@ function makeDb() {
 
 export const db = makeDb();
 
-// Local browser tests only (scripts/test-videos-filter.mjs): when the dev server
+// Local browser tests only (scripts/fixtures/local-stack.mjs): when the dev server
 // is started with NEXT_PUBLIC_FIREBASE_EMULATOR=true, talk to the local Auth and
 // Firestore emulators instead of a Firebase project. The variable is inlined at
-// build time and is never set in a deployed build, so this is dead code there.
+// build time. A deployed build never sets it, so in the browser it is undefined
+// and this branch does nothing (the code is still in the bundle; it only acts
+// when the variable is "true").
 if (process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === "true") {
   try {
     connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });

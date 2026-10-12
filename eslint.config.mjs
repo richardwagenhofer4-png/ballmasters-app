@@ -38,6 +38,12 @@ const eslintConfig = defineConfig([
     files: ["app/coach/dashboard/page.tsx", "app/student/dashboard/page.tsx"],
     rules: { "react-hooks/purity": "warn" },
   },
+  // Test fixtures preloaded into Node with `--require` (scripts/fixtures/*.cjs)
+  // must be CommonJS, so `require()` is the right tool there.
+  {
+    files: ["scripts/fixtures/**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
   {
     files: ["app/coach/videos/[[]id]/drill/DrillViewPage.tsx"],
     rules: { "react-hooks/static-components": "warn" },
