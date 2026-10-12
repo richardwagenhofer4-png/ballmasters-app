@@ -42,7 +42,7 @@ export default function TermsPage() {
               Terms of Service
             </h1>
             <p className="text-xs text-gray-400 font-mono">
-              Last updated: September 27, 2026
+              Last updated: October 11, 2026
             </p>
           </div>
 
@@ -82,6 +82,9 @@ export default function TermsPage() {
             {" "}and the{" "}
             <Link href="/privacy" className="underline font-medium" style={{ color: "#001c48" }}>Privacy Policy</Link>
             . AI output may contain errors and is provided to assist, not replace, coaching judgment.
+          </p>
+          <p className={`${p} mt-3`}>
+            Coach voiceovers (the coach&rsquo;s own voice) are transcribed to create captions, which the coach reviews before athletes see them. Athletes&rsquo; own video audio is not transcribed for athletes under 13.
           </p>
 
           {/* 6. TERMINATION */}
