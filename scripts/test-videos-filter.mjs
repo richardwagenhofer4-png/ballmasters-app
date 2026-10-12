@@ -13,18 +13,10 @@
 //   Java 11+ and the Firebase CLI on PATH (same as the rules test)
 // Run:  node scripts/test-videos-filter.mjs
 // Ports used: 9099 (Auth), 8080 (Firestore), 3115 (next dev). Stops what it starts.
+// (The emulators, data and dev server come from scripts/fixtures/local-stack.mjs.)
 
-import { spawn } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import net from "node:net";
 import assert from "node:assert/strict";
-
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const PORT = 3115;
-const BASE = `http://localhost:${PORT}`;
+import { startStack, signedInPage } from "./fixtures/local-stack.mjs";
 
 let playwright;
 try {
@@ -35,82 +27,31 @@ try {
 }
 const { webkit, devices } = playwright;
 
-const portFree = port => new Promise(res => {
-  const s = net.createServer().once("error", () => res(false)).once("listening", () => s.close(() => res(true)));
-  s.listen(port, "127.0.0.1");
-});
-for (const port of [9099, 8080, PORT]) {
-  if (!(await portFree(port))) { console.log(`Port ${port} is in use; stop whatever is using it first.`); process.exit(2); }
+let stack;
+try {
+  stack = await startStack({ port: 3115 });
+} catch (err) {
+  console.log(err.message);
+  process.exit(2);
 }
+const { BASE, COACH, stop: stopAll } = stack;
 
-const procs = [];
-// Children run in their own process group so stopping them also stops what they
-// spawn (the emulator's Java process, next's server).
-const stopAll = () => { for (const p of procs) { try { process.kill(-p.pid, "SIGTERM"); } catch { /* gone */ } } };
-process.on("exit", stopAll);
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-async function waitFor(fn, what, tries = 120) {
-  for (let i = 0; i < tries; i++) { try { if (await fn()) return; } catch { /* not yet */ } await sleep(1000); }
-  throw new Error(`timed out waiting for ${what}`);
-}
-
-// 1. Emulators: Auth + Firestore, with the repo's real rules.
-const dir = mkdtempSync(join(tmpdir(), "bm-emu-"));
-writeFileSync(join(dir, "firebase.json"), JSON.stringify({
-  firestore: { rules: join(root, "firestore.rules") },
-  emulators: { auth: { host: "127.0.0.1", port: 9099 }, firestore: { host: "127.0.0.1", port: 8080 }, ui: { enabled: false } },
-}));
-procs.push(spawn("firebase", ["emulators:start", "--config", join(dir, "firebase.json"), "--only", "auth,firestore", "--project", "demo-ballmasters"], { cwd: dir, stdio: "ignore", detached: true }));
-await waitFor(async () => (await fetch("http://127.0.0.1:9099")).ok && (await fetch("http://127.0.0.1:8080")).ok, "the emulators");
-
-// 2. Fake data.
-const { seed, COACH } = await import("./fixtures/seed-coach-videos.mjs");
-await seed();
-
-// 3. The app, pointed at the emulators.
-procs.push(spawn("npx", ["next", "dev", "-p", String(PORT)], {
-  cwd: root,
-  stdio: "ignore",
-  detached: true,
-  env: {
-    ...process.env,
-    NODE_OPTIONS: `--require ${join(root, "scripts/fixtures/block-sentry.cjs")}`,
-    NEXT_PUBLIC_FIREBASE_EMULATOR: "true",
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-ballmasters",
-    NEXT_PUBLIC_FIREBASE_API_KEY: "fake",
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "localhost",
-    NEXT_PUBLIC_FIREBASE_APP_ID: "1:1:web:1",
-  },
-}));
-await waitFor(async () => (await fetch(`${BASE}/login`)).ok, "next dev");
-
-// 4. The checks.
+// The checks.
 const browser = await webkit.launch();
-const ctx = await browser.newContext({ ...devices["iPhone 14"] });
-await ctx.route(/sentry\.io/, r => r.abort());
-const page = await ctx.newPage();
+const makeContext = async () => {
+  const ctx = await browser.newContext({ ...devices["iPhone 14"] });
+  await ctx.route(/sentry\.io/, r => r.abort());
+  return ctx;
+};
+const signedIn = await signedInPage(makeContext, BASE, COACH);
+if (!signedIn) throw new Error("could not sign in to the local app");
+const { page } = signedIn;
 
 let passed = 0;
 const failed = [];
 async function check(name, fn) {
   try { await fn(); passed++; } catch (err) { failed.push(`${name}: ${err.message.split("\n")[0]}`); }
 }
-
-// A freshly started dev server compiles each page the first time it is asked
-// for (the dashboard can take a minute), and a click before React has hydrated
-// would submit the form natively. So: wait for hydration, sign in, allow the
-// compile, and only retry if the page is still on /login.
-let signedIn = false;
-for (let attempt = 0; attempt < 3 && !signedIn; attempt++) {
-  await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded", timeout: 180000 });
-  await page.waitForSelector('button[type="submit"]', { timeout: 180000 });
-  await page.waitForTimeout(2500); // let React hydrate
-  await page.fill('input[type="email"]', COACH.email);
-  await page.fill('input[type="password"]', COACH.password);
-  await page.click('button[type="submit"]');
-  signedIn = await page.waitForURL(/\/coach\//, { timeout: 240000 }).then(() => true, () => false);
-}
-if (!signedIn) throw new Error("could not sign in to the local app");
 
 const resultsText = async () => (await page.textContent("text=/\\d+ results?/")).trim();
 const EXPECTED = { "All Athletes": 5, "Alice Adams": 2, "Ben Brown": 2, "Cara Cole": 1 };

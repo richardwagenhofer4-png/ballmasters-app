@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/AuthContext";
 import { db } from "@/lib/firebase";
+import { loginTrace } from "@/lib/loginDiagnostics";
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -18,6 +19,7 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
 
     // No signed-in user -> send to login.
     if (!user) {
+      loginTrace.step("coach_layout_no_user", {}, "warning");
       router.replace("/login");
       return;
     }
@@ -27,19 +29,22 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
 
     (async () => {
       try {
-        const snap = await getDoc(doc(db, "users", user.uid));
+        const snap = await loginTrace.track("coach_layout_profile", getDoc(doc(db, "users", user.uid)), "profile");
         const role = snap.data()?.role;
         if (cancelled) return;
+        loginTrace.step("coach_layout_role", { role: typeof role === "string" ? role : "none", profileExists: snap.exists() });
         if (role === "coach" || role === "admin") {
           setAllowed(true);
           setChecking(false);
         } else {
           // Missing profile or non-coach role -> fail closed to the student home.
+          loginTrace.step("coach_layout_redirect_student", { role: typeof role === "string" ? role : "none" }, "warning");
           router.replace("/student/dashboard");
         }
       } catch {
         if (cancelled) return;
         // Failed read -> fail closed.
+        loginTrace.step("coach_layout_redirect_student_after_error", {}, "warning");
         router.replace("/student/dashboard");
       }
     })();

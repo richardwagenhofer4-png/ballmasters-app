@@ -28,9 +28,18 @@ export interface UserProfile {
 // (firestore.rules refuse client creates). There is deliberately no client
 // writer here.
 
-export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+/**
+ * `onRead` (optional, diagnostics only) is told what Firestore actually
+ * answered, so the login trace can show whether a "no profile" came from the
+ * server or from the cache. It cannot change the result.
+ */
+export async function getUserProfile(
+  uid: string,
+  onRead?: (meta: { exists: boolean; fromCache: boolean }) => void
+): Promise<UserProfile | null> {
   const ref = doc(db, "users", uid);
   const snap = await getDoc(ref);
+  try { onRead?.({ exists: snap.exists(), fromCache: snap.metadata.fromCache }); } catch { /* diagnostics only */ }
   if (!snap.exists()) return null;
   return snap.data() as UserProfile;
 }

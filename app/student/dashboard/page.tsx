@@ -14,6 +14,7 @@ import InitialsAvatar from "@/components/InitialsAvatar";
 import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
 import { isDrillComparison } from "@/lib/entitlements";
 import { CoachedLockBadge, LockIcon, NavLockDot } from "@/components/PlanLock";
+import { loginTrace } from "@/lib/loginDiagnostics";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,14 +159,20 @@ export default function StudentDashboard() {
   const videoHref = (v: Video) => (isLocked(v) ? UPGRADE_HREF : `/student/videos/${v.id}`);
 
   useEffect(() => {
+    loginTrace.step("student_dash_mounted");
     const unsub = onAuthStateChanged(auth, async (user) => {
+      loginTrace.step("student_dash_auth_callback", { signedIn: user !== null });
       if (!user) { router.push("/login"); return; }
       setUid(user.uid);
 
       try {
         const [profileSnap, videosSnap] = await Promise.all([
-          getDoc(doc(db, "users", user.uid)),
-          getDocs(query(collection(db, "videos"), where("studentIds", "array-contains", user.uid))),
+          loginTrace.track("student_dash_profile", getDoc(doc(db, "users", user.uid)), "profile"),
+          loginTrace.track(
+            "student_dash_videos_query",
+            getDocs(query(collection(db, "videos"), where("studentIds", "array-contains", user.uid))),
+            "first_query"
+          ),
         ]);
 
         const profileData = profileSnap.data();
@@ -186,6 +193,8 @@ export default function StudentDashboard() {
         setLoading(false);
       } catch (err) {
         console.error("[student/dashboard]", err);
+        // The view that follows is empty: say so in the login trace (bug 2).
+        loginTrace.step("student_dash_load_failed_showing_empty", {}, "error");
         setLoading(false);
       }
     });

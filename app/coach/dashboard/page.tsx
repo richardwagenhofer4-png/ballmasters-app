@@ -9,6 +9,7 @@ import { auth, db } from "@/lib/firebase";
 import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import VideoActionsMenu from "@/components/VideoActionsMenu";
+import { loginTrace } from "@/lib/loginDiagnostics";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -147,7 +148,9 @@ export default function CoachDashboard() {
     // Videos and comments are still read once per visit.
     let unsubStudents: (() => void) | null = null;
     let disposed = false;
+    loginTrace.step("coach_dash_mounted");
     const unsub = onAuthStateChanged(auth, async (user) => {
+      loginTrace.step("coach_dash_auth_callback", { signedIn: user !== null });
       unsubStudents?.();
       unsubStudents = null;
       if (!user) { router.push("/login"); return; }
@@ -157,7 +160,7 @@ export default function CoachDashboard() {
         // Load the caller's role first: admins see every athlete and video;
         // coaches see only their own. A blanket query would return docs the
         // rules forbid a coach from reading, which fails the whole query.
-        const profileSnap = await getDoc(doc(db, "users", user.uid));
+        const profileSnap = await loginTrace.track("coach_dash_profile", getDoc(doc(db, "users", user.uid)), "profile");
         const viewerRole = profileSnap.data()?.role as string | undefined;
         const admin = viewerRole === "admin";
         setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? user.displayName ?? "Coach");
@@ -194,8 +197,8 @@ export default function CoachDashboard() {
         });
 
         const [, videosSnap] = await Promise.all([
-          firstStudents,
-          getDocs(videosQuery),
+          loginTrace.track("coach_dash_athletes_snapshot", firstStudents),
+          loginTrace.track("coach_dash_videos_query", getDocs(videosQuery), "first_query"),
         ]);
 
         const videoDocs: VideoData[] = videosSnap.docs.map(d => ({
@@ -234,6 +237,8 @@ export default function CoachDashboard() {
         }
       } catch (err) {
         console.error("[dashboard]", err);
+        // The view that follows is empty: say so in the login trace (bug 2).
+        loginTrace.step("coach_dash_load_failed_showing_empty", {}, "error");
         setLoading(false);
       }
     });

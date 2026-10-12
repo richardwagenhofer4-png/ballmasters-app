@@ -4,12 +4,29 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDocFromServer, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
 import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type SocialProvider } from "@/lib/socialSignIn";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
+import { loginTrace } from "@/lib/loginDiagnostics";
+
+// Bug 2 evidence only. When a signed-in person's profile reads as "missing",
+// look once more, straight from the server, shortly afterwards, and put the
+// answer in the login trace. It tells a profile that really isn't there from
+// a read that came back wrong. It changes nothing about where the person goes.
+function recheckMissingProfile(uid: string) {
+  const waitMs = 1500;
+  setTimeout(async () => {
+    try {
+      const snap = await getDocFromServer(doc(db, "users", uid));
+      loginTrace.step("profile_recheck_from_server", { afterMs: waitMs, exists: snap.exists() }, snap.exists() ? "error" : "warning");
+    } catch (err) {
+      loginTrace.fail("profile_recheck_from_server_failed", err, { afterMs: waitMs });
+    }
+  }, waitMs);
+}
 
 function markLastActive(uid: string) {
   updateDoc(doc(db, "users", uid), { lastActiveAt: serverTimestamp() }).catch(console.error);
@@ -49,20 +66,28 @@ export default function LoginPage() {
 
   async function afterLogin(uid: string) {
     const cachedRole = localStorage.getItem("ballmasters_role");
+    loginTrace.step("after_login", { cachedRole: cachedRole ?? "none" });
     if (cachedRole === "coach" || cachedRole === "admin" || cachedRole === "student") {
       setAuthCookies(cachedRole);
       markLastActive(uid);
+      loginTrace.step("route", { to: "/dashboard", role: cachedRole, via: "cached_role" });
       router.push("/dashboard");
       return;
     }
-    const profile = await getUserProfile(uid);
+    const profile = await loginTrace.track(
+      "login_profile_read",
+      getUserProfile(uid, meta => loginTrace.step("login_profile_snapshot", meta))
+    );
     if (!profile) {
+      loginTrace.step("profile_missing_going_to_incomplete_profile", {}, "error");
+      recheckMissingProfile(uid);
       router.push("/incomplete-profile");
       return;
     }
     localStorage.setItem("ballmasters_role", profile.role);
     setAuthCookies(profile.role);
     markLastActive(uid);
+    loginTrace.step("route", { to: "/dashboard", role: profile.role, via: "profile" });
     router.push("/dashboard");
   }
 
@@ -72,11 +97,18 @@ export default function LoginPage() {
       // account has a Ball Masters profile).
       if (socialInFlight.current) return;
       if (user) {
+        // Bug 2 evidence: a sign-in started on this page is already being
+        // traced; being sent here while signed in is a login of its own.
+        if (loginTrace.active()) loginTrace.setUser(user.uid);
+        else loginTrace.begin("restored", user.uid);
         // Fast path: role cookie already set — skip Firestore read
         const role = getCookieValue("ballmasters_role");
+        loginTrace.step("login_page_signed_in", { roleCookie: role || "none" });
         if (role === "coach" || role === "admin") {
+          loginTrace.step("route", { to: "/coach/dashboard", role, via: "cookie" });
           router.push("/coach/dashboard");
         } else if (role === "student") {
+          loginTrace.step("route", { to: "/student/dashboard", role, via: "cookie" });
           router.push("/student/dashboard");
         } else {
           // No role cookie — must read Firestore to get role
@@ -98,10 +130,15 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const credential = await signInWithEmailAndPassword(auth, email, password);
+      loginTrace.begin("email");
+      const credential = await loginTrace.track("signin", signInWithEmailAndPassword(auth, email, password));
+      loginTrace.setUser(credential.user.uid);
       await afterLogin(credential.user.uid);
     } catch (err: unknown) {
       const code = (err as { code?: string }).code ?? "";
+      // A rejected email/password is the person's answer, not a stall. Anything
+      // else (e.g. the profile read failing) stays open and is reported.
+      if (code.startsWith("auth/")) loginTrace.abandon("signin_rejected", { code });
       setError(getErrorMessage(code));
     } finally {
       setLoading(false);
@@ -113,13 +150,16 @@ export default function LoginPage() {
     setSocialBusy(provider);
     socialInFlight.current = true;
     try {
-      const credential = await nativeSocialSignIn(provider);
+      loginTrace.begin(provider);
+      const credential = await loginTrace.track("social_signin", nativeSocialSignIn(provider), undefined, { provider });
+      loginTrace.setUser(credential.user.uid);
       // An Apple ID / Google account with no Ball Masters profile yet: say so,
       // rather than landing on "Account setup required". Accounts are created
       // from the coach's invite link (register), which can use the same
       // Apple / Google sign-in.
-      const profile = await getUserProfile(credential.user.uid);
+      const profile = await loginTrace.track("social_profile_read", getUserProfile(credential.user.uid));
       if (!profile) {
+        loginTrace.abandon("social_no_account_signed_out");
         await signOut(auth);
         setError(
           `There's no Ball Masters account for this ${provider === "apple" ? "Apple ID" : "Google account"} yet. ` +
@@ -134,6 +174,10 @@ export default function LoginPage() {
         const code = (err as { code?: string }).code ?? "";
         setError(getErrorMessage(code));
       }
+      // Closing Apple's / Google's sheet, or a rejected credential, is the
+      // person's choice, not a stall.
+      const failedCode = (err as { code?: string }).code ?? "";
+      if (isSocialSignInCancel(err) || failedCode.startsWith("auth/")) loginTrace.abandon("social_signin_ended", { code: failedCode });
     } finally {
       socialInFlight.current = false;
       setSocialBusy(null);

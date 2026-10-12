@@ -4,6 +4,7 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { syncBillingUser } from "@/lib/billing";
+import { loginTrace } from "@/lib/loginDiagnostics";
 
 interface AuthContextType {
   user: User | null;
@@ -55,11 +56,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(auth.currentUser === null);
 
   useEffect(() => {
+    // If an earlier launch's login never finished, report it now (bug 2 evidence).
+    loginTrace.checkPrevious();
+
     // Safety timeout: if onAuthStateChanged hasn't fired in 3s, stop blocking.
     // On iOS PWA the listener can take 30s; currentUser is reliable enough to proceed.
-    const timeout = setTimeout(() => setLoading(false), 3000);
+    const timeout = setTimeout(() => {
+      loginTrace.step("auth_listener_not_fired_3s", { hasCurrentUser: auth.currentUser !== null }, "warning");
+      setLoading(false);
+    }, 3000);
 
     const unsub = onAuthStateChanged(auth, (u) => {
+      loginTrace.step("auth_state", { signedIn: u !== null });
       setUser(u);
       setLoading(false);
       clearTimeout(timeout);
