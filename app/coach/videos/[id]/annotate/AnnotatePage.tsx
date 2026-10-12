@@ -801,7 +801,8 @@ export default function AnnotatePage() {
   // Asks the server to transcribe the voiceover. The result is only a DRAFT in
   // the editor: athletes see nothing until the coach reviews it and saves.
   async function generateCaptions() {
-    if (!voiceoverRef.current || transcribingRef.current) return;
+    const requested = voiceoverRef.current;
+    if (!requested || transcribingRef.current) return;
     transcribingRef.current = true;
     setTranscribing(true);
     setNotesError("");
@@ -813,6 +814,9 @@ export default function AnnotatePage() {
         body: JSON.stringify({ videoId: id }),
       });
       const data = (await res.json().catch(() => ({}))) as { segments?: unknown; error?: string };
+      // The coach recorded again, or deleted the voiceover, while this ran:
+      // these captions belong to a recording that no longer exists.
+      if (voiceoverRef.current?.fileName !== requested.fileName) return;
       if (!res.ok) throw new Error(data.error ?? "The transcription service didn't answer.");
       if (!mountedRef.current) return;
       const segs = cleanSegments(data.segments);
@@ -828,10 +832,16 @@ export default function AnnotatePage() {
       setToast("Captions ready — review them, then save");
       setTimeout(() => setToast(null), 3000);
     } catch (err) {
-      if (mountedRef.current) setNotesError(`Couldn't create captions. ${(err as Error).message}`);
+      if (mountedRef.current && voiceoverRef.current?.fileName === requested.fileName) {
+        setNotesError(`Couldn't create captions. ${(err as Error).message}`);
+      }
     } finally {
       transcribingRef.current = false;
       if (mountedRef.current) setTranscribing(false);
+      // A newer take was saved while this one ran (its own request was skipped
+      // because this one was in flight): draft captions for that one now.
+      const current = voiceoverRef.current;
+      if (mountedRef.current && current && current.fileName !== requested.fileName) void generateCaptions();
     }
   }
 

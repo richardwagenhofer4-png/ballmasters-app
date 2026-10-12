@@ -15,7 +15,7 @@ export const maxDuration = 300;
 
 import type { NextRequest } from "next/server";
 import { verifyIdToken, getFirestoreDoc } from "@/lib/firebaseServer";
-import { transcribeVoiceoverAudio } from "@/lib/voiceoverCaptions.server";
+import { CaptionsError, transcribeVoiceoverAudio } from "@/lib/voiceoverCaptions.server";
 import { buildCaptionSegments } from "@/lib/captions";
 
 // A voiceover is recorded live next to a clip; nothing legitimate is longer.
@@ -28,7 +28,13 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
     const idToken = authHeader.slice(7);
-    const { uid } = await verifyIdToken(idToken);
+    let uid: string;
+    try {
+      ({ uid } = await verifyIdToken(idToken));
+    } catch {
+      // An expired or invalid token is the caller's problem, not a server fault.
+      return Response.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { videoId } = (await request.json()) as { videoId?: string };
     if (!videoId) return Response.json({ error: "videoId required" }, { status: 400 });
@@ -45,6 +51,15 @@ export async function POST(request: NextRequest) {
 
     const voiceover = await getFirestoreDoc(`videos/${videoId}/voiceover`, "main", idToken);
     if (!voiceover || typeof voiceover.fileName !== "string" || !voiceover.fileName) {
+      return Response.json({ error: "No voiceover found" }, { status: 404 });
+    }
+    // voiceover/main is written by the coach's browser, so its fileName is not
+    // trustworthy. Only ever read the object POST /api/voiceover issues for THIS
+    // video (voiceovers/{videoId}-{timestamp}.webm|mp4). Without this a coach
+    // could point it at any file in the bucket, such as another coach's video,
+    // or an under-13 athlete's footage this route has no age gate for.
+    const expected = new RegExp(`^voiceovers/${videoId.replace(/[^A-Za-z0-9_-]/g, "")}-\\d+\\.(webm|mp4)$`);
+    if (!expected.test(voiceover.fileName)) {
       return Response.json({ error: "No voiceover found" }, { status: 404 });
     }
     const duration = Number(voiceover.duration);
@@ -64,7 +79,12 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ segments, text: result.text });
   } catch (err) {
-    console.error("[api/voiceover/transcribe]", err);
-    return Response.json({ error: (err as Error).message }, { status: 500 });
+    // Only messages written for the coach (CaptionsError) go to the browser.
+    // Raw SDK/ffmpeg errors can quote API key fragments or file paths.
+    console.error("[api/voiceover/transcribe]", err instanceof CaptionsError ? err.detail ?? err : err);
+    if (err instanceof CaptionsError) {
+      return Response.json({ error: err.message }, { status: 502 });
+    }
+    return Response.json({ error: "Couldn't create captions. Please try again." }, { status: 500 });
   }
 }

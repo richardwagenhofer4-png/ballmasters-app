@@ -41,6 +41,18 @@ function openaiClient(): OpenAI {
   return openai;
 }
 
+/**
+ * A failure whose message is safe and clear enough to show the coach. Anything
+ * else thrown here (SDK errors can quote parts of API keys, ffmpeg errors
+ * quote file paths) is logged on the server and never sent to the browser.
+ */
+export class CaptionsError extends Error {
+  constructor(message: string, readonly detail?: unknown) {
+    super(message);
+    this.name = "CaptionsError";
+  }
+}
+
 export interface VoiceoverTranscription {
   text: string;
   duration: number;
@@ -55,35 +67,57 @@ export async function transcribeVoiceoverAudio(r2Key: string): Promise<Voiceover
   const mp3Path = join(tmpdir(), `bm-vo-${ts}.mp3`);
 
   try {
-    const { Body } = await r2Client().send(
-      new GetObjectCommand({ Bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME!, Key: r2Key })
-    );
-    if (!Body) throw new Error("Empty response from R2");
-    await pipeline(Body as NodeJS.ReadableStream, createWriteStream(rawPath));
+    try {
+      const { Body } = await r2Client().send(
+        new GetObjectCommand({ Bucket: process.env.CLOUDFLARE_R2_BUCKET_NAME!, Key: r2Key })
+      );
+      if (!Body) throw new Error("Empty response from R2");
+      await pipeline(Body as NodeJS.ReadableStream, createWriteStream(rawPath));
+    } catch (err) {
+      const missing = (err as { name?: string })?.name === "NoSuchKey";
+      throw new CaptionsError(
+        missing
+          ? "The voiceover audio file is missing. Record the voiceover again."
+          : "Couldn't load the voiceover audio. Please try again.",
+        err
+      );
+    }
 
     // MediaRecorder output (webm/opus or mp4/aac) has no reliable duration
     // header; re-encoding to a plain mp3 gives Whisper a clean file.
-    await new Promise<void>((resolve, reject) => {
-      ffmpeg(rawPath)
-        .audioFilters("asetpts=PTS-STARTPTS")
-        .outputOptions(["-vn", "-ar 16000", "-ac 1", "-f mp3"])
-        .output(mp3Path)
-        .on("end", () => resolve())
-        .on("error", (err: Error) => reject(err))
-        .run();
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(rawPath)
+          .audioFilters("asetpts=PTS-STARTPTS")
+          .outputOptions(["-vn", "-ar 16000", "-ac 1", "-f mp3"])
+          .output(mp3Path)
+          .on("end", () => resolve())
+          .on("error", (err: Error) => reject(err))
+          .run();
+      });
+    } catch (err) {
+      throw new CaptionsError("Couldn't read the voiceover audio. Try recording it again.", err);
+    }
 
-    const result = (await openaiClient().audio.transcriptions.create({
-      file: createReadStream(mp3Path) as unknown as File,
-      model: "whisper-1",
-      response_format: "verbose_json",
-      timestamp_granularities: ["word", "segment"],
-    })) as unknown as {
+    let result: {
       text: string;
       duration: number;
       segments?: Array<{ id: number; start: number; end: number; text: string }>;
       words?: Array<{ word: string; start: number; end: number }>;
     };
+    try {
+      result = (await openaiClient().audio.transcriptions.create({
+        file: createReadStream(mp3Path) as unknown as File,
+        model: "whisper-1",
+        response_format: "verbose_json",
+        timestamp_granularities: ["word", "segment"],
+      })) as unknown as typeof result;
+    } catch (err) {
+      throw new CaptionsError(
+        "The transcription service couldn't be reached. Your voiceover is saved; try creating captions again in a minute.",
+        err
+      );
+    }
 
     return {
       text: (result.text ?? "").trim(),
