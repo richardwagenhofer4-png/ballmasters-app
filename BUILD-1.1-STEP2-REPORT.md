@@ -509,3 +509,144 @@ Changed:
 ### To ship
 
 1. Deploy the web build (safe before the rules). 2. `firebase deploy --only firestore:rules` (coaches can't save captions or feedback until it is live). 3. Run the backfill (§3) so existing videos with captions or feedback show the locked panel to Access members. Optional: the Terms page (section 5) still says only that the app transcribes "video audio"; consider a matching line.
+
+
+---
+
+## 11. Step 6
+
+Branch `build-1.1-paywall`. Nothing under `ios/` touched, no `npx cap sync`, no deploy, `main` not touched, `../rules-interim` not touched. The paywall switch is still **off** and switch-off behaviour is unchanged. `npm run build` ✅, `npm run lint` ✅ (0 errors), rules emulator suite ✅ **395/395**.
+
+### Task 1: independent review of Step 5
+
+I read `git diff 1042a72..7e614ac` again as a reviewer and exercised what could be exercised. **Three defects confirmed and fixed. Nothing else wrong found.**
+
+**Fixed**
+
+1. **The transcribe route would read any file in the storage bucket.** `voiceover/main` is written by the coach's browser (the rules let the video's coach write it), and the route passed its `fileName` straight to R2. A coach could point it at another coach's video, or at footage of an under-13 athlete (which this route deliberately has no age gate for) and get the transcript back. The route now only accepts the object that `POST /api/voiceover` issues for that video (`voiceovers/{videoId}-{timestamp}.webm|mp4`). *Reproduced* with `scripts/test-transcribe-route.mjs` before the fix: the "other file" case reached R2.
+2. **Raw error text reached the browser.** OpenAI SDK errors can quote part of the API key, and ffmpeg errors quote file paths (the test saw `connect ECONNREFUSED 127.0.0.1:9`). Failures are now `CaptionsError`s with messages written for the coach ("Couldn't load the voiceover audio…", "Couldn't read the voiceover audio. Try recording it again.", "The transcription service couldn't be reached. Your voiceover is saved; try creating captions again in a minute."); the detail goes to the server log only. An expired or invalid sign-in now returns 401 instead of a 500.
+3. **A late transcription could land on the wrong take.** If the coach re-recorded or deleted the voiceover while a transcription was running, its result (for the old recording) filled the editor, and the new take got no captions because its own request was skipped while one was in flight. The editor now discards a result whose voiceover is no longer the current one, and starts the new take's transcription when the old request ends.
+
+New test `scripts/test-transcribe-route.mjs`: **9 checks** against a mocked Firebase layer (nothing real touched). Run against the previous route, **4 fail** (invalid token, the bucket-key case and both "reaches R2" messages).
+
+**Checked, no defect**
+
+| Area | What I did | Result |
+|---|---|---|
+| Caption timing, video time = `voiceover.startTime` + segment time | Re-read `buildCaptionSegments` and the route; re-read the recorder code (it pauses with the video, so the voiceover's clock is video time); 16 unit checks | Correct. Also splits long speech, never overlaps, clamps short captions |
+| Captions shown to the wrong people | Rules emulator: students on the video only, another coach, strangers and signed-out all denied; coach/admin allowed | 395/395. Client reads only from the student page, the drill player and the coach editor |
+| Legacy voiceover playback | Read the student page: with no captions it reads `voiceover/main` and loads the audio exactly as before; with captions it skips both | Unchanged for videos without captions. Not played in a browser with real data |
+| Access users, switch on | Client returns before loading anything for Access (`breakdownsLocked`); rules require Coached; drill player unreachable for Access | Denied in both layers |
+| Transcribe route callable by non-coaches / not-owner | Mocked-REST test: no token → 401, bad token → 401, student → 404, coach who doesn't own the video → 404, missing video → 404, admin and owner pass | As designed (plus fix 1) |
+| Failure never loses the voiceover | The voiceover doc is written first; discard-captions and generate-captions each catch their own errors | Confirmed by reading; failure shows a message in the panel |
+| Text-size drift, editor vs playback | One function (`textFontSizePx(h, size)`) feeds the live input and the canvas, and every player | No drift. Unknown or missing `textSize` falls back to M |
+| Drill-comparison text | The drill player draws against the element box, not the video's content rectangle (older code). Drill videos can't be annotated (the editor redirects them) | Not reachable for new data; left alone |
+| Video deletion cleanup | `deleteVideoCompletely` is the only teardown (video delete and sole-athlete account delete); it now removes `captions` and `feedback` | Correct by reading. Not run against a real Firestore |
+
+**Noted, not changed**
+- `GET /api/voiceover` also presigns whatever `fileName` the doc holds, which is the same weakness as fix 1 on the athlete side (pre-existing code, outside this diff). Recommend the same key check.
+- Deleting a voiceover is two calls (the API removes the audio, then the editor removes the captions). If the second fails, the coach sees an error and the captions stay live.
+- Captions and feedback each cost one extra read per student video view.
+
+### Task 2: bug 3, Videos tab athlete filter
+
+**Not reproduced. `app/coach/videos/page.tsx` is unchanged.**
+
+What I ran:
+- **Browser:** Playwright 1.64 with **real WebKit** (installed for this; WebKit was not on the machine) using its **iPhone 14** profile: 390 × 844, touch, mobile Safari user-agent.
+- **Data:** the Firebase **Auth and Firestore emulators** (project `demo-ballmasters`, the repo's real rules), seeded with fake data: one coach, three athletes, five videos. Never production; Sentry was blocked.
+- **App:** `next dev` pointed at the emulators through an environment switch added to `lib/firebase.ts`.
+- **Signed in:** through the real login form as the seeded coach.
+
+What I checked, and what I saw:
+- **The select changes the list.** Choosing each athlete showed exactly 5 / 2 / 2 / 1 videos (All, Alice, Ben, Cara), and the right titles, in **all three view modes** (cards, list, grid).
+- **A tap reaches the select.** A touch tap focuses it.
+- **Nothing covers the filter row.** At 390px, the centre and both corners of all six selects hit the select itself, not another element.
+- **No sideways scroll.**
+- **Breaking the filter on purpose makes 12 of the 18 checks fail**, so the check can see the bug.
+
+The check is committed as `scripts/test-videos-filter.mjs` (**18 checks, all pass**).
+
+Things I saw but cannot confirm as the cause (not changed):
+- Arriving from a "Needs Reply" link (`?needsReply=true`) turns that filter on, and it **combines** with the athlete filter; with no replies pending, choosing an athlete shows an empty list. If the report came from that link, the athlete select would look dead.
+- The global CSS forces 16 px text in selects on small screens, so each of the six selects (about 114 px wide) cuts its label: "All Athlete…", long names clipped.
+- A coach's athlete list is only athletes whose `coachId` is that coach, so athletes with no coach assigned (head-coach case) are not in the select.
+- iOS's own picker wheel can't be driven by any automation; I could only drive the select and the tap.
+
+### Task 3: bug 2, diagnostics (no fix)
+
+**What is recorded.** A "login trace" starts when someone signs in (email, Apple, Google) or lands on `/login` already signed in. Each step is a Sentry breadcrumb (category `login`) with the milliseconds since sign-in:
+
+`begin` → `signin_start/ok` → `auth_state` (and `auth_listener_not_fired_3s`) → `after_login` (cached role) → `login_profile_read_*` + `login_profile_snapshot` (exists / fromCache) → `route` (to, role, via cookie / cached role / profile) → dashboard side: `coach_layout_profile_*`, `coach_layout_role`, `coach_layout_redirect_*`, `coach_dash_*` / `student_dash_*` (mounted, auth callback, profile read, athletes snapshot, videos query, "load failed, showing empty view") → `profile_loaded`, `first_query_loaded`, `complete`.
+Errors carry the Firebase error code and a short message with email-like text removed.
+
+**When Sentry hears about it.**
+- If the profile or the first dashboard query hasn't loaded **10 s after sign-in**: one event, "Login did not finish within 10 seconds", tagged `login.missing` (`profile`, `first_query` or both), `login.source` and the route. The full trace is attached as **plain text** (Sentry flattens nested extras, which I found out the hard way in testing), one line per step.
+- If the page freezes or the app is closed or killed mid-login, the trace is kept in `localStorage`, and the **next launch** sends "Previous login never finished (page closed, frozen or killed)" with that trace.
+- A login that ends on purpose (wrong password, closing the Apple/Google sheet, no account for that Apple ID) is not reported.
+
+**Privacy.** No names, emails or raw uids: the user appears only as an 8-character one-way fingerprint of the uid; step data is limited to short scalars (role, route, counts, milliseconds, error codes). Tests assert none of the email, the name or the uid appears in any breadcrumb or event.
+
+**Example event** (produced in the browser test, Firestore made to hang):
+```
+login.missing = profile+first_query   route = /login
+     0ms       begin  source=email
+    19ms       login_page_signed_in  roleCookie=none
+    19ms       after_login  cachedRole=none
+    20ms       login_profile_read_start
+    20ms       auth_state  signedIn=true
+    21ms       signin_ok  ms=19
+    21ms       after_login  cachedRole=none
+    21ms       login_profile_read_start
+ 10001ms       stalled_10s  profile=false firstQuery=false
+```
+It already shows two things about today's login: `after_login` and the profile read run **twice** (the login page's auth listener and the form handler both do it), and which step it was waiting on.
+
+**Tests.** `scripts/test-login-diagnostics.mjs` **16/16** (fake clock and fake Sentry: stall timing, no repeat events, next-launch report, privacy, no-throw when storage or Sentry fail). `scripts/test-login-trace.mjs` **12/12**, in WebKit/iPhone against the emulators with Sentry intercepted: a healthy sign-in sends no event and leaves the ordered trail; a hung Firestore sends exactly one event around 10 s; a login cut off at 4 s is reported by the next launch.
+
+#### A lead on bug 2 found while testing (not fixed, needs your decision)
+
+While building the browser test, **the first sign-in on a fresh local stack sometimes failed**, in WebKit. The trace showed what happens: both profile reads (login page listener and form handler) answer **`exists: false, fromCache: false`** (the server said "no such profile"), yet a server re-read 1.5 s later returns the profile. The app then sends the person towards `/incomplete-profile`; because the cookies aren't set yet, the middleware bounces them back to `/login`. From the person's side the sign-in seems to do nothing. That is a good match for "empty profile / freeze right after login".
+
+Numbers (first sign-in on a fresh emulator stack, WebKit, iPhone 14 profile):
+| Condition | Stranded |
+|---|---|
+| Original login code (before the diagnostics) | **3 of 12** |
+| With the diagnostics (several runs) | 12 of 31 (1/6, 1/3, 7/12, 3/10) |
+| With the sign-in "last active" write switched off (`SUPPRESS=1`) | **0 of 12** |
+| Chrome with the iPhone profile | 0 of 3 (too few to say) |
+
+The write in question is `AuthContext.markLastActive`: it sends `updateDoc(users/{uid}, {lastActiveAt})` at the instant of sign-in, the same instant as the first profile `getDoc`. Switching it off made the problem disappear in my runs, which strongly suggests a race between that write and the first read. **I have not proved the mechanism, and this is the emulator, not production**: it may or may not happen against the real backend. The new diagnostics will show it in production: look for `login_profile_snapshot exists=false fromCache=false` followed by `profile_recheck_from_server exists=true`.
+
+Two diagnostic-only additions support that: `getUserProfile` takes an optional callback that reports `exists` and `fromCache` (it cannot change the result), and when the login page finds a profile "missing" it does one extra `getDocFromServer` read 1.5 s later and records the answer. Neither changes where anyone goes.
+
+Fix options when you are ready (neither done): start the "last active" write only after the profile read has finished; and/or treat "profile not found" at login as retryable once before sending anyone to `/incomplete-profile`. `scripts/repro-profile-missing-after-login.mjs` measures it (`N=12`, `SUPPRESS=1`), so a fix can be checked the same way.
+
+Also seen in the code, not changed: `CoachLayout` fails closed to `/student/dashboard` on *any* profile read error, and `AuthContext` stops waiting for the auth listener after 3 s and `CoachLayout` then treats "no user yet" as "send to /login". Both now leave steps in the trace.
+
+### Task 4: Terms copy
+
+`app/terms/page.tsx`, section 5 (AI Features): one added paragraph: coach voiceovers (the coach's own voice) are transcribed to create captions, which the coach reviews before athletes see them; athletes' own video audio is not transcribed for athletes under 13. "Last updated" is now October 11, 2026. `termsConsentVersion` was not bumped (same decision as §5.18).
+
+### Every file touched in this step
+
+Changed:
+- `app/api/voiceover/transcribe/route.ts`, `lib/voiceoverCaptions.server.ts` (fixes 1 and 2)
+- `app/coach/videos/[id]/annotate/AnnotatePage.tsx` (fix 3)
+- `app/terms/page.tsx`
+- `lib/AuthContext.tsx`, `lib/firestore.ts`, `app/login/page.tsx`, `app/coach/layout.tsx`, `app/coach/dashboard/page.tsx`, `app/student/dashboard/page.tsx` (login trace; behaviour unchanged)
+- `lib/firebase.ts` (local-test switch: acts only when `NEXT_PUBLIC_FIREBASE_EMULATOR` is `"true"`; a deployed build never sets it, so in the browser it is undefined and the branch does nothing, but the few lines are in the bundle)
+- `eslint.config.mjs` (allow `require()` in the CommonJS test preloads)
+- this report
+
+New:
+- `lib/loginDiagnostics.core.ts`, `lib/loginDiagnostics.ts`
+- `scripts/test-login-diagnostics.mjs`, `scripts/test-login-trace.mjs`, `scripts/test-transcribe-route.mjs`, `scripts/test-videos-filter.mjs`, `scripts/repro-profile-missing-after-login.mjs`
+- `scripts/fixtures/` (`local-stack.mjs`, `seed-coach-videos.mjs`, `mock-firebase-rest.cjs`, `block-sentry.cjs`)
+
+### Decisions where the brief was silent, and what I could not verify
+
+1. **Playwright was not installed;** I installed it and its WebKit browser (outside the repo for exploration; `npm i --no-save` for the committed scripts, like the rules test, so `package.json` is unchanged). Java for the emulators was a temporary download in the scratch folder.
+2. **A small test-only switch in `lib/firebase.ts`** was needed to point the app at the emulators. It is not a fix for anything and does nothing in a deployed build.
+3. **The login trace starts only from the login page** (including landing there already signed in), not on every app start, so ordinary app opens produce no stall events.
+4. **Not verified on a real iPhone or against production:** all browser results are WebKit (the iPhone's engine) on a laptop against local emulators. The native iOS select picker, the iPhone app shell, real Sentry delivery and the production backend's behaviour for the bug 2 lead are untested. The captions features are as in §10 (no live OpenAI call).
