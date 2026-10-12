@@ -2,10 +2,11 @@ import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   initializeAuth,
   getAuth,
+  connectAuthEmulator,
   indexedDBLocalPersistence,
   browserLocalPersistence,
 } from "firebase/auth";
-import { initializeFirestore, getFirestore } from "firebase/firestore";
+import { initializeFirestore, getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -46,3 +47,16 @@ function makeDb() {
 }
 
 export const db = makeDb();
+
+// Local browser tests only (scripts/test-videos-filter.mjs): when the dev server
+// is started with NEXT_PUBLIC_FIREBASE_EMULATOR=true, talk to the local Auth and
+// Firestore emulators instead of a Firebase project. The variable is inlined at
+// build time and is never set in a deployed build, so this is dead code there.
+if (process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === "true") {
+  try {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  } catch {
+    // already connected (hot reload)
+  }
+}
