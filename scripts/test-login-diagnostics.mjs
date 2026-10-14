@@ -201,6 +201,42 @@ test("a finished login leaves nothing to report next launch", () => {
   assert.equal(second.events.length, 0);
 });
 
+test("flag(): one info event right away, with the trace, even though the login goes on to succeed", () => {
+  const w = world();
+  w.diag.begin("email", UID);
+  w.advance(900);
+  w.diag.flag("profile_retry_rescued", { firstFromCache: false, retryFromCache: false }, UID);
+  assert.equal(w.events.length, 1);
+  const e = w.events[0];
+  assert.equal(e.text, "Login: profile_retry_rescued");
+  assert.equal(e.level, "info");
+  assert.equal(e.tags["login.flag"], "profile_retry_rescued");
+  assert.deepEqual(e.fingerprint, ["login-diagnostics", "flag", "profile_retry_rescued"]);
+  assert.ok(e.extra.trace.includes("profile_retry_rescued"));
+  assert.ok(e.extra.trace.includes("begin"));
+  // ...and the session carries on normally: finishing it sends no stall event.
+  w.diag.milestone("profile"); w.diag.milestone("first_query"); w.advance(STALL_MS * 2);
+  assert.equal(w.events.length, 1);
+});
+
+test("flag(): works with no login being traced (a restored session), carrying only what it knows", () => {
+  const w = world();
+  w.diag.flag("profile_retry_rescued", { waitMs: 1000 }, UID);
+  assert.equal(w.events.length, 1);
+  assert.equal(w.events[0].tags["login.source"], "none");
+  assert.equal(w.events[0].extra.user, hashUid(UID));
+  assert.ok(w.events[0].extra.trace.includes("waitMs=1000"));
+  assert.ok(!JSON.stringify(w.events[0]).includes(UID), "raw uid leaked");
+});
+
+test("flag(): a page load sends at most 3 events for one name", () => {
+  const w = world();
+  for (let i = 0; i < 10; i++) w.diag.flag("profile_retry_rescued");
+  assert.equal(w.events.length, 3);
+  w.diag.flag("something_else");
+  assert.equal(w.events.length, 4);
+});
+
 test("step list is capped so a long session can't grow without bound", () => {
   const w = world();
   w.diag.begin("email", UID);

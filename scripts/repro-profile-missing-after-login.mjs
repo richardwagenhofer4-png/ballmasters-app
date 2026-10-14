@@ -3,10 +3,9 @@
 // (emulators + dev server) N times and reports how often the first profile read
 // comes back "missing" and the person is stranded on /login.
 //
-// Finding (see §11 of BUILD-1.1-STEP2-REPORT.md): against the local emulators in
-// WebKit, about a quarter to a half of first sign-ins fail this way, and none do
-// when AuthContext's sign-in "last active" write is suppressed (SUPPRESS=1).
-// Nothing here fixes anything; it only measures.
+// History (BUILD-1.1-STEP2-REPORT.md §11, §12): before the fix, 6 of 20 first
+// sign-ins ended stranded; with the fix, 0 of 20. The script only measures.
+// "Suppress" simulates the old workaround of skipping AuthContext's write.
 //
 // Needs: npm i --no-save playwright && npx playwright install webkit; Java; Firebase CLI.
 // Run:  N=12 node scripts/repro-profile-missing-after-login.mjs
@@ -28,6 +27,7 @@ const N = Number(process.env.N ?? 6);
 const suppress = Boolean(process.env.SUPPRESS);
 
 let stranded = 0;
+let rescued = 0; // sign-ins where the retry found a profile the first read called missing
 for (let i = 1; i <= N; i++) {
   let stack;
   try {
@@ -39,7 +39,12 @@ for (let i = 1; i <= N; i++) {
   const { BASE, COACH, stop, seeded } = stack;
   const browser = engine === "webkit" ? await webkit.launch() : await chromium.launch({ channel: "chrome" });
   const ctx = await browser.newContext({ ...devices["iPhone 14"] });
-  await ctx.route(/sentry\.io/, r => r.fulfill({ status: 200, body: "{}" }));
+  let sawRescue = false;
+  await ctx.route(/sentry\.io/, r => {
+    // Sentry is answered here, nothing is sent. A "profile_retry_rescued" event means the retry saved this sign-in.
+    if ((r.request().postData() ?? "").includes("profile_retry_rescued")) sawRescue = true;
+    return r.fulfill({ status: 200, body: "{}" });
+  });
   if (suppress) {
     // Pretend AuthContext's once-a-day "last active" write already happened,
     // so it doesn't start at the moment of sign-in.
@@ -63,9 +68,11 @@ for (let i = 1; i <= N; i++) {
   const note = !ok && trace
     ? JSON.parse(trace).steps.filter(s => /snapshot|recheck/.test(s.s)).map(s => `${s.s}${JSON.stringify(s.d)}`).join(" | ")
     : "";
-  console.log(`${engine}${suppress ? " (last-active write suppressed)" : ""} run ${i}/${N}: ${ok ? "signed in" : `STRANDED on ${path}`} ${note}`);
+  if (sawRescue) rescued++;
+  console.log(`${engine}${suppress ? " (last-active write suppressed)" : ""} run ${i}/${N}: ${ok ? "signed in" : `STRANDED on ${path}`}${sawRescue ? " (the retry found the profile)" : ""} ${note}`);
   await browser.close();
   stop();
   await new Promise(r => setTimeout(r, 5000)); // let the ports free up
 }
 console.log(`\n${stranded} of ${N} first sign-ins ended stranded on the login flow`);
+console.log(`${rescued} of ${N} first sign-ins were saved by the profile retry (only possible on code that has it)`);
