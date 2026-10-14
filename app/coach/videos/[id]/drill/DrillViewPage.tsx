@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import CommentsSection from "@/components/CommentsSection";
 
 interface DrillDoc {
@@ -124,7 +125,7 @@ export default function DrillViewPage() {
         // athletes; a coach sees only their own. A blanket query would be
         // rejected by the rules for a non-admin coach, so both branches below
         // use the same scoped query.
-        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        const viewerSnap = await readOwnUserDoc(user.uid);
         const admin = (viewerSnap.data()?.role as string) === "admin";
         const studentsQuery = admin
           ? query(collection(db, "users"), where("role", "==", "student"))

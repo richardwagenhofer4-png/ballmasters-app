@@ -4,16 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
+  collection, getDocs, onSnapshot, orderBy, query, where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import { markThreadRead, sendMessage } from "@/lib/messaging";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
@@ -138,7 +132,7 @@ export default function CoachMessagesPage() {
     setUid(user.uid);
     // Load role so athlete-video lookups can be scoped: admins see all of an
     // athlete's videos; coaches see only their own (coachId == uid).
-    getDoc(doc(db, "users", user.uid))
+    readOwnUserDoc(user.uid)
       .then(snap => setIsAdmin((snap.data()?.role as string) === "admin"))
       .catch(() => {});
   }, [authLoading, user, router]);

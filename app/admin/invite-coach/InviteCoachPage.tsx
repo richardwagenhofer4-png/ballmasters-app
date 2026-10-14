@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { createCoachInvite } from "@/lib/coachInvites";
 
 interface Invite {
@@ -27,7 +27,7 @@ export default function InviteCoachPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
-      const snap = await getDoc(doc(db, "users", user.uid));
+      const snap = await readOwnUserDoc(user.uid);
       const role = snap.data()?.role as string | undefined;
       if (role !== "admin") {
         setAuthLoading(false);

@@ -14,6 +14,7 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -135,7 +136,7 @@ export default function StudentMessagesPage() {
     (async () => {
       try {
         // Load athlete profile
-        const profileSnap = await getDoc(doc(db, "users", currentUid));
+        const profileSnap = await readOwnUserDoc(currentUid);
         const profileData = profileSnap.data();
 
         // Coaches and admins must never run the thread bootstrap below: it would

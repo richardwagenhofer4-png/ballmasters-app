@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
 import { planToolsVisible, useAppConfig } from "@/lib/paywall";
 import { pickPlanFields, type PlanFields } from "@/lib/entitlements";
@@ -171,7 +172,7 @@ export default function UploadPage() {
       try {
         // Admins see every athlete; a coach sees only their own. A blanket
         // query would be rejected by the rules for a non-admin coach.
-        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        const viewerSnap = await readOwnUserDoc(user.uid);
         const admin = (viewerSnap.data()?.role as string) === "admin";
         const q = admin
           ? query(collection(db, "users"), where("role", "==", "student"))

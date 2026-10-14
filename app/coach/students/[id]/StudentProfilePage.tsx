@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import { getOrCreateThread, sendMessage } from "@/lib/messaging";
@@ -177,7 +178,7 @@ export default function StudentProfilePage() {
         // regardless of owner; a coach sees only their own of them. The coach
         // branch combines array-contains with an equality filter, which needs
         // a composite index on videos (coachId ASC + studentIds CONTAINS).
-        const viewerSnap = await getDoc(doc(db, "users", user.uid));
+        const viewerSnap = await readOwnUserDoc(user.uid);
         const viewerData = viewerSnap.data();
         const admin = (viewerData?.role as string) === "admin";
         // Needed as coachName and senderName when the coach starts a conversation.

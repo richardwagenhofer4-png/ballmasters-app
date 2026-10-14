@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
@@ -54,7 +55,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (authLoading) return;
     if (!user) { router.push("/login"); return; }
-    getDoc(doc(db, "users", user.uid)).then(snap => {
+    readOwnUserDoc(user.uid).then(snap => {
       const data = snap.data();
       setNameInput(data?.fullName ?? data?.name ?? user.displayName ?? "");
     });

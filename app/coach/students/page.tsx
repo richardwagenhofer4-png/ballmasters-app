@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
@@ -106,7 +107,7 @@ export default function StudentsListPage() {
         // Admins see every athlete and video; coaches see only their own. A
         // blanket query would return docs the rules forbid a coach from
         // reading, which fails the whole query.
-        const profileSnap = await getDoc(doc(db, "users", user.uid));
+        const profileSnap = await readOwnUserDoc(user.uid);
         const admin = profileSnap.data()?.role === "admin";
 
         const usersQuery = admin

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, onSnapshot, query, where, type QueryDocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, query, where, type QueryDocumentSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import VideoActionsMenu from "@/components/VideoActionsMenu";
@@ -160,7 +161,7 @@ export default function CoachDashboard() {
         // Load the caller's role first: admins see every athlete and video;
         // coaches see only their own. A blanket query would return docs the
         // rules forbid a coach from reading, which fails the whole query.
-        const profileSnap = await loginTrace.track("coach_dash_profile", getDoc(doc(db, "users", user.uid)), "profile");
+        const profileSnap = await loginTrace.track("coach_dash_profile", readOwnUserDoc(user.uid), "profile");
         const viewerRole = profileSnap.data()?.role as string | undefined;
         const admin = viewerRole === "admin";
         setCoachName(profileSnap.data()?.fullName ?? profileSnap.data()?.name ?? user.displayName ?? "Coach");

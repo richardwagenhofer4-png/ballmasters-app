@@ -5,9 +5,10 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
-  collection, doc, getDoc, getDocs, query, updateDoc, where,
+  collection, doc, getDocs, query, updateDoc, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { clearAuthCookies } from "@/lib/cookies";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
@@ -186,7 +187,7 @@ function CoachVideosPage() {
         // Load the caller's role first: admins see every video and athlete;
         // coaches see only their own. A blanket query would return docs the
         // rules forbid a coach from reading, which fails the whole query.
-        const profileSnap = await getDoc(doc(db, "users", user.uid));
+        const profileSnap = await readOwnUserDoc(user.uid);
         const admin = profileSnap.data()?.role === "admin";
         setIsAdmin(admin);
 

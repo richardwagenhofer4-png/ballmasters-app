@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import { createCoachInvite } from "@/lib/coachInvites";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -93,7 +94,7 @@ export default function CoachesPage() {
 
     (async () => {
       try {
-        const profileSnap = await getDoc(doc(db, "users", user.uid));
+        const profileSnap = await readOwnUserDoc(user.uid);
         const role = profileSnap.data()?.role as string | undefined;
         if (role !== "admin") {
           router.push("/coach/dashboard");

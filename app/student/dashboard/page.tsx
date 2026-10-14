@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
@@ -167,7 +168,7 @@ export default function StudentDashboard() {
 
       try {
         const [profileSnap, videosSnap] = await Promise.all([
-          loginTrace.track("student_dash_profile", getDoc(doc(db, "users", user.uid)), "profile"),
+          loginTrace.track("student_dash_profile", readOwnUserDoc(user.uid), "profile"),
           loginTrace.track(
             "student_dash_videos_query",
             getDocs(query(collection(db, "videos"), where("studentIds", "array-contains", user.uid))),

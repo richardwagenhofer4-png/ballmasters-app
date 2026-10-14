@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/lib/AuthContext";
-import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 import { loginTrace } from "@/lib/loginDiagnostics";
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
@@ -29,7 +28,7 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
 
     (async () => {
       try {
-        const snap = await loginTrace.track("coach_layout_profile", getDoc(doc(db, "users", user.uid)), "profile");
+        const snap = await loginTrace.track("coach_layout_profile", readOwnUserDoc(user.uid), "profile");
         const role = snap.data()?.role;
         if (cancelled) return;
         loginTrace.step("coach_layout_role", { role: typeof role === "string" ? role : "none", profileExists: snap.exists() });
