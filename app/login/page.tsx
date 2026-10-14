@@ -4,33 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDocFromServer, updateDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
 import { setAuthCookies } from "@/lib/cookies";
 import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type SocialProvider } from "@/lib/socialSignIn";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
 import { loginTrace } from "@/lib/loginDiagnostics";
-
-// Bug 2 evidence only. When a signed-in person's profile reads as "missing",
-// look once more, straight from the server, shortly afterwards, and put the
-// answer in the login trace. It tells a profile that really isn't there from
-// a read that came back wrong. It changes nothing about where the person goes.
-function recheckMissingProfile(uid: string) {
-  const waitMs = 1500;
-  setTimeout(async () => {
-    try {
-      const snap = await getDocFromServer(doc(db, "users", uid));
-      loginTrace.step("profile_recheck_from_server", { afterMs: waitMs, exists: snap.exists() }, snap.exists() ? "error" : "warning");
-    } catch (err) {
-      loginTrace.fail("profile_recheck_from_server_failed", err, { afterMs: waitMs });
-    }
-  }, waitMs);
-}
-
-function markLastActive(uid: string) {
-  updateDoc(doc(db, "users", uid), { lastActiveAt: serverTimestamp() }).catch(console.error);
-}
+import { lastActive } from "@/lib/lastActive";
 
 const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
   "auth/invalid-credential": "Invalid email or password.",
@@ -69,7 +49,7 @@ export default function LoginPage() {
     loginTrace.step("after_login", { cachedRole: cachedRole ?? "none" });
     if (cachedRole === "coach" || cachedRole === "admin" || cachedRole === "student") {
       setAuthCookies(cachedRole);
-      markLastActive(uid);
+      lastActive.request(uid, { force: true });
       loginTrace.step("route", { to: "/dashboard", role: cachedRole, via: "cached_role" });
       router.push("/dashboard");
       return;
@@ -80,13 +60,12 @@ export default function LoginPage() {
     );
     if (!profile) {
       loginTrace.step("profile_missing_going_to_incomplete_profile", {}, "error");
-      recheckMissingProfile(uid);
       router.push("/incomplete-profile");
       return;
     }
     localStorage.setItem("ballmasters_role", profile.role);
     setAuthCookies(profile.role);
-    markLastActive(uid);
+    lastActive.request(uid, { force: true });
     loginTrace.step("route", { to: "/dashboard", role: profile.role, via: "profile" });
     router.push("/dashboard");
   }

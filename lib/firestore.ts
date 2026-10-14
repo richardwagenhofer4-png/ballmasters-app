@@ -1,5 +1,4 @@
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { readOwnUserDoc } from "@/lib/ownProfile";
 
 export type UserRole = "student" | "coach" | "admin";
 
@@ -29,17 +28,18 @@ export interface UserProfile {
 // writer here.
 
 /**
- * `onRead` (optional, diagnostics only) is told what Firestore actually
- * answered, so the login trace can show whether a "no profile" came from the
- * server or from the cache. It cannot change the result.
+ * The signed-in person's own profile, or null if they really have none.
+ * A first "missing" answer is double-checked against the server about a second
+ * later before null is returned (lib/ownProfile.ts). `onRead` (optional,
+ * diagnostics only) is told what the FIRST read answered, so the login trace
+ * can show whether a "no profile" came from the server or from the cache. It
+ * cannot change the result.
  */
 export async function getUserProfile(
   uid: string,
   onRead?: (meta: { exists: boolean; fromCache: boolean }) => void
 ): Promise<UserProfile | null> {
-  const ref = doc(db, "users", uid);
-  const snap = await getDoc(ref);
-  try { onRead?.({ exists: snap.exists(), fromCache: snap.metadata.fromCache }); } catch { /* diagnostics only */ }
+  const snap = await readOwnUserDoc(uid, onRead);
   if (!snap.exists()) return null;
   return snap.data() as UserProfile;
 }

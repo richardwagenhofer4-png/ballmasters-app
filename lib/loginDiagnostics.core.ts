@@ -27,7 +27,7 @@ export interface Sink {
   breadcrumb(b: { category: string; message: string; level: Level; data?: Detail }): void;
   message(
     text: string,
-    ctx: { level: "warning"; tags: Record<string, string>; extra: Record<string, unknown>; fingerprint: string[] }
+    ctx: { level: "warning" | "info"; tags: Record<string, string>; extra: Record<string, unknown>; fingerprint: string[] }
   ): void;
 }
 
@@ -65,6 +65,8 @@ interface Session {
 
 export const STALL_MS = 10_000;
 const MAX_STEPS = 80;
+/** A page load sends at most this many events for one flag name, so a frequent one can't flood Sentry. */
+const MAX_FLAGS_PER_NAME = 3;
 
 /** 8-hex-digit FNV-1a fingerprint: enough to tell accounts apart in a report, useless for finding the person. */
 export function hashUid(uid: string): string {
@@ -220,6 +222,36 @@ export function createLoginDiagnostics(deps: Deps) {
     persist();
   }
 
+  const flagged = new Map<string, number>();
+
+  /**
+   * Something worth knowing about happened that would otherwise leave no trace
+   * because the login still went on to succeed (e.g. the profile retry found a
+   * profile the first read called missing). Adds a step to the trace if a login
+   * is being traced, and sends ONE Sentry info event right away, with or
+   * without a login session. At most MAX_FLAGS_PER_NAME per name per page load.
+   */
+  function flag(name: string, detail?: Detail, uid?: string | null) {
+    step(name, detail, "warning");
+    const count = flagged.get(name) ?? 0;
+    if (count >= MAX_FLAGS_PER_NAME) return;
+    flagged.set(name, count + 1);
+    const s = session;
+    safe(() => {
+      const extraDetail = Object.entries(cleanDetail(detail) ?? {}).map(([k, v]) => `${k}=${v}`).join(" ");
+      deps.sink.message(`Login: ${name}`, {
+        level: "info",
+        tags: { "login.flag": name, "login.source": s?.source ?? "none", route: deps.route() },
+        extra: {
+          trace: s ? traceText(s) : `${name}  ${extraDetail}`,
+          user: s?.user ?? (uid ? hashUid(uid) : null),
+          elapsedMs: s ? deps.now() - s.t0 : null,
+        },
+        fingerprint: ["login-diagnostics", "flag", name],
+      });
+    });
+  }
+
   function setUser(uid: string) {
     if (session && !session.done) {
       session.user = hashUid(uid);
@@ -272,7 +304,7 @@ export function createLoginDiagnostics(deps: Deps) {
     });
   }
 
-  return { begin, step, fail, milestone, track, setUser, abandon, active, checkPrevious: reportPreviousIfUnfinished };
+  return { begin, step, fail, flag, milestone, track, setUser, abandon, active, checkPrevious: reportPreviousIfUnfinished };
 }
 
 export type LoginDiagnostics = ReturnType<typeof createLoginDiagnostics>;
