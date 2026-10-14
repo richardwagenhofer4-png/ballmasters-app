@@ -1,10 +1,10 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
 import { syncBillingUser } from "@/lib/billing";
 import { loginTrace } from "@/lib/loginDiagnostics";
+import { lastActive } from "@/lib/lastActive";
 
 interface AuthContextType {
   user: User | null;
@@ -12,42 +12,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({ user: null, loading: true });
-
-// Refresh users/{uid}.lastActiveAt so the retention job sees real usage, not
-// just logins. Fire-and-forget (never awaited, never throws into the auth
-// flow), throttled to at most one write per user per local calendar day via a
-// localStorage marker. Login/page.tsx also writes this on login; the throttle
-// suppresses the duplicate.
-function markLastActive(uid: string) {
-  const now = new Date();
-  const today =
-    `${now.getFullYear()}-` +
-    `${String(now.getMonth() + 1).padStart(2, "0")}-` +
-    `${String(now.getDate()).padStart(2, "0")}`;
-  const key = `lastActiveWrite:${uid}`;
-
-  let canPersist = true;
-  try {
-    const last = localStorage.getItem(key);
-    // YYYY-MM-DD sorts chronologically as a string — skip if already written today.
-    if (last && last >= today) return;
-  } catch {
-    // localStorage unavailable — just write, and don't try to persist the marker.
-    canPersist = false;
-  }
-
-  updateDoc(doc(db, "users", uid), { lastActiveAt: serverTimestamp() })
-    .then(() => {
-      if (canPersist) {
-        try {
-          localStorage.setItem(key, today);
-        } catch {
-          // ignore — the write still succeeded
-        }
-      }
-    })
-    .catch(console.error);
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Seed from currentUser if already available (instant on warm sessions)
@@ -71,7 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(u);
       setLoading(false);
       clearTimeout(timeout);
-      if (u) markLastActive(u.uid);
+      // Refresh users/{uid}.lastActiveAt so the retention job sees real usage,
+      // not just logins: once a day per device, fire-and-forget. It is only
+      // REQUESTED here. lib/lastActive.ts holds the write back until the first
+      // profile read has finished (a write in flight at the same moment as that
+      // read could make it answer "missing": Build 1.1 bug 2). The login page
+      // asks for the same write after its own read; both collapse into one.
+      if (u) lastActive.request(u.uid);
       // iPhone app 1.1+: keep RevenueCat's user identical to the Firebase
       // user (logIn / logOut). A no-op on the web and in older app builds.
       void syncBillingUser(u?.uid ?? null);
