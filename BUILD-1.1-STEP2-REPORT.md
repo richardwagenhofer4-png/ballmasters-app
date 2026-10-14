@@ -650,3 +650,103 @@ New:
 2. **A small test-only switch in `lib/firebase.ts`** was needed to point the app at the emulators. It is not a fix for anything and does nothing in a deployed build.
 3. **The login trace starts only from the login page** (including landing there already signed in), not on every app start, so ordinary app opens produce no stall events.
 4. **Not verified on a real iPhone or against production:** all browser results are WebKit (the iPhone's engine) on a laptop against local emulators. The native iOS select picker, the iPhone app shell, real Sentry delivery and the production backend's behaviour for the bug 2 lead are untested. The captions features are as in §10 (no live OpenAI call).
+
+
+---
+
+## 12. Step 7: bug 2 fix (profile read says "missing" right after login)
+
+Branch `build-1.1-paywall`. Nothing under `ios/` touched, `firestore.rules` untouched, no `npx cap sync`, no deploys, `main` and `../rules-interim` not touched. Paywall switch is still **off**.
+
+**Result:** first sign-ins on a fresh local stack, real WebKit with the iPhone profile: **6 of 20 stranded before the fix, 0 of 20 after, and 0 of 20 again on a second run (0 of 40).**
+
+### What was wrong (from §11)
+
+`AuthContext` sent `updateDoc(users/{uid}, {lastActiveAt})` at the instant of sign-in, the same instant as the first read of the same document. With a write pending on `users/{uid}`, that first read could answer `exists: false, fromCache: false`, so the app sent a real person to `/incomplete-profile` (which the middleware bounces back to `/login`), and a real Apple/Google person would have been signed out with "There's no Ball Masters account".
+
+### What changed
+
+**1. The write can no longer overlap the read** (`lib/lastActive.core.ts`, wired in `lib/lastActive.ts`)
+
+`AuthContext` now only *requests* the write. The write goes out once:
+- at least one read of that user's profile has finished, **and**
+- none is still in flight, **and**
+- the profile reads have been quiet for 1.5 s (so the page the person lands on, whose own first read starts a moment after the login page's read ends, is also done),
+
+or after at most 8 s (so it still happens if no page ever reads the profile, or the network is very slow). The other direction too: a profile read that starts while the write is in flight waits for it (at most 2 s).
+
+*Why a gate instead of a fixed delay.* A delay can't promise the order on a slow connection, and the first read can take longer than any delay I'd pick. Signals from the reads give the order on every normal path; the 8 s cap is only the safety net. The reads that signal are the ones I changed in part 2 (login, both dashboards, the coach layout and the role-checking pages); a page that never reads the profile just hits the cap.
+
+Kept as before: once per local day per device (same `lastActiveWrite:{uid}` marker, so no device writes twice after the update) and fire-and-forget. The login page's own request now goes through the same gate with `force` (it wrote on every login before, and still does). Everything for one login collapses into **one** write: a request while one is pending, in flight, or was sent in the last 60 s is dropped. Before, the login page's unthrottled write and AuthContext's could both fire, and the login page's two concurrent `afterLogin` runs wrote twice.
+
+**2. One retry before believing "missing"** (`lib/ownProfile.core.ts`, wired in `lib/ownProfile.ts`: `readOwnUserDoc`)
+
+If the first read says "missing": wait ~1 s, re-read with `getDocFromServer`, and only treat the profile as missing if that also says so.
+- Truly missing profile: behaves exactly as today, about 1 s later.
+- First "missing", retry finds it: the found profile is used.
+- The retry itself fails (e.g. offline): the error is thrown, as any failed profile read is. The person is **not** told they have no account on the strength of an unconfirmed read.
+
+Where I put it (every read of the signed-in person's **own** profile where a missing answer sends them away or gives a wrong or empty view):
+
+| Site | What a false "missing" did | Changed |
+|---|---|---|
+| (a) `login/page.tsx` `afterLogin` (via `getUserProfile`) | → `/incomplete-profile` | **Yes** |
+| (b) `login/page.tsx` `handleSocialLogin` (via `getUserProfile`) | signed a real Apple/Google user out: "There's no Ball Masters account" | **Yes** |
+| `app/not-found.tsx` (via `getUserProfile`) | → `/incomplete-profile` | **Yes** |
+| `app/coach/layout.tsx` | redirected a coach to `/student/dashboard` | **Yes** |
+| `app/coach/dashboard`, `app/student/dashboard` | name and role lost; admin got the coach-scoped view | **Yes** |
+| `app/coach/coaches`, `app/admin/invite-coach` | sent an admin away / "not authorised" | **Yes** |
+| `app/coach/videos`, `students`, `upload`, `messages`, `students/[id]` (viewer role), `videos/[id]/drill` | admin saw their own athletes only (could be an empty list) | **Yes** |
+| `app/coach/settings`, `app/student/profile` | blank name fields ("empty profile") | **Yes** |
+| `app/student/messages` | role check (a missing role "proceeds as before") | **Yes** |
+| `app/coach/invite` (`currentInviteCode`), `app/student/videos` and `StudentVideoPage` (display-name fallback), `NotificationsToggle`, `CommentsSection` (other people's names), `lib/getAthleteCoach`, `lib/inviteCodes`, `EntitlementsContext` (live plan listener, paywall off) | cosmetic, or not the signed-in person's own profile, or not a one-time read | No |
+
+The "Yes" rows use `readOwnUserDoc`. Real accounts always have a profile, so for them nothing changes; a really missing one takes about a second longer.
+
+**3. Diagnostics kept and extended.** All §11 trace steps stay, and `login_profile_snapshot` too. One thing is replaced: the one-off `profile_recheck_from_server` read (the login page's "look again 1.5 s later", added for evidence) is gone because the retry does that same server read inside the real flow. New steps: `profile_retry_start`, `profile_retry` (`retryExists`, `retryFromCache`, `waitMs`), `profile_retry_failed`, and for the gate `last_active_requested`, `last_active_write_start`/`_ok`, `last_active_skipped` and `profile_read_waits_for_last_active_write`.
+Because a retry that **rescues** the login would otherwise leave no trace (the login finishes, so no stall event is sent), it sends **one Sentry info event right away**, "Login: profile_retry_rescued", with the trace; at most 3 per page load. So production Sentry shows whether the retry ever fires. A confirmed-missing profile is already covered by the 10-second stall event.
+
+### Proof
+
+**Repro, `scripts/repro-profile-missing-after-login.mjs`** (a fresh emulator stack for each sign-in; real WebKit, iPhone 14 profile; "stranded" = still on the login flow 14 s after pressing Sign in):
+
+| Code | Stranded |
+|---|---|
+| Before (`192946a`) | **6 of 20** |
+| After (`43e24b7`) | **0 of 20** |
+| After, second run | **0 of 20** (and in that run the retry saved 0 sign-ins: the write deferral alone removed the false "missing"; the retry is the second line of defence) |
+
+(§11 had seen 3 of 12 on the original code and 12 of 31 on the instrumented code, so 6 of 20 is in the same range.)
+
+**Tests, all pass on the final tree:**
+- `npm run build` ✅, `npm run lint` ✅ (0 errors, 66 warnings: the same count as before)
+- rules emulator suite ✅ **395/395**
+- `test-login-diagnostics` ✅ 19 (3 new: the Sentry flag), `test-login-trace` ✅ 12, `test-transcribe-route` ✅ 9, `test-videos-filter` ✅ 18, `test-captions` ✅ 16
+- **new** `scripts/test-profile-read.mjs` ✅ **23**: the write never overlaps a read, waits for the quiet period, caps at 8 s, one write per login however many requests, throttle kept, reads wait for an in-flight write (at most 2 s), failures don't throw; the retry returns a first hit untouched, uses a rescue, leaves a real "missing" missing after 1 s, and throws if the retry fails
+- **new** `scripts/test-profile-missing.mjs` ✅ **9**, in WebKit against the emulators:
+  - **Email:** an account with no profile document still navigates to `/incomplete-profile`, about a second after Sign in, with the trace showing the retry found nothing.
+  - **Social:** the Google flow (faked with a small stand-in for Capacitor's iOS bridge, so the page believes it is the 1.1 app and the Auth emulator accepts the fake token) still shows "There's no Ball Masters account for this Google account yet…", about a second later, and the account is signed out again.
+  - Neither sends a "rescued" event. On the old code, the three timing/trace checks fail (the redirect and the message came after 154 ms and 112 ms), so the test can tell the two apart.
+
+### Every file touched
+
+New: `lib/lastActive.core.ts`, `lib/lastActive.ts`, `lib/ownProfile.core.ts`, `lib/ownProfile.ts`, `scripts/test-profile-read.mjs`, `scripts/test-profile-missing.mjs`
+
+Changed:
+- `lib/AuthContext.tsx`, `lib/firestore.ts`, `lib/loginDiagnostics.core.ts`
+- `app/login/page.tsx`
+- `app/coach/layout.tsx`, `app/coach/dashboard/page.tsx`, `app/student/dashboard/page.tsx`
+- `app/coach/coaches/page.tsx`, `app/admin/invite-coach/InviteCoachPage.tsx`
+- `app/coach/videos/page.tsx`, `app/coach/students/page.tsx`, `app/coach/upload/page.tsx`, `app/coach/messages/page.tsx`
+- `app/coach/students/[id]/StudentProfilePage.tsx`, `app/coach/videos/[id]/drill/DrillViewPage.tsx`
+- `app/coach/settings/page.tsx`, `app/student/profile/page.tsx`, `app/student/messages/page.tsx`
+- `scripts/test-login-diagnostics.mjs`, `scripts/repro-profile-missing-after-login.mjs`, `scripts/fixtures/local-stack.mjs` (waits for ports to free)
+- this report
+
+### Not verified
+
+- **No real iPhone and no production backend.** Every number is WebKit on a laptop against the local Auth and Firestore emulators. Whether production has the same race is unknown; this fix removes the one overlap I could measure and adds the second look as a safety net. Production Sentry will say: "Login: profile_retry_rescued" events mean the retry still catches false "missing"s; a "Login did not finish…" event with `profile_retry … retryExists=false` means a genuinely missing profile.
+- I did not prove *why* a pending write makes the first read answer "missing". The evidence is the measured effect (6/20 → 0/40, and 0/12 when the write was switched off in §11).
+- The `lastActiveAt` write now happens about 2 to 9.5 seconds after sign-in instead of at once. Anything that depends on that timestamp being fresh within seconds of login would notice; nothing in this repo does (the retention job reads it daily).
+- Writes to `users/{uid}` by other code (push token, notifications toggle) are not gated; they happen after user action, not at sign-in.
+- The Capacitor stand-in used for the Google test fakes only `FirebaseAuthentication.signInWithGoogle`; Apple goes through the same `handleSocialLogin` code, but Apple's sheet was not simulated.
