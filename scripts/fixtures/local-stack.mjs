@@ -30,6 +30,8 @@ const logTo = name => (process.env.BM_STACK_LOGS ? ["ignore", openSync(join(proc
 
 export async function startStack({ port }) {
   for (const p of [9099, 8080, port]) {
+    // A stack that was stopped a moment ago may still be letting go of its ports.
+    for (let i = 0; i < 20 && !(await portFree(p)); i++) await sleep(1000);
     if (!(await portFree(p))) throw new Error(`Port ${p} is in use; stop whatever is using it first.`);
   }
   const procs = [];
