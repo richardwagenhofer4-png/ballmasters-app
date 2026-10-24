@@ -16,9 +16,14 @@
 //
 // Needs: npm i --no-save playwright && npx playwright install webkit; Java; Firebase CLI.
 // Run:  node scripts/test-push-token.mjs      Ports: 9099, 8080, 3120
+//       RULES_FILE=<path> node scripts/test-push-token.mjs   against other rules.
+// Check B only shows the old bug under rules that let a client create users/{uid}
+// (the rules LIVE in production today; this branch's rules refuse it). Run it both
+// ways: `git show origin/main:firestore.rules > /tmp/main.rules` and RULES_FILE=/tmp/main.rules.
 
 import assert from "node:assert/strict";
 import { startStack, signedInPage } from "./fixtures/local-stack.mjs";
+import { installNativeApp } from "./fixtures/native-app.mjs";
 
 let playwright;
 try {
@@ -48,33 +53,10 @@ async function check(name, fn) {
 
 const TOKEN = "phone-token-1";
 
-/** The 1.1 iPhone app, as far as these checks need it. */
-function nativeStub(token) {
-  window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
-  window.Capacitor = {
-    PluginHeaders: [
-      { name: "Purchases", methods: [] },
-      { name: "FirebaseMessaging", methods: ["checkPermissions", "requestPermissions", "getToken", "addListener"].map(name => ({ name, rtype: "promise" })) },
-      { name: "FirebaseAuthentication", methods: [{ name: "signInWithGoogle", rtype: "promise" }, { name: "signInWithApple", rtype: "promise" }] },
-    ],
-    nativePromise: async (plugin, method) => {
-      if (plugin === "FirebaseAuthentication" && method === "signInWithGoogle") {
-        return { credential: { idToken: JSON.stringify({ sub: "google-push-1", email: "pushgoogle@example.test", email_verified: true }) } };
-      }
-      if (plugin === "FirebaseMessaging") {
-        if (method === "checkPermissions" || method === "requestPermissions") return { receive: "granted" };
-        if (method === "getToken") return { token };
-        if (method === "addListener") return { remove: async () => {} };
-      }
-      return {};
-    },
-  };
-}
-
 const net = { blocked: false };
 async function newNativeContext() {
   const ctx = await browser.newContext({ ...devices["iPhone 14"] });
-  await ctx.addInitScript(nativeStub, TOKEN);
+  await ctx.addInitScript(installNativeApp, { pushToken: TOKEN, googleSub: "google-push-1", googleEmail: "pushgoogle@example.test" });
   await ctx.route(/127\.0\.0\.1:8080/, route => (net.blocked ? undefined : route.continue()));
   await ctx.route(/sentry\.io/, route => route.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
   return ctx;

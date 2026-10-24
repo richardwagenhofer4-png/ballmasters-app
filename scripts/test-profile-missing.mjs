@@ -10,7 +10,7 @@
 //   Social: an Apple/Google account with no Ball Masters profile is signed out
 //           and shown "There's no Ball Masters account for this Google account
 //           yet…", after the retry. The native Google sheet is faked by a small
-//           stand-in for Capacitor's iOS bridge (see nativeStub); the Auth
+//           stand-in for Capacitor's iOS bridge (scripts/fixtures/native-app.mjs); the Auth
 //           emulator accepts the fake Google ID token it hands back.
 //
 // Needs: npm i --no-save playwright && npx playwright install webkit; Java; Firebase CLI.
@@ -18,6 +18,7 @@
 
 import assert from "node:assert/strict";
 import { startStack } from "./fixtures/local-stack.mjs";
+import { installNativeApp } from "./fixtures/native-app.mjs";
 
 let playwright;
 try {
@@ -55,24 +56,6 @@ const NO_PROFILE = { email: "noprofile@example.test", password: "password1" };
   if (!res.ok) throw new Error(`could not create the no-profile account: ${await res.text()}`);
 }
 
-/** A stand-in for Capacitor's iOS bridge: makes the page believe it is the 1.1 iPhone app and answers Google sign-in with a fake token the Auth emulator accepts. */
-function nativeStub() {
-  window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
-  window.Capacitor = {
-    PluginHeaders: [
-      { name: "Purchases", methods: [] },
-      { name: "FirebaseMessaging", methods: [] },
-      { name: "FirebaseAuthentication", methods: [{ name: "signInWithGoogle", rtype: "promise" }, { name: "signInWithApple", rtype: "promise" }] },
-    ],
-    nativePromise: async (plugin, method) => {
-      if (plugin === "FirebaseAuthentication" && method === "signInWithGoogle") {
-        return { credential: { idToken: JSON.stringify({ sub: "google-no-profile-1", email: "nogoogleprofile@example.test", email_verified: true }) } };
-      }
-      return {};
-    },
-  };
-}
-
 async function newContext(withNativeStub) {
   const ctx = await browser.newContext({ ...devices["iPhone 14"] });
   const events = [];
@@ -82,7 +65,7 @@ async function newContext(withNativeStub) {
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  if (withNativeStub) await ctx.addInitScript(nativeStub);
+  if (withNativeStub) await ctx.addInitScript(installNativeApp, { googleSub: "google-no-profile-1", googleEmail: "nogoogleprofile@example.test" });
   return { ctx, events };
 }
 const eventText = e => (e.message?.formatted ?? e.message ?? e.logentry?.formatted ?? e.logentry?.message ?? "");

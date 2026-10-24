@@ -42,7 +42,8 @@ export async function startStack({ port }) {
 
   const dir = mkdtempSync(join(tmpdir(), "bm-emu-"));
   writeFileSync(join(dir, "firebase.json"), JSON.stringify({
-    firestore: { rules: join(root, "firestore.rules") },
+    // RULES_FILE=<path> tests against other rules (e.g. the ones live in production).
+    firestore: { rules: process.env.RULES_FILE ?? join(root, "firestore.rules") },
     emulators: { auth: { host: "127.0.0.1", port: 9099 }, firestore: { host: "127.0.0.1", port: 8080 }, ui: { enabled: false } },
   }));
   procs.push(spawn("firebase", ["emulators:start", "--config", join(dir, "firebase.json"), "--only", "auth,firestore", "--project", "demo-ballmasters"], { cwd: dir, stdio: logTo("emulators.log"), detached: true }));

@@ -1,0 +1,34 @@
+// A stand-in for Capacitor's iOS bridge, for the browser tests. Passed to
+// context.addInitScript(installNativeApp, config): it makes the page believe it
+// is the 1.1 iPhone app (Purchases, FirebaseMessaging and FirebaseAuthentication
+// "installed"), answers Google sign-in with a fake ID token the Auth emulator
+// accepts, and (when config.pushToken is set) reports push permission granted
+// and that device token. Everything else the app asks the native side answers
+// with {}.
+//
+// This function runs INSIDE the page, so it must not use anything outside itself.
+//
+//   config = { googleEmail?: string, googleSub?: string, pushToken?: string }
+
+export function installNativeApp(config) {
+  window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
+  const push = typeof config.pushToken === "string";
+  window.Capacitor = {
+    PluginHeaders: [
+      { name: "Purchases", methods: [] },
+      { name: "FirebaseMessaging", methods: push ? ["checkPermissions", "requestPermissions", "getToken", "addListener"].map(name => ({ name, rtype: "promise" })) : [] },
+      { name: "FirebaseAuthentication", methods: [{ name: "signInWithGoogle", rtype: "promise" }, { name: "signInWithApple", rtype: "promise" }] },
+    ],
+    nativePromise: async (plugin, method) => {
+      if (plugin === "FirebaseAuthentication" && method === "signInWithGoogle") {
+        return { credential: { idToken: JSON.stringify({ sub: config.googleSub ?? "google-test-1", email: config.googleEmail ?? "google@example.test", email_verified: true }) } };
+      }
+      if (plugin === "FirebaseMessaging" && push) {
+        if (method === "checkPermissions" || method === "requestPermissions") return { receive: "granted" };
+        if (method === "getToken") return { token: config.pushToken };
+        if (method === "addListener") return { remove: async () => {} };
+      }
+      return {};
+    },
+  };
+}

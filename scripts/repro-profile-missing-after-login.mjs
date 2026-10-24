@@ -10,9 +10,12 @@
 // Needs: npm i --no-save playwright && npx playwright install webkit; Java; Firebase CLI.
 // Run:  N=12 node scripts/repro-profile-missing-after-login.mjs
 //       N=12 SUPPRESS=1 node scripts/repro-profile-missing-after-login.mjs
+//       NATIVE=1 ...        as the 1.1 iPhone app does it: with push permission granted, so the
+//                           app also saves a push token at sign-in (the old code strands EVERY one)
 //       ENGINE=chrome ...   (Chrome with the iPhone profile instead of WebKit)
 
 import { startStack } from "./fixtures/local-stack.mjs";
+import { installNativeApp } from "./fixtures/native-app.mjs";
 
 let playwright;
 try {
@@ -45,6 +48,7 @@ for (let i = 1; i <= N; i++) {
     if ((r.request().postData() ?? "").includes("profile_retry_rescued")) sawRescue = true;
     return r.fulfill({ status: 200, body: "{}" });
   });
+  if (process.env.NATIVE) await ctx.addInitScript(installNativeApp, { pushToken: "repro-token" });
   if (suppress) {
     // Pretend AuthContext's once-a-day "last active" write already happened,
     // so it doesn't start at the moment of sign-in.
