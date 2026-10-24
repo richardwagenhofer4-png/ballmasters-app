@@ -231,7 +231,7 @@ export function createLoginDiagnostics(deps: Deps) {
    * is being traced, and sends ONE Sentry info event right away, with or
    * without a login session. At most MAX_FLAGS_PER_NAME per name per page load.
    */
-  function flag(name: string, detail?: Detail, uid?: string | null) {
+  function flag(name: string, detail?: Detail, uid?: string | null, level: "info" | "warning" = "info") {
     step(name, detail, "warning");
     const count = flagged.get(name) ?? 0;
     if (count >= MAX_FLAGS_PER_NAME) return;
@@ -240,7 +240,7 @@ export function createLoginDiagnostics(deps: Deps) {
     safe(() => {
       const extraDetail = Object.entries(cleanDetail(detail) ?? {}).map(([k, v]) => `${k}=${v}`).join(" ");
       deps.sink.message(`Login: ${name}`, {
-        level: "info",
+        level,
         tags: { "login.flag": name, "login.source": s?.source ?? "none", route: deps.route() },
         extra: {
           trace: s ? traceText(s) : `${name}  ${extraDetail}`,

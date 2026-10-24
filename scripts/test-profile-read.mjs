@@ -9,7 +9,9 @@ import assert from "node:assert/strict";
 import {
   createLastActiveGate, QUIET_MS, MAX_WAIT_MS, READ_WAIT_MS, DEDUPE_MS,
 } from "../lib/lastActive.core.ts";
-import { readWithMissingRetry, RETRY_WAIT_MS } from "../lib/ownProfile.core.ts";
+import {
+  readWithMissingRetry, RETRY_WAIT_MS, READ_TIMEOUT_MS, ReadTimeoutError, ProfileUnreachableError, isProfileUnreachable,
+} from "../lib/ownProfile.core.ts";
 
 let passed = 0;
 const failed = [];
@@ -312,6 +314,133 @@ test("retry: the first-read callback sees exists/fromCache, and a throwing callb
   const { deps } = retryWorld({ first: snap(true, true) });
   await readWithMissingRetry(deps, m => { seen.push(m); throw new Error("diag bug"); });
   assert.deepEqual(seen, [{ exists: true, fromCache: true }]);
+});
+
+// ---- a read that never answers ----------------------------------------------
+const never = () => new Promise(() => {});
+const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+function stuckWorld({ first, server, resetThrows = false }) {
+  const log = { calls: [], resets: 0, traces: [], fails: [], flags: [], sleeps: [] };
+  const timeouts = [];
+  let serverCalls = 0;
+  const deps = {
+    first: () => { log.calls.push("first"); return first(); },
+    fromServer: () => { log.calls.push("server"); return server(++serverCalls); },
+    sleep: async ms => { log.sleeps.push(ms); },
+    trace: (s, d, l) => log.traces.push([s, d, l]),
+    fail: (s, e, d) => log.fails.push([s, String(e?.message ?? e), d]),
+    flag: (n, d, l) => log.flags.push([n, d, l]),
+    withTimeout: (p, ms) => new Promise((resolve, reject) => {
+      const t = { done: false, ms, expire: () => { t.done = true; reject(new ReadTimeoutError(ms)); } };
+      timeouts.push(t);
+      p.then(v => { t.done = true; resolve(v); }, e => { t.done = true; reject(e); });
+    }),
+    resetNetwork: async () => { log.resets++; if (resetThrows) throw new Error("reset failed"); },
+  };
+  // The next read that is still waiting runs out of time.
+  const expire = async () => {
+    await flush();
+    const t = timeouts.find(x => !x.done);
+    if (!t) throw new Error("no read is waiting");
+    t.expire();
+    await flush();
+  };
+  return { deps, log, expire, timeouts };
+}
+const settled = p => { const r = { state: "pending" }; p.then(v => { r.state = "resolved"; r.value = v; }, e => { r.state = "rejected"; r.error = e; }); return r; };
+
+test("stuck: the limit is 5 seconds", () => assert.equal(READ_TIMEOUT_MS, 5000));
+
+test("stuck: a read that never answers is reset once and asked again; the answer is used and reported", async () => {
+  const found = snap(true);
+  const w = stuckWorld({ first: never, server: async () => found });
+  const r = settled(readWithMissingRetry(w.deps));
+  await flush();
+  assert.equal(r.state, "pending", "still waiting for the first read");
+  assert.equal(w.timeouts[0].ms, READ_TIMEOUT_MS);
+  await w.expire();
+  assert.equal(r.state, "resolved");
+  assert.equal(r.value, found);
+  assert.equal(w.log.resets, 1);
+  assert.deepEqual(w.log.calls, ["first", "server"]);
+  assert.ok(w.log.traces.some(t => t[0] === "profile_read_stuck"));
+  assert.ok(w.log.traces.some(t => t[0] === "profile_read_recovered"));
+  assert.equal(w.log.flags[0][0], "profile_read_recovered_after_reset");
+  assert.equal(w.log.flags[0][2], "warning");
+});
+
+test("stuck: still stuck after the reset -> ProfileUnreachableError, never a snapshot, and reported", async () => {
+  const w = stuckWorld({ first: never, server: never });
+  const r = settled(readWithMissingRetry(w.deps));
+  await w.expire();       // the first read runs out of time
+  await w.expire();       // the read after the reset runs out of time too
+  assert.equal(r.state, "rejected");
+  assert.ok(r.error instanceof ProfileUnreachableError);
+  assert.ok(isProfileUnreachable(r.error));
+  assert.equal(w.log.resets, 1, "reset exactly once");
+  assert.equal(w.log.flags[0][0], "profile_unreachable");
+  assert.equal(w.log.flags[0][2], "warning");
+});
+
+test("stuck: a reset that itself fails doesn't stop the second attempt", async () => {
+  const found = snap(true);
+  const w = stuckWorld({ first: never, server: async () => found, resetThrows: true });
+  const r = settled(readWithMissingRetry(w.deps));
+  await w.expire();
+  assert.equal(r.state, "resolved");
+  assert.equal(r.value, found);
+  assert.equal(w.log.fails[0][0], "profile_network_reset_failed");
+});
+
+test("stuck: Firestore saying the client is offline ('unavailable') takes the same road", async () => {
+  const found = snap(true);
+  const offline = Object.assign(new Error("Failed to get document because the client is offline."), { code: "unavailable" });
+  const w = stuckWorld({ first: async () => { throw offline; }, server: async () => found });
+  const out = await readWithMissingRetry(w.deps);
+  assert.equal(out, found);
+  assert.equal(w.log.resets, 1);
+});
+
+test("stuck: any other failure (permission-denied) is thrown straight away, no reset", async () => {
+  const denied = Object.assign(new Error("denied"), { code: "permission-denied" });
+  const w = stuckWorld({ first: async () => { throw denied; }, server: async () => snap(true) });
+  await assert.rejects(readWithMissingRetry(w.deps), e => e === denied);
+  assert.equal(w.log.resets, 0);
+  assert.deepEqual(w.log.calls, ["first"]);
+});
+
+test("stuck: after the reset the server answers 'missing': it still gets the normal second look before 'missing' is believed", async () => {
+  const w = stuckWorld({ first: never, server: async () => snap(false) });
+  const r = settled(readWithMissingRetry(w.deps));
+  await w.expire();
+  assert.equal(r.state, "resolved");
+  assert.equal(r.value.exists(), false);
+  assert.deepEqual(w.log.calls, ["first", "server", "server"], "reset read, then the 1 s re-check");
+  assert.deepEqual(w.log.sleeps, [RETRY_WAIT_MS]);
+});
+
+test("a stuck re-check is NOT a second 'missing': ProfileUnreachableError", async () => {
+  const w = stuckWorld({ first: async () => snap(false), server: never });
+  const r = settled(readWithMissingRetry(w.deps));
+  await w.expire();       // the re-check never answers
+  assert.equal(r.state, "rejected");
+  assert.ok(r.error instanceof ProfileUnreachableError);
+  assert.equal(w.log.flags.at(-1)[0], "profile_unreachable");
+});
+
+test("a read that answers in time is not touched by any of this", async () => {
+  const first = snap(true);
+  const w = stuckWorld({ first: async () => first, server: never });
+  const out = await readWithMissingRetry(w.deps);
+  assert.equal(out, first);
+  assert.equal(w.log.resets, 0);
+  assert.equal(w.log.flags.length, 0);
+});
+
+test("isProfileUnreachable: only that error", () => {
+  assert.equal(isProfileUnreachable(new Error("x")), false);
+  assert.equal(isProfileUnreachable(null), false);
+  assert.equal(isProfileUnreachable(new ProfileUnreachableError()), true);
 });
 
 await Promise.all(pending);
