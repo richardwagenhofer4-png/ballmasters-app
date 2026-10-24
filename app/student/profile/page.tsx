@@ -3,12 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { signOutUser } from "@/lib/signOut";
 import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
-import { clearAuthCookies } from "@/lib/cookies";
 import { useRef } from "react";
 import InitialsAvatar, { AVATAR_OPTIONS } from "@/components/InitialsAvatar";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
@@ -115,8 +114,7 @@ export default function StudentProfilePage() {
   }
 
   async function handleSignOut() {
-    await signOut(auth);
-    clearAuthCookies();
+    await signOutUser();
     router.push("/login");
   }
 
@@ -150,8 +148,7 @@ export default function StudentProfilePage() {
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Deletion failed");
-      await signOut(auth);
-      clearAuthCookies();
+      await signOutUser({ removeToken: false }); // the account and its profile are already gone
       router.push("/login?deleted=1");
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : "Something went wrong.");

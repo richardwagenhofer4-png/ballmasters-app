@@ -2,9 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { clearAuthCookies } from "@/lib/cookies";
+import { signOutUser } from "@/lib/signOut";
 
 export default function IncompleteProfilePage() {
   const router = useRouter();
@@ -13,8 +11,8 @@ export default function IncompleteProfilePage() {
   async function handleSignOut() {
     setLoading(true);
     try {
-      clearAuthCookies();
-      await signOut(auth);
+      // No profile here, so there is no push token to remove from one.
+      await signOutUser({ removeToken: false });
       router.push("/login");
     } catch {
       setLoading(false);

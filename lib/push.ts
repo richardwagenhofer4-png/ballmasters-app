@@ -45,6 +45,15 @@ export async function pushPermission(): Promise<PushPermission> {
 
 const savedKey = (uid: string) => `ballmasters_fcm_saved:${uid}`;
 
+/** Forget that this device saved its token for `uid` (called at sign-out, so the next sign-in saves it again). */
+export function forgetSavedPushToken(uid: string): void {
+  try {
+    localStorage.removeItem(savedKey(uid));
+  } catch {
+    // no storage
+  }
+}
+
 /** Store this device's FCM token on the user's doc (skipped when unchanged). */
 export async function saveNativePushToken(uid: string, token?: string): Promise<void> {
   if (!nativePushAvailable()) return;

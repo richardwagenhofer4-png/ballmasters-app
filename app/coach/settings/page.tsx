@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { signOutUser } from "@/lib/signOut";
 import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
-import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import NotificationsToggle from "@/components/NotificationsToggle";
 
@@ -86,8 +85,7 @@ export default function SettingsPage() {
   }
 
   async function handleSignOut() {
-    await signOut(auth);
-    clearAuthCookies();
+    await signOutUser();
     router.push("/login");
   }
 
@@ -106,8 +104,7 @@ export default function SettingsPage() {
       // The API explains head-coach / last-admin refusals in the error text;
       // show it verbatim rather than a generic failure message.
       if (!res.ok) throw new Error(data.error ?? "Deletion failed");
-      await signOut(auth);
-      clearAuthCookies();
+      await signOutUser({ removeToken: false }); // the account and its profile are already gone
       router.push("/login?deleted=1");
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : "Something went wrong.");

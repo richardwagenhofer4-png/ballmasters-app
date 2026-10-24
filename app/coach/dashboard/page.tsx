@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, onSnapshot, query, where, type QueryDocumentSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { signOutUser } from "@/lib/signOut";
 import { readOwnUserDoc } from "@/lib/ownProfile";
-import { clearAuthCookies } from "@/lib/cookies";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import VideoActionsMenu from "@/components/VideoActionsMenu";
 import { loginTrace } from "@/lib/loginDiagnostics";
@@ -291,8 +291,7 @@ export default function CoachDashboard() {
   }, [studentStats, studentSearch]);
 
   async function handleSignOut() {
-    await signOut(auth);
-    clearAuthCookies();
+    await signOutUser();
     router.push("/login");
   }
 

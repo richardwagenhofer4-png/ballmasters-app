@@ -3,13 +3,13 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection, doc, getDocs, query, updateDoc, where,
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { signOutUser } from "@/lib/signOut";
 import { readOwnUserDoc } from "@/lib/ownProfile";
-import { clearAuthCookies } from "@/lib/cookies";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
@@ -414,8 +414,7 @@ function CoachVideosPage() {
   }
 
   async function handleSignOut() {
-    await signOut(auth);
-    clearAuthCookies();
+    await signOutUser();
     router.push("/login");
   }
 
