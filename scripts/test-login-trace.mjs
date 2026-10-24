@@ -109,7 +109,10 @@ async function submitLogin(page) {
   if (probe) {
     const names = loginCrumbs(probe).map(b => b.message);
     await check("A: breadcrumbs cover sign-in → auth state → profile → first query → complete, in order", async () => {
-      const want = ["begin", "signin_start", "signin_ok", "after_login", "route", "coach_layout_profile_ok", "profile_loaded", "coach_dash_videos_query_ok", "first_query_loaded", "complete"];
+      // afterLogin is single-flight now: the auth listener's run starts it, the submit handler's run
+      // joins it ("after_login_joined_in_flight"), so "after_login" itself appears once, early.
+      const want = ["begin", "signin_start", "signin_ok", "route", "coach_layout_profile_ok", "profile_loaded", "coach_dash_videos_query_ok", "first_query_loaded", "complete"];
+      assert.ok(names.includes("after_login"), names.join(", "));
       let from = 0;
       for (const w of want) {
         const at = names.indexOf(w, from);
