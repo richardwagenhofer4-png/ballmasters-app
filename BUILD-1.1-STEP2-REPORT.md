@@ -750,3 +750,80 @@ Changed:
 - The `lastActiveAt` write now happens about 2 to 9.5 seconds after sign-in instead of at once. Anything that depends on that timestamp being fresh within seconds of login would notice; nothing in this repo does (the retention job reads it daily).
 - Writes to `users/{uid}` by other code (push token, notifications toggle) are not gated; they happen after user action, not at sign-in.
 - The Capacitor stand-in used for the Google test fakes only `FirebaseAuthentication.signInWithGoogle`; Apple goes through the same `handleSocialLogin` code, but Apple's sheet was not simulated.
+
+
+---
+
+## 13. Step 8
+
+Branch `build-1.1-paywall`, started from `c063b7e`. Nothing under `ios/` touched, `firestore.rules` untouched, `main` untouched, no `npx cap sync`, nothing deployed. Paywall switch still **off**. **Nothing here has been tried on an iPhone**; that is the next test.
+
+Evidence for the three problems came from the phone test of 24 Oct on release `c063b7e` (Sentry `JAVASCRIPT-NEXTJS-4`, two events). Everything below was exercised in real WebKit with the iPhone 14 profile against the local Firebase emulators with fake data, plus unit tests.
+
+### Two things I found while reproducing, which change how to read the three problems
+
+1. **On the old code the iPhone-app push write raced the first profile read exactly like the `lastActiveAt` write did in §12.** With a stand-in for the 1.1 app (push permission granted), the old code stranded **10 of 10** sign-ins on `/incomplete-profile`, although the profile existed: the first read came back as a document that **exists but has no role** (only the token fields from the pending `setDoc` merge). Without the push stand-in the same code stranded 6 of 20. So on the real 1.1 app the intermittent "empty profile after login" and "Account setup required" are very likely the same race plus the token write. This is also why `localStorage` got the string `"undefined"` as the role.
+2. **"A coach/admin lands on the student screens" is reproducible from one fail-closed branch.** On the old code, when the coach layout's profile read fails, `app/coach/layout.tsx` sends the person to `/student/dashboard` (student bottom menu, all zeros). The new test, run against the old code, ends on `/student/dashboard`. That fits the report of an admin landing there after switching accounts. I have not proved it was the cause that day, so the tracer for it is in too (see A4).
+
+### What changed, commit by commit
+
+| Commit | Change |
+|---|---|
+| `f1037a9` **Own-profile reads can no longer hang** | `readOwnUserDoc` (the path every own-profile read uses) gives each read **5 s**. If it hasn't answered, or Firestore says the client is offline: `disableNetwork` then `enableNetwork` **once** (shared, so two stuck reads don't both reset), then `getDocFromServer` under the same 5 s. Still stuck: throws `ProfileUnreachableError`. A stuck "missing" re-check is also unreachable, never a second "missing". A timeout is never "missing". Sentry warning events: "Login: profile_read_recovered_after_reset" and "Login: profile_unreachable". New `lib/roles.ts` (`isValidRole`). |
+| `5fd70c2` **Problem C: shared sign-out** | `signOutUser()` (`lib/signOut.ts`, logic in `signOut.core.ts`): **before** signing out, while still authenticated, `updateDoc` with `deleteField` removes `fcmToken` and `fcmTokenSource` from the person's profile; best effort, **max 2 s**, errors ignored, never blocks sign-out; clears the "this device already saved its token" marker so the next sign-in saves it again; then signs out and clears the role cookies and cached role. Used by every sign-out button (student and coach dashboards, coach videos, student profile, coach settings, incomplete-profile). Account deletion and the no-profile screen skip the removal. `ballmasters_push_asked` is left alone ("ask once per account" stays). |
+| `3578b5e` **Problem B, cause** | `saveNativePushToken` uses `updateDoc` (never `setDoc`), and only after `hasUsableProfile` confirms a profile with a valid role. Same for the web token save in `lib/notifications.ts`. If the profile isn't there yet, the iPhone bridge retries as the person navigates. |
+| `8ae57e4` **Login page** | `afterLogin` is **single-flight per uid**: the auth listener and the submit handler share one run, so one profile read (the old double run is what hung in Sentry). On "profile unreachable": a banner "Couldn't reach Ball Masters" with **Try again** and **Use a different account**, the sign-in form back, **no endless spinner, no redirect, no "no account", nothing stored as a role**. Apple and Google now go through the same function (it checks the profile, then routes). **Problem B, login side:** a `users/{uid}` document **without a valid role** is treated as no profile: email goes to `/incomplete-profile`; Apple/Google get "There's no Ball Masters account for this Apple ID yet…" and are signed out. `"undefined"` is never written. |
+| `a161bdb` **Every other caller** | Same "couldn't reach / Try again" state (full page, or an inline banner where sign-out must stay reachable) on: coach layout, coach and student dashboards, coach videos / athletes / upload / coaches, drill view, athlete page, invite-coach, student messages, student profile and coach settings; `not-found` stays put instead of guessing. The **coach layout never redirects on a timeout**; the redirects it still makes (no valid coach/admin role, or another failed read) are now **Sentry events** (`coach_layout_redirect_student`, `…_after_error`). A coach/admin who lands on the student dashboard right after login is a Sentry event too (`staff_on_student_dashboard_after_login`, with the cookie and cached role that led there). |
+| `526d165` **Token write waits; role-less document** | Found by the 10-of-10 result above: the token write now also waits until profile reads have settled (`lastActive.settled`), so no write is pending while a read is in flight. And a document that **exists but has no valid role** now gets the same second look as "missing" (`isUsable` in the retry logic). |
+| `70b7f10` | `setAuthCookies` refuses a role that isn't `coach`/`admin`/`student`. |
+| `9504c64`, `8930434`, `ec444c6`, `c7a1250`, `9f7e0a2` | Tests and fixtures, below. |
+
+### Test evidence (all on the final tree, `70b7f10`)
+
+- `npx tsc --noEmit` exit **0**; `npm run lint` **0 errors** (66 warnings, unchanged); `npm run build` ✅; rules emulator suite **395/395**.
+- Unit: `test-profile-read` **39** (10 new for stuck reads and unreachable, 3 for `settled`, 3 for role-less documents, 23 from Step 7 unchanged), `test-sign-out` **7** (new), `test-login-diagnostics` 19, `test-captions` 16, `test-transcribe-route` 9.
+- WebKit/emulator: `test-profile-unreachable` **16** (new), `test-push-token` **13** (new; passes under **this branch's rules and under `main`'s live rules**), `test-profile-missing` 9, `test-login-trace` 12, `test-videos-filter` 18.
+- One Step 7/6 expectation changed on purpose: `test-login-trace` used to expect `after_login` to appear after `signin_ok`; with single-flight the submit handler's run now joins the listener's, so it expects one early `after_login` and an `after_login_joined_in_flight` step. Every Step 7 test still passes.
+
+**A5, a read that never answers** (`test-profile-unreachable`, Firestore requests held open):
+- Network comes back when the app drops its connection: the app gave up at about 5 s, reset once, the sign-in **completed by itself**, and Sentry got the "recovered after reset" warning.
+- Firestore stays dead: the message and Try again button appeared **within 14 s** on the login screen, the coach screens and the student dashboard; no redirect, no stored role; after the network returned, Try again worked each time.
+- A healthy sign-in made **one** profile read although both the listener and the submit handler ran `afterLogin`.
+- Against the old code **14 of those 16 checks fail** (including: the coach ends on `/student/dashboard`).
+
+**B** (`test-push-token`, with a stand-in for the iPhone app: Google sign-in, push permission, a device token):
+- An Apple/Google sign-in with no Ball Masters account: the "no account" message, **no `users` document created**, no token without a role anywhere, no `"undefined"` stored.
+- A real coach's token is still saved (`fcmToken` + `fcmTokenSource: "ios"`).
+- Run against the old code under `main`'s live rules (which let a client create a profile): **a role-less `users` document is created** (docs 4 → 5). The branch's own rules already block client creates, so under them the old code can't show it. That is why the test can run under either rules file (`RULES_FILE=`).
+
+**C** (same test):
+- Sign-out removed the token **and its source** and nothing else (role, name, email stay); cookies and cached role cleared.
+- Signing in as a different account on the same phone put the token on the new account only; signing that account out removed it; signing the coach back in saved it again.
+- With Firestore unreachable, sign-out still completed in under 6 s.
+
+**Repro, `scripts/repro-profile-missing-after-login.mjs`** (a fresh stack per sign-in; stranded = still on the login flow 14 s after Sign in):
+
+| Run | Old (`c063b7e`) | New |
+|---|---|---|
+| Plain web | 6 of 20 (Step 7) | **0 of 20** |
+| As the 1.1 iPhone app (`NATIVE=1`, push on) | **10 of 10** | **0 of 10** |
+
+### Decisions where the brief was silent
+
+1. **Limits:** 5 s per read; one reset; 5 s again after it. So the worst case before "couldn't reach" is about 10 to 11 s. A working but slow first read of 5 to 10 s now triggers one connection reset and may succeed on the second look.
+2. **Firestore's "client is offline" (`unavailable`)** takes the same road as a timeout, because it is the same condition. Other errors (e.g. permission-denied) are thrown as before.
+3. **The retry itself failing** (A) throws unreachable, it does not say "no account".
+4. **"Use a different account"** on the login banner signs out through the shared helper (which may spend up to 2 s trying to remove a token on a dead connection).
+5. **Token removal is unconditional.** The profile holds one token field, so signing out on a laptop also removes a phone's token if the phone was the last device to write one. That design limit was already there (the last device to sign in wins).
+6. **`FirebaseMessaging.deleteToken()` is not called at sign-out.** The brief asked only for the profile fields; with them gone the server has nothing to send to, but a notification already sent could still arrive.
+7. **The existing token-only document `users/R8ys2TfC2bbD3GpWow5mpFms2lq2` was not touched.** With this code an Apple sign-in onto it is treated as no profile: the "no account" message and sign-out, and nothing more is written to it. Richard still needs to delete it.
+8. **Writers I did not change:** the notifications toggle and the profile/settings name and avatar saves still use `setDoc` merge; they run only on screens that need an existing profile.
+9. **The cached-role shortcut is unchanged** (email login trusts `ballmasters_role` in `localStorage` without checking whose it is). Sign-out clears it, so I found no normal path that leaves it stale, but it is a second possible source of "wrong screens" that the new Sentry event will show if it ever happens.
+
+### Not verified
+
+- **Nothing on a real iPhone**, and nothing against the production backend. All of this is WebKit on a laptop against the Auth and Firestore emulators.
+- **The iPhone app is only imitated**: a small JavaScript stand-in for Capacitor's iOS bridge answers Google sign-in and the push plugin (permission granted, one fixed token). Real Apple sign-in, the real push plugin, APNs/FCM delivery, and whether a signed-out account really stops receiving that phone's notifications were not exercised.
+- **The 8-minute hang itself was reproduced by holding requests open**, not by an actual idle phone. Whether a real dead connection behaves the same way when `disableNetwork`/`enableNetwork` is called is untested.
+- **The "wrong screens" cause is shown as a possible mechanism, not proven for that day's report.**
+- Under `main`'s live rules the old bug B reproduces; the branch's rules (not yet deployed) already refuse client-created profiles, so after the rules deploy that part of B cannot recur by itself, though the role-less-document handling still matters for existing token-only documents.
