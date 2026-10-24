@@ -83,6 +83,9 @@ const traceSteps = page => page.evaluate(() => {
 });
 const roleLeak = page => page.evaluate(() => [localStorage.getItem("ballmasters_role"), document.cookie]);
 
+// (Short timeout, errors ignored: if the message never appeared, the check above has already failed.)
+const pressTryAgain = banner => banner.getByRole("button", { name: /try again/i }).click({ timeout: 3000 }).catch(() => {});
+
 const ALICE = { email: "alice@example.test", password: "password1" };
 
 // Warm the compile of the pages used below, and get past the first-login flake.
@@ -166,7 +169,7 @@ const ALICE = { email: "alice@example.test", password: "password1" };
     assert.equal(e.level, "warning");
   });
   net.blocked = false;
-  await banner.getByRole("button", { name: /try again/i }).click();
+  await pressTryAgain(banner);
   await check("2: once the connection is back, Try again signs in", async () => {
     await page.waitForURL(/\/coach\//, { timeout: 30000 });
   });
@@ -197,7 +200,7 @@ const ALICE = { email: "alice@example.test", password: "password1" };
     assert.ok(!/\/student\//.test(new URL(page.url()).pathname), page.url());
   });
   net.blocked = false;
-  await banner.getByRole("button", { name: /try again/i }).click();
+  await pressTryAgain(banner);
   await check("3: Try again then shows the coach's videos", async () => {
     await page.waitForSelector("text=/\\d+ results?/", { timeout: 40000 });
     assert.ok(/\/coach\/videos/.test(page.url()));
@@ -223,7 +226,7 @@ const ALICE = { email: "alice@example.test", password: "password1" };
     assert.ok(await banner.getByRole("button", { name: /try again/i }).isVisible());
   });
   net.blocked = false;
-  await banner.getByRole("button", { name: /try again/i }).click();
+  await pressTryAgain(banner);
   await check("4: Try again then shows the dashboard", async () => {
     await page.waitForSelector("text=Alice", { timeout: 40000 });
   });
