@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import { getOrCreateThread, sendMessage } from "@/lib/messaging";
@@ -129,6 +130,8 @@ export default function StudentProfilePage() {
 
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [student, setStudent] = useState<StudentDoc | null>(null);
   const [videos, setVideos] = useState<VideoDoc[]>([]);
 
@@ -255,6 +258,7 @@ export default function StudentProfilePage() {
         setVideos(videoList);
       } catch (err) {
         console.error("[student-profile]", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
       } finally {
         setLoading(false);
       }
@@ -380,6 +384,8 @@ export default function StudentProfilePage() {
       </main>
     );
   }
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (notFound || !student) {
     return (

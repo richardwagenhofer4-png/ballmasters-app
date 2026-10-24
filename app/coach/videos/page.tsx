@@ -9,7 +9,8 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { signOutUser } from "@/lib/signOut";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
@@ -145,6 +146,8 @@ function CoachVideosPage() {
   const searchParams = useSearchParams();
 
   const [loading, setLoading] = useState(true);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const { newComment, newMessage } = useNotificationCounts();
@@ -249,6 +252,7 @@ function CoachVideosPage() {
         }
       } catch (err) {
         console.error("[coach/videos]", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
         setLoading(false);
       }
     });
@@ -417,6 +421,8 @@ function CoachVideosPage() {
     await signOutUser();
     router.push("/login");
   }
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (loading) {
     return (

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { useAuth } from "@/lib/AuthContext";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
@@ -84,6 +85,8 @@ export default function StudentsListPage() {
   const showPlans = planToolsVisible(useAppConfig());
 
   const [loading, setLoading] = useState(true);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [stats, setStats] = useState<Record<string, StudentStat>>({});
   const [search, setSearch] = useState("");
@@ -151,6 +154,7 @@ export default function StudentsListPage() {
         setStats(statsMap);
       } catch (err) {
         console.error("[coach/students]", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
       } finally {
         setLoading(false);
       }
@@ -178,6 +182,8 @@ export default function StudentsListPage() {
       return sortDir === "desc" ? bv - av : av - bv;
     });
   }, [filtered, sortBy, sortDir, stats]);
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (authLoading || loading) {
     return (

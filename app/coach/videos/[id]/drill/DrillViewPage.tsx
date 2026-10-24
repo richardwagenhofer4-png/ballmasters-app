@@ -6,7 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, doc, getDoc, getDocs, query, updateDoc, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import CommentsSection from "@/components/CommentsSection";
 
 interface DrillDoc {
@@ -65,6 +66,8 @@ export default function DrillViewPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [activeTab, setActiveTab] = useState<"coach" | "student">("coach");
 
   // Edit modal state
@@ -150,7 +153,8 @@ export default function DrillViewPage() {
           })));
         }
       } catch (err: unknown) {
-        setError((err as Error).message ?? "Failed to load drill.");
+        if (isProfileUnreachable(err)) setUnreachable(true);
+        else setError((err as Error).message ?? "Failed to load drill.");
       } finally {
         setLoading(false);
       }
@@ -226,6 +230,8 @@ export default function DrillViewPage() {
       </main>
     );
   }
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (error) {
     return (

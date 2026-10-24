@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { signOutUser } from "@/lib/signOut";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import { ProfileUnreachableBanner } from "@/components/ProfileUnreachable";
 import { useAuth } from "@/lib/AuthContext";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import NotificationsToggle from "@/components/NotificationsToggle";
@@ -50,6 +51,8 @@ export default function SettingsPage() {
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const deleteInputRef = useRef<HTMLInputElement>(null);
+  // The profile could not be read: say so (sign-out must stay reachable here, so a banner, not a blocked page).
+  const [unreachable, setUnreachable] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -57,6 +60,9 @@ export default function SettingsPage() {
     readOwnUserDoc(user.uid).then(snap => {
       const data = snap.data();
       setNameInput(data?.fullName ?? data?.name ?? user.displayName ?? "");
+    }).catch(err => {
+      if (isProfileUnreachable(err)) setUnreachable(true);
+      else console.error("[coach/settings]", err);
     });
   }, [authLoading, user, router]);
 
@@ -114,6 +120,7 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 pb-20">
+      {unreachable && <ProfileUnreachableBanner />}
       <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-5 px-4">
         <div className="flex items-center gap-2 mb-4">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />

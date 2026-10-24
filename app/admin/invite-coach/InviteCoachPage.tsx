@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { createCoachInvite } from "@/lib/coachInvites";
 
 interface Invite {
@@ -16,6 +17,8 @@ export default function InviteCoachPage() {
   const router = useRouter();
   const [authLoading, setAuthLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [adminUid, setAdminUid] = useState("");
 
   const [email, setEmail] = useState("");
@@ -27,7 +30,14 @@ export default function InviteCoachPage() {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { router.push("/login"); return; }
-      const snap = await readOwnUserDoc(user.uid);
+      let snap;
+      try {
+        snap = await readOwnUserDoc(user.uid);
+      } catch (err) {
+        // Could not be reached at all: not "access denied", a retry.
+        if (isProfileUnreachable(err)) { setUnreachable(true); setAuthLoading(false); return; }
+        throw err;
+      }
       const role = snap.data()?.role as string | undefined;
       if (role !== "admin") {
         setAuthLoading(false);
@@ -67,6 +77,8 @@ export default function InviteCoachPage() {
     setCopied(link);
     setTimeout(() => setCopied(null), 2500);
   }
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (authLoading) {
     return (

@@ -6,7 +6,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { signOutUser } from "@/lib/signOut";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import { ProfileUnreachableBanner } from "@/components/ProfileUnreachable";
 import { useAuth } from "@/lib/AuthContext";
 import { useRef } from "react";
 import InitialsAvatar, { AVATAR_OPTIONS } from "@/components/InitialsAvatar";
@@ -67,6 +68,8 @@ export default function StudentProfilePage() {
   const ent = useEntitlements();
   const showPlan = ent.paywallEnabled && ent.ready && !ent.isStaff && ent.plan !== null;
   const messagingLocked = ent.paywallEnabled && !ent.canMessage;
+  // The profile could not be read: say so (sign-out must stay reachable here, so a banner, not a blocked page).
+  const [unreachable, setUnreachable] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState<{ tone: "ok" | "info" | "error"; text: string } | null>(null);
 
@@ -79,6 +82,9 @@ export default function StudentProfilePage() {
       setName(data?.fullName ?? data?.name ?? user.displayName ?? "Athlete");
       setNameInput(data?.fullName ?? data?.name ?? user.displayName ?? "");
       setAvatarId(data?.avatarId ?? "");
+    }).catch(err => {
+      if (isProfileUnreachable(err)) setUnreachable(true);
+      else console.error("[student/profile]", err);
     });
   }, [authLoading, user, router]);
 
@@ -176,6 +182,7 @@ export default function StudentProfilePage() {
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col pb-20">
+      {unreachable && <ProfileUnreachableBanner />}
       <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-6 px-4">
         <div className="flex items-center justify-between mb-5">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />

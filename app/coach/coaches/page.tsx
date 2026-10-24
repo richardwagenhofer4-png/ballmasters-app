@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { collection, doc, getDoc, getDocs, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { useAuth } from "@/lib/AuthContext";
 import { createCoachInvite } from "@/lib/coachInvites";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -65,6 +66,8 @@ export default function CoachesPage() {
   const { newComment, newMessage } = useNotificationCounts();
 
   const [loading, setLoading] = useState(true);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [viewerUid, setViewerUid] = useState("");
   const [coaches, setCoaches] = useState<CoachRow[]>([]);
 
@@ -129,6 +132,7 @@ export default function CoachesPage() {
         setSelectedHeadCoach(currentHeadCoachId);
       } catch (err) {
         console.error("[coaches page]", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
       } finally {
         setLoading(false);
       }
@@ -202,6 +206,8 @@ export default function CoachesPage() {
   }
 
   const headCoachName = coaches.find(c => c.uid === headCoachId)?.name ?? null;
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (authLoading || loading) {
     return (

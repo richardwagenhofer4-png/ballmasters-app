@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { getUserProfile } from "@/lib/firestore";
+import { isValidRole } from "@/lib/roles";
 
 export default function NotFound() {
   const router = useRouter();
@@ -15,8 +16,13 @@ export default function NotFound() {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setTimeout(async () => {
-          const profile = await getUserProfile(user.uid);
-          if (!profile) { router.push("/incomplete-profile"); return; }
+          let profile;
+          try {
+            profile = await getUserProfile(user.uid);
+          } catch {
+            return; // couldn't be reached: stay on this page rather than guess where to send them
+          }
+          if (!profile || !isValidRole(profile.role)) { router.push("/incomplete-profile"); return; }
           router.push(profile.role === "coach" || profile.role === "admin" ? "/coach/dashboard" : "/student/dashboard");
         }, 3000);
       }

@@ -7,7 +7,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, onSnapshot, query, where, type QueryDocumentSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { signOutUser } from "@/lib/signOut";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import VideoActionsMenu from "@/components/VideoActionsMenu";
 import { loginTrace } from "@/lib/loginDiagnostics";
@@ -129,6 +130,8 @@ export default function CoachDashboard() {
   const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [coachName, setCoachName] = useState("");
   const [students, setStudents] = useState<StudentData[]>([]);
@@ -238,6 +241,7 @@ export default function CoachDashboard() {
         }
       } catch (err) {
         console.error("[dashboard]", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
         // The view that follows is empty: say so in the login trace (bug 2).
         loginTrace.step("coach_dash_load_failed_showing_empty", {}, "error");
         setLoading(false);
@@ -303,6 +307,8 @@ export default function CoachDashboard() {
   }
 
   // ---- LOADING ----
+  if (unreachable) return <ProfileUnreachable />;
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">

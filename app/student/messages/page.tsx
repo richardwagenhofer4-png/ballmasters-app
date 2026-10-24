@@ -14,7 +14,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { useAuth } from "@/lib/AuthContext";
 import { getAthleteCoachId } from "@/lib/getAthleteCoach";
 import InitialsAvatar from "@/components/InitialsAvatar";
@@ -94,6 +95,8 @@ export default function StudentMessagesPage() {
 
   const [loading, setLoading] = useState(true);
   const [redirecting, setRedirecting] = useState(false);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [athleteName, setAthleteName] = useState("");
   const [avatarId, setAvatarId] = useState("");
@@ -194,6 +197,7 @@ export default function StudentMessagesPage() {
         );
       } catch (err) {
         console.error("[student/messages] init error:", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
       } finally {
         setLoading(false);
       }
@@ -313,6 +317,8 @@ export default function StudentMessagesPage() {
       </main>
     );
   }
+
+  if (unreachable) return <ProfileUnreachable />;
 
   if (authLoading || loading || redirecting) {
     return (

@@ -3,14 +3,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
 import { loginTrace } from "@/lib/loginDiagnostics";
+import { isValidRole } from "@/lib/roles";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [allowed, setAllowed] = useState(false);
   const [checking, setChecking] = useState(true);
+  // The profile could not be read at all: offer a retry instead of guessing a role.
+  const [unreachable, setUnreachable] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     // Wait for auth to resolve before deciding anything.
@@ -25,6 +30,7 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
 
     let cancelled = false;
     setChecking(true);
+    setUnreachable(false);
 
     (async () => {
       try {
@@ -32,18 +38,26 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
         const role = snap.data()?.role;
         if (cancelled) return;
         loginTrace.step("coach_layout_role", { role: typeof role === "string" ? role : "none", profileExists: snap.exists() });
-        if (role === "coach" || role === "admin") {
+        if (isValidRole(role) && role !== "student") {
           setAllowed(true);
           setChecking(false);
         } else {
-          // Missing profile or non-coach role -> fail closed to the student home.
-          loginTrace.step("coach_layout_redirect_student", { role: typeof role === "string" ? role : "none" }, "warning");
+          // Missing profile, no valid role, or a student -> fail closed to the
+          // student home. Reported to Sentry: a coach or admin sent here after
+          // login is the "wrong screens" report, and this says why.
+          loginTrace.flag("coach_layout_redirect_student", { role: typeof role === "string" ? role : "none", profileExists: snap.exists() }, user.uid, "warning");
           router.replace("/student/dashboard");
         }
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        // Failed read -> fail closed.
-        loginTrace.step("coach_layout_redirect_student_after_error", {}, "warning");
+        // Could not be reached at all: never a verdict on who this is.
+        if (isProfileUnreachable(err)) {
+          setUnreachable(true);
+          setChecking(false);
+          return;
+        }
+        // Any other failed read -> fail closed (reported, see above).
+        loginTrace.flag("coach_layout_redirect_student_after_error", { code: String((err as { code?: unknown })?.code ?? "none") }, user.uid, "warning");
         router.replace("/student/dashboard");
       }
     })();
@@ -51,7 +65,9 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
     return () => {
       cancelled = true;
     };
-  }, [user, loading, router]);
+  }, [user, loading, router, attempt]);
+
+  if (unreachable) return <ProfileUnreachable onRetry={() => setAttempt(a => a + 1)} />;
 
   // While auth is loading, while the role lookup is in flight, or before access is
   // granted, never render the coach UI — it must not flash before a redirect.

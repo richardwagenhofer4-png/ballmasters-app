@@ -7,7 +7,8 @@ import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { signOutUser } from "@/lib/signOut";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import ViewToggle from "@/components/ViewToggle";
 import { useViewMode } from "@/lib/useViewMode";
@@ -142,6 +143,8 @@ export default function StudentDashboard() {
   const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
+  // The profile could not be read at all: offer a retry instead of an empty or wrong view.
+  const [unreachable, setUnreachable] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
   const [studentName, setStudentName] = useState("");
   const [avatarId, setAvatarId] = useState("");
@@ -168,7 +171,23 @@ export default function StudentDashboard() {
 
       try {
         const [profileSnap, videosSnap] = await Promise.all([
-          loginTrace.track("student_dash_profile", readOwnUserDoc(user.uid), "profile"),
+          loginTrace.track(
+            "student_dash_profile",
+            readOwnUserDoc(user.uid).then(snap => {
+              // A coach or admin who has just signed in and lands on the STUDENT
+              // screens is the "wrong screens" report. Say so in Sentry, with how
+              // they got here (cookie / cached role) so it explains itself.
+              const role = snap.data()?.role;
+              if ((role === "coach" || role === "admin") && loginTrace.active()) {
+                const cookie = document.cookie.match(/(?:^|; )ballmasters_role=([^;]*)/)?.[1] ?? "none";
+                let cached = "none";
+                try { cached = localStorage.getItem("ballmasters_role") ?? "none"; } catch { /* no storage */ }
+                loginTrace.flag("staff_on_student_dashboard_after_login", { role, roleCookie: cookie, cachedRole: cached }, user.uid, "warning");
+              }
+              return snap;
+            }),
+            "profile"
+          ),
           loginTrace.track(
             "student_dash_videos_query",
             getDocs(query(collection(db, "videos"), where("studentIds", "array-contains", user.uid))),
@@ -194,6 +213,7 @@ export default function StudentDashboard() {
         setLoading(false);
       } catch (err) {
         console.error("[student/dashboard]", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
         // The view that follows is empty: say so in the login trace (bug 2).
         loginTrace.step("student_dash_load_failed_showing_empty", {}, "error");
         setLoading(false);
@@ -226,6 +246,8 @@ export default function StudentDashboard() {
   }
 
   // ---- LOADING ----
+  if (unreachable) return <ProfileUnreachable />;
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center">

@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
-import { readOwnUserDoc } from "@/lib/ownProfile";
+import { isProfileUnreachable, readOwnUserDoc } from "@/lib/ownProfile";
+import ProfileUnreachable from "@/components/ProfileUnreachable";
 import { createNotification, sendVideoNotification } from "@/lib/notifications";
 import { planToolsVisible, useAppConfig } from "@/lib/paywall";
 import { pickPlanFields, type PlanFields } from "@/lib/entitlements";
@@ -151,6 +152,8 @@ export default function UploadPage() {
   const [studentSearch, setStudentSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [studentsLoading, setStudentsLoading] = useState(true);
+  // The profile could not be read at all: offer a retry instead of a wrong athlete list.
+  const [unreachable, setUnreachable] = useState(false);
   // Plan badges in the picker: shown once the paywall is live (or plan tools are previewed).
   const showPlans = planToolsVisible(useAppConfig());
 
@@ -188,6 +191,7 @@ export default function UploadPage() {
         );
       } catch (err) {
         console.error("Failed to load students:", err);
+        if (isProfileUnreachable(err)) setUnreachable(true);
       } finally {
         setStudentsLoading(false);
       }
@@ -378,6 +382,8 @@ export default function UploadPage() {
   const canSubmit = !isWorking && !!title.trim() && (
     mode === "standard" ? !!file : (!!coachFile && !!studentFile)
   );
+
+  if (unreachable) return <ProfileUnreachable />;
 
   // ---- SUCCESS SCREEN ----
   if (status === "success") {
