@@ -23,6 +23,7 @@ import { db } from "@/lib/firebase";
 import { lastActive } from "@/lib/lastActive";
 import { loginTrace } from "@/lib/loginDiagnostics";
 import { ReadTimeoutError, readWithMissingRetry } from "@/lib/ownProfile.core";
+import { isValidRole } from "@/lib/roles";
 
 export { isProfileUnreachable, ProfileUnreachableError } from "@/lib/ownProfile.core";
 
@@ -70,5 +71,21 @@ export async function readOwnUserDoc(
     );
   } finally {
     readDone();
+  }
+}
+
+/**
+ * Does this person already have a real profile: a users/{uid} document with a
+ * valid role? Push tokens are only ever stored on one. (A token write must
+ * never be what brings a profile into existence: it once left Apple sign-ins
+ * with a "profile" that held only a token and no role.) A profile that can't be
+ * reached right now counts as "not yet": try again later.
+ */
+export async function hasUsableProfile(uid: string): Promise<boolean> {
+  try {
+    const snap = await readOwnUserDoc(uid);
+    return snap.exists() && isValidRole(snap.data()?.role);
+  } catch {
+    return false;
   }
 }

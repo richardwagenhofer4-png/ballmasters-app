@@ -4,15 +4,23 @@
 // existing web-push code in lib/notifications.ts is untouched.
 //
 // The FCM token is stored where the web path stores it — users/{uid}.fcmToken,
-// with a merge write on the user's own doc (allowed by the rules) — plus
+// an update of the user's own doc (allowed by the rules) — plus
 // fcmTokenSource: "ios" so the server knows it can reach the iPhone app.
 // users/{uid}.notificationsEnabled === false (the toggle on the profile /
 // settings screens) makes the server skip that person.
+//
+// The token is only ever saved on a profile that already exists with a valid
+// role, and with updateDoc, never setDoc: a token write must not be what
+// creates users/{uid}. (It used to be, with setDoc merge, which gave an Apple
+// sign-in with no Ball Masters account a document holding only the token, so
+// the login mistook it for a profile.) lib/signOut.ts removes the token again
+// at sign-out.
 
 import { useSyncExternalStore } from "react";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { hasNativePlugin } from "@/lib/nativeApp";
+import { hasUsableProfile } from "@/lib/ownProfile";
 
 export type PushPermission = "granted" | "denied" | "prompt" | "unavailable";
 
@@ -54,23 +62,35 @@ export function forgetSavedPushToken(uid: string): void {
   }
 }
 
-/** Store this device's FCM token on the user's doc (skipped when unchanged). */
-export async function saveNativePushToken(uid: string, token?: string): Promise<void> {
-  if (!nativePushAvailable()) return;
+/**
+ * "saved": written now. "unchanged": this device already saved this token for
+ * this account. "unavailable": not the 1.1 app, or no token to save.
+ * "not_ready": the account has no usable profile yet (or it can't be reached),
+ * so nothing was written: try again later.
+ */
+export type SaveTokenResult = "saved" | "unchanged" | "unavailable" | "not_ready";
+
+/** Store this device's FCM token on the user's doc (skipped when unchanged). Never creates the doc. */
+export async function saveNativePushToken(uid: string, token?: string): Promise<SaveTokenResult> {
+  if (!nativePushAvailable()) return "unavailable";
   const { FirebaseMessaging } = await loadMessaging();
   const t = token ?? (await FirebaseMessaging.getToken()).token;
-  if (!t) return;
+  if (!t) return "unavailable";
   try {
-    if (localStorage.getItem(savedKey(uid)) === t) return;
+    if (localStorage.getItem(savedKey(uid)) === t) return "unchanged";
   } catch {
     // no storage — just write
   }
-  await setDoc(doc(db, "users", uid), { fcmToken: t, fcmTokenSource: "ios" }, { merge: true });
+  // Only a profile that is really there, with a valid role, may carry a token.
+  if (!(await hasUsableProfile(uid))) return "not_ready";
+  // updateDoc: fails (not-found) rather than creating the document.
+  await updateDoc(doc(db, "users", uid), { fcmToken: t, fcmTokenSource: "ios" });
   try {
     localStorage.setItem(savedKey(uid), t);
   } catch {
     // ignore
   }
+  return "saved";
 }
 
 /** Shows iOS's permission prompt (once per install), then registers the token. */

@@ -4,7 +4,10 @@
 // nothing at all on the web or in older app builds.
 //
 // - Keeps users/{uid}.fcmToken current: on sign-in when permission is already
-//   granted, and whenever FCM rotates the token (tokenReceived).
+//   granted, and whenever FCM rotates the token (tokenReceived). It only ever
+//   updates a profile that already exists with a valid role (lib/push.ts); it
+//   never creates users/{uid}. If the profile isn't there yet (an account being
+//   set up), it tries again as the person moves between screens.
 // - Asks for permission the first time a student opens the app after login
 //   (a /student screen), never at launch and never again after that.
 // - A tapped notification opens its data.url (a video or a message thread).
@@ -31,6 +34,8 @@ export default function NativePushBridge() {
   const pathname = usePathname();
   const uid = user?.uid ?? null;
   const uidRef = useRef<string | null>(uid);
+  // True while a token is waiting for the account's profile to exist.
+  const tokenWaitingRef = useRef(false);
 
   useEffect(() => {
     uidRef.current = uid;
@@ -62,11 +67,21 @@ export default function NativePushBridge() {
 
   // Signed in with permission already granted: make sure the token is stored.
   useEffect(() => {
+    tokenWaitingRef.current = false;
     if (!uid || !nativePushAvailable()) return;
     pushPermission()
       .then(permission => (permission === "granted" ? saveNativePushToken(uid) : undefined))
+      .then(result => { tokenWaitingRef.current = result === "not_ready"; })
       .catch(err => console.error("[push] token sync failed", err));
   }, [uid]);
+
+  // The profile wasn't ready at sign-in: look again when the person navigates.
+  useEffect(() => {
+    if (!uid || !tokenWaitingRef.current || !nativePushAvailable()) return;
+    saveNativePushToken(uid)
+      .then(result => { tokenWaitingRef.current = result === "not_ready"; })
+      .catch(err => console.error("[push] token retry failed", err));
+  }, [uid, pathname]);
 
   // First time a student opens the app after logging in: ask once.
   const inStudentArea = pathname?.startsWith("/student") ?? false;
