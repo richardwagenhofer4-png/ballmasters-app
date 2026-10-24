@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { getUserProfile } from "@/lib/firestore";
+import { getUserProfile, type UserProfile } from "@/lib/firestore";
+import { isProfileUnreachable } from "@/lib/ownProfile";
+import { isValidRole } from "@/lib/roles";
+import { signOutUser } from "@/lib/signOut";
+import { UNREACHABLE_HELP, UNREACHABLE_TITLE } from "@/components/ProfileUnreachable";
 import { setAuthCookies } from "@/lib/cookies";
 import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type SocialProvider } from "@/lib/socialSignIn";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
@@ -43,31 +47,104 @@ export default function LoginPage() {
   const socialInFlight = useRef(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  // Set when the profile could not be read at all (see showUnreachable).
+  const [unreachable, setUnreachable] = useState<{ uid: string; provider: SocialProvider | null } | null>(null);
 
-  async function afterLogin(uid: string) {
-    const cachedRole = localStorage.getItem("ballmasters_role");
+  // One afterLogin per person at a time. The auth listener and the submit
+  // handler both call it for the same sign-in; two profile reads started
+  // together on a connection that had died while the phone sat idle were the
+  // login that hung for 8 minutes (Sentry JAVASCRIPT-NEXTJS-4). The second call
+  // joins the first and gets the same outcome.
+  const afterLoginFlights = useRef(new Map<string, Promise<void>>());
+  function afterLogin(uid: string, provider: SocialProvider | null = null): Promise<void> {
+    const running = afterLoginFlights.current.get(uid);
+    if (running) {
+      loginTrace.step("after_login_joined_in_flight");
+      return running;
+    }
+    const run = runAfterLogin(uid, provider).finally(() => { afterLoginFlights.current.delete(uid); });
+    afterLoginFlights.current.set(uid, run);
+    return run;
+  }
+
+  // The profile could not be reached at all: say so and offer a retry. Never a
+  // redirect, never "no account", never an endless spinner.
+  function showUnreachable(uid: string, provider: SocialProvider | null) {
+    loginTrace.abandon("profile_unreachable_showing_retry");
+    setCheckingAuth(false);
+    setUnreachable({ uid, provider });
+  }
+
+  async function runAfterLogin(uid: string, provider: SocialProvider | null): Promise<void> {
+    // A cached role is trusted only for email sign-in, which always has one
+    // after a first successful login. Apple/Google always check the profile:
+    // they must find out whether this account exists at all.
+    const cachedRole = provider ? null : localStorage.getItem("ballmasters_role");
     loginTrace.step("after_login", { cachedRole: cachedRole ?? "none" });
-    if (cachedRole === "coach" || cachedRole === "admin" || cachedRole === "student") {
+    if (isValidRole(cachedRole)) {
       setAuthCookies(cachedRole);
       lastActive.request(uid, { force: true });
       loginTrace.step("route", { to: "/dashboard", role: cachedRole, via: "cached_role" });
       router.push("/dashboard");
       return;
     }
-    const profile = await loginTrace.track(
-      "login_profile_read",
-      getUserProfile(uid, meta => loginTrace.step("login_profile_snapshot", meta))
-    );
-    if (!profile) {
-      loginTrace.step("profile_missing_going_to_incomplete_profile", {}, "error");
+    let profile: UserProfile | null;
+    try {
+      profile = await loginTrace.track(
+        provider ? "social_profile_read" : "login_profile_read",
+        getUserProfile(uid, meta => loginTrace.step("login_profile_snapshot", meta))
+      );
+    } catch (err) {
+      if (isProfileUnreachable(err)) { showUnreachable(uid, provider); return; }
+      throw err;
+    }
+    // A users/{uid} document without a valid role is not a profile. (A push
+    // token write once made such documents for Apple sign-ins.)
+    const role = profile?.role;
+    if (!isValidRole(role)) {
+      if (provider) {
+        // An Apple ID / Google account with no Ball Masters profile yet: say
+        // so, rather than landing on "Account setup required". Accounts are
+        // created from the coach's invite link (register), which can use the
+        // same Apple / Google sign-in.
+        loginTrace.abandon("social_no_account_signed_out", { hadProfileDoc: profile !== null });
+        await signOut(auth);
+        setError(
+          `There's no Ball Masters account for this ${provider === "apple" ? "Apple ID" : "Google account"} yet. ` +
+            "Use the invite link from your coach to create one."
+        );
+        return;
+      }
+      loginTrace.step("profile_missing_going_to_incomplete_profile", { hadProfileDoc: profile !== null }, "error");
       router.push("/incomplete-profile");
       return;
     }
-    localStorage.setItem("ballmasters_role", profile.role);
-    setAuthCookies(profile.role);
+    localStorage.setItem("ballmasters_role", role);
+    setAuthCookies(role);
     lastActive.request(uid, { force: true });
-    loginTrace.step("route", { to: "/dashboard", role: profile.role, via: "profile" });
+    loginTrace.step("route", { to: "/dashboard", role, via: "profile" });
     router.push("/dashboard");
+  }
+
+  async function retryAfterUnreachable() {
+    const pending = unreachable;
+    if (!pending) return;
+    setUnreachable(null);
+    setError("");
+    setLoading(true);
+    try {
+      if (!loginTrace.active()) loginTrace.begin("restored", pending.uid);
+      await afterLogin(pending.uid, pending.provider);
+    } catch (err: unknown) {
+      setError(getErrorMessage((err as { code?: string }).code ?? ""));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function signOutFromUnreachable() {
+    setUnreachable(null);
+    await signOutUser();
   }
 
   useEffect(() => {
@@ -91,7 +168,12 @@ export default function LoginPage() {
           router.push("/student/dashboard");
         } else {
           // No role cookie — must read Firestore to get role
-          await afterLogin(user.uid);
+          try {
+            await afterLogin(user.uid);
+          } catch (err: unknown) {
+            setCheckingAuth(false);
+            setError(getErrorMessage((err as { code?: string }).code ?? ""));
+          }
         }
       } else {
         setCheckingAuth(false);
@@ -132,22 +214,9 @@ export default function LoginPage() {
       loginTrace.begin(provider);
       const credential = await loginTrace.track("social_signin", nativeSocialSignIn(provider), undefined, { provider });
       loginTrace.setUser(credential.user.uid);
-      // An Apple ID / Google account with no Ball Masters profile yet: say so,
-      // rather than landing on "Account setup required". Accounts are created
-      // from the coach's invite link (register), which can use the same
-      // Apple / Google sign-in.
-      const profile = await loginTrace.track("social_profile_read", getUserProfile(credential.user.uid));
-      if (!profile) {
-        loginTrace.abandon("social_no_account_signed_out");
-        await signOut(auth);
-        setError(
-          `There's no Ball Masters account for this ${provider === "apple" ? "Apple ID" : "Google account"} yet. ` +
-            "Use the invite link from your coach to create one."
-        );
-        return;
-      }
-      localStorage.setItem("ballmasters_role", profile.role);
-      await afterLogin(credential.user.uid);
+      // Checks the profile (no account / no valid role: message + sign-out),
+      // then routes. See runAfterLogin.
+      await afterLogin(credential.user.uid, provider);
     } catch (err: unknown) {
       if (!isSocialSignInCancel(err)) {
         const code = (err as { code?: string }).code ?? "";
@@ -200,6 +269,31 @@ export default function LoginPage() {
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clipRule="evenodd" />
               </svg>
               Your account has been deleted.
+            </div>
+          )}
+
+          {/* The profile couldn't be reached: offer a retry, never redirect or spin forever */}
+          {unreachable && (
+            <div
+              className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+              role="alert"
+              data-testid="profile-unreachable"
+            >
+              <p className="font-semibold">{UNREACHABLE_TITLE}</p>
+              <p className="mt-0.5">{UNREACHABLE_HELP}</p>
+              <div className="mt-3 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={retryAfterUnreachable}
+                  className="inline-flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-semibold text-white"
+                  style={{ backgroundColor: "#001c48" }}
+                >
+                  Try again
+                </button>
+                <button type="button" onClick={signOutFromUnreachable} className="text-sm underline">
+                  Use a different account
+                </button>
+              </div>
             </div>
           )}
 
