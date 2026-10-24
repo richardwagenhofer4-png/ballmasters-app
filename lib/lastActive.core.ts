@@ -129,7 +129,27 @@ export function createLastActiveGate(deps: GateDeps) {
     });
   }
 
-  return { request, readStarted, beforeRead };
+  /**
+   * Resolves once it is safe to WRITE to users/{uid} (same condition as the
+   * lastActiveAt write): a profile read has finished, none is in flight, and
+   * they have been quiet for QUIET_MS, or MAX_WAIT_MS has passed. Other writes
+   * to the profile (the push token) wait on this, so no write is ever pending
+   * while the first profile read is in flight.
+   */
+  function settled(uid: string): Promise<void> {
+    return new Promise<void>(resolve => {
+      const since = deps.now();
+      const tick = () => {
+        const r = reads.get(uid);
+        const quiet = r !== undefined && r.settledAt !== null && r.inFlight === 0 && deps.now() - r.settledAt >= QUIET_MS;
+        if (quiet || deps.now() - since >= MAX_WAIT_MS) resolve();
+        else deps.setTimer(tick, POLL_MS);
+      };
+      tick();
+    });
+  }
+
+  return { request, readStarted, beforeRead, settled };
 }
 
 export type LastActiveGate = ReturnType<typeof createLastActiveGate>;

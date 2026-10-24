@@ -66,6 +66,8 @@ export async function readOwnUserDoc(
         flag: (name, detail, level) => loginTrace.flag(name, detail, uid, level),
         withTimeout,
         resetNetwork,
+        // A document with no valid role (only token fields, say) is not a profile.
+        isUsable: snap => snap.exists() && isValidRole(snap.data()?.role),
       },
       onFirstRead
     );

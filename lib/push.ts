@@ -21,6 +21,7 @@ import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { hasNativePlugin } from "@/lib/nativeApp";
 import { hasUsableProfile } from "@/lib/ownProfile";
+import { lastActive } from "@/lib/lastActive";
 
 export type PushPermission = "granted" | "denied" | "prompt" | "unavailable";
 
@@ -83,6 +84,9 @@ export async function saveNativePushToken(uid: string, token?: string): Promise<
   }
   // Only a profile that is really there, with a valid role, may carry a token.
   if (!(await hasUsableProfile(uid))) return "not_ready";
+  // Not while a profile read is still in flight: a write pending on users/{uid}
+  // can make that read answer wrongly (see lib/lastActive.core.ts).
+  await lastActive.settled(uid);
   // updateDoc: fails (not-found) rather than creating the document.
   await updateDoc(doc(db, "users", uid), { fcmToken: t, fcmTokenSource: "ios" });
   try {

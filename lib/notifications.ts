@@ -6,6 +6,7 @@ import {
 import { doc, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { hasUsableProfile } from "@/lib/ownProfile";
+import { lastActive } from "@/lib/lastActive";
 
 // ---------------------------------------------------------------------------
 // In-app notification system
@@ -94,6 +95,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
     // updateDoc, and only onto a profile that really exists: a token write must
     // never be what creates users/{uid} (Build 1.1 step 8, problem B).
     if (user && (await hasUsableProfile(user.uid))) {
+      await lastActive.settled(user.uid);
       await updateDoc(doc(db, "users", user.uid), { fcmToken: token });
     }
     return true;

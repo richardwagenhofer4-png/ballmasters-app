@@ -443,6 +443,73 @@ test("isProfileUnreachable: only that error", () => {
   assert.equal(isProfileUnreachable(new ProfileUnreachableError()), true);
 });
 
+// ---- settled(): other writes to the profile wait for the reads ---------------------------
+test("settled: resolves only after a profile read has finished and things have been quiet", async () => {
+  const w = world();
+  let released = false;
+  w.gate.settled(UID).then(() => { released = true; });
+  await w.advance(3000);
+  assert.equal(released, false, "no read has finished yet");
+  const done = w.gate.readStarted(UID);
+  await w.advance(200); done();
+  await w.advance(QUIET_MS - 100);
+  assert.equal(released, false, "inside the quiet period");
+  await w.advance(300);
+  assert.equal(released, true);
+});
+
+test("settled: never resolves while a read is in flight, but never waits past the 8 s cap", async () => {
+  const w = world();
+  w.gate.readStarted(UID); // never finishes
+  let released = false;
+  w.gate.settled(UID).then(() => { released = true; });
+  await w.advance(MAX_WAIT_MS - 200);
+  assert.equal(released, false);
+  await w.advance(400);
+  assert.equal(released, true);
+});
+
+test("settled: a read that ended long ago lets a write through at once", async () => {
+  const w = world();
+  const done = w.gate.readStarted(UID);
+  await w.advance(100); done();
+  await w.advance(QUIET_MS + 500);
+  let released = false;
+  w.gate.settled(UID).then(() => { released = true; });
+  await w.advance(10);
+  assert.equal(released, true);
+});
+
+// ---- a document that exists but has no valid role gets the same second look ----------------
+const snapWith = (role, fromCache = false) => ({ exists: () => true, data: () => ({ role }), metadata: { fromCache } });
+const usableRole = s => s.exists() && ["coach", "admin", "student"].includes(s.data()?.role);
+
+test("role-less document: treated like 'missing': second look; if the retry has a role, that is used and reported", async () => {
+  const partial = snapWith(undefined), full = snapWith("coach");
+  const { deps, log } = retryWorld({ first: partial, second: full });
+  const out = await readWithMissingRetry({ ...deps, isUsable: usableRole });
+  assert.equal(out, full);
+  assert.deepEqual(log.calls, ["first", "sleep", "server"]);
+  assert.ok(log.traces.some(t => t[0] === "profile_first_read_unusable"));
+  assert.equal(log.flags[0][0], "profile_retry_rescued");
+});
+
+test("role-less document both times: the (role-less) answer is returned, ~1 s later, not reported as rescued", async () => {
+  const a = snapWith(undefined), b = snapWith(undefined);
+  const { deps, log } = retryWorld({ first: a, second: b });
+  const out = await readWithMissingRetry({ ...deps, isUsable: usableRole });
+  assert.equal(out, b);
+  assert.equal(log.flags.length, 0);
+  assert.equal(log.traces.find(t => t[0] === "profile_retry")[1].retryUsable, false);
+});
+
+test("a document with a valid role is returned at once even with isUsable set", async () => {
+  const ok = snapWith("student");
+  const { deps, log } = retryWorld({ first: ok });
+  assert.equal(await readWithMissingRetry({ ...deps, isUsable: usableRole }), ok);
+  assert.deepEqual(log.calls, ["first"]);
+});
+
 await Promise.all(pending);
 console.log(`${passed} passed, ${failed.length} failed`);
 for (const f of failed) console.log(`  FAIL ${f}`);

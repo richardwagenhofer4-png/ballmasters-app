@@ -18,7 +18,7 @@
 //    the person anywhere.
 //
 // Outcomes:
-//   - first read finds it                 -> returned at once, nothing else happens
+//   - first read finds it (and it is usable) -> returned at once, nothing else happens
 //   - first "missing", retry finds it     -> the retry's answer; a Sentry info event
 //   - both "missing"                      -> the (missing) answer, ~1 s later
 //   - first read stuck, reset fixes it    -> the answer; a Sentry warning event
@@ -71,6 +71,13 @@ export interface SnapLike {
 type Detail = Record<string, string | number | boolean | null | undefined>;
 
 export interface RetryDeps<S extends SnapLike> {
+  /**
+   * Is this answer a profile we can use? Default: it exists. The app passes
+   * "exists AND has a valid role": a document that exists but has no role (a
+   * pending token write once made the first read return one: only the token
+   * fields, no role) gets the same second look as "missing".
+   */
+  isUsable?(snap: S): boolean;
   /** The normal read (getDoc). */
   first(): Promise<S>;
   /** The second look, straight from the server (getDocFromServer). */
@@ -91,6 +98,7 @@ export async function readWithMissingRetry<S extends SnapLike>(
   onFirstRead?: (meta: { exists: boolean; fromCache: boolean }) => void
 ): Promise<S> {
   const limit = deps.withTimeout ?? (<T>(p: Promise<T>) => p);
+  const usable = deps.isUsable ?? ((s: S) => s.exists());
 
   async function unreachable(step: string, err: unknown, detail?: Detail): Promise<never> {
     deps.fail(step, err, detail);
@@ -122,9 +130,10 @@ export async function readWithMissingRetry<S extends SnapLike>(
   }
 
   try { onFirstRead?.({ exists: first.exists(), fromCache: first.metadata.fromCache }); } catch { /* diagnostics only */ }
-  if (first.exists()) return first;
+  if (usable(first)) return first;
 
   const base = { firstFromCache: first.metadata.fromCache, waitMs: RETRY_WAIT_MS };
+  if (first.exists()) deps.trace("profile_first_read_unusable", { firstFromCache: first.metadata.fromCache }, "error");
   deps.trace("profile_retry_start", base, "warning");
   await deps.sleep(RETRY_WAIT_MS);
 
@@ -137,8 +146,12 @@ export async function readWithMissingRetry<S extends SnapLike>(
     deps.fail("profile_retry_failed", err, base);
     throw err;
   }
-  const found = second.exists();
-  deps.trace("profile_retry", { ...base, retryExists: found, retryFromCache: second.metadata.fromCache }, found ? "error" : "warning");
+  const found = usable(second);
+  deps.trace(
+    "profile_retry",
+    { ...base, retryExists: second.exists(), retryUsable: found, retryFromCache: second.metadata.fromCache },
+    found ? "error" : "warning"
+  );
   if (found) deps.flag("profile_retry_rescued", { ...base, retryFromCache: second.metadata.fromCache });
   return second;
 }
