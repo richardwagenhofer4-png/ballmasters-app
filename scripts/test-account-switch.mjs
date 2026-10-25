@@ -14,7 +14,6 @@
 // Needs: npm i --no-save playwright && npx playwright install webkit; Java; Firebase CLI.
 // Run:  N=10 node scripts/test-account-switch.mjs      Ports: 9099, 8080, 3122
 
-import assert from "node:assert/strict";
 import { startStack, signedInPage } from "./fixtures/local-stack.mjs";
 import { authUser, put } from "./fixtures/seed-coach-videos.mjs";
 
