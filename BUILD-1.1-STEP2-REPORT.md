@@ -943,3 +943,62 @@ Goal: test the **new website** (the `build-1.1-paywall` preview) inside an app b
 - **To put the 1.1 test app back:** open `/Users/richardwagenhofer/dev/BallmastersApp/ballmasters-app/ios/App/App.xcodeproj` and press Run. **Do not run `npx cap sync` in the main checkout**: that would reset its server address to the live site.
 
 **Not verified (Part 2):** I did not open the project in Xcode or build or run it; no `xcodebuild`, no device. Whether Xcode resolves the packages and signs cleanly is untested.
+
+## 16. Step 11
+
+Branch `build-1.1-paywall`, started from `d4e7a91`. `firestore.rules` untouched, `main` untouched (`3919c29`), nothing deployed, `../rules-interim` and `../ballmasters-1.0-compat` untouched. **`ios/` did change** (one file, see below), so the 1.1 test app has to be run from Xcode again. **Nothing here has been tried on an iPhone.**
+
+### What you reported (phone test, preview `d4e7a91`)
+
+Tapping "Message Collin…" opened the keyboard and: (1) the conversation header scrolled off the top; (2) the bottom tab menu stayed above the keyboard and wasted space; (3) iOS showed its form accessory bar (up/down arrows and the checkmark).
+
+### Web side (works in the 1.0 App Store app too: it needs no plugin)
+
+New `lib/useKeyboardLayout.ts`, used by both conversation screens (`app/coach/messages/page.tsx`, `app/student/messages/page.tsx`):
+- **"Keyboard open"** means the message field has focus, or the visible area (`window.visualViewport`) is more than 100 px shorter than the window. Both are read with `useSyncExternalStore` (visualViewport `resize` and `scroll`, window `resize`, `focusin`/`focusout`).
+- While it is open, the conversation screen becomes `position: fixed` with `top = visualViewport.offsetTop` and `height = visualViewport.height`. So it is exactly the visible area, even when iOS has panned the page down to keep the field in view (the 1.0 app, which has no keyboard plugin). The header is therefore at the top of what you see, and the typing bar is the bottom of the screen, directly above the keyboard.
+- While it is open, `html` and `body` get `overflow: hidden`, so the page cannot scroll underneath. Both are put back on close.
+- The **bottom tab menu is not rendered** while it is open (both screens; on the coach screen only inside a conversation, the thread list is unchanged).
+- The typing bar's bottom padding drops from `env(safe-area-inset-bottom) + 64px` (room for the tab menu) to 8 px while the keyboard is open, and returns on close. The header's inline `paddingTop: calc(3rem + env(safe-area-inset-top))` from Step 10 is kept.
+- **Newest message stays in view:** `useStickToBottom` notes whether the messages area is within 24 px of its bottom and, whenever the area changes size (keyboard opening, a typed message growing the box to several lines, keyboard closing), puts it back at the bottom if it was there. If you had scrolled up to read older messages, it leaves you where you were.
+- The message field carries a `data-keyboard-input` attribute; that is how the hook knows which field counts.
+
+### Native side (1.1 app only)
+
+- `@capacitor/keyboard` **8.0.6**, pinned exactly like the other plugins (the 8.x line is the one for Capacitor 8; `package.json`, `package-lock.json`).
+- `capacitor.config.ts`: `plugins.Keyboard.resize = KeyboardResize.Native`. (First attempt used the plain string `'native'`, which the plugin's config type rejects: `tsc` and `npm run build` failed on commit `77d2af3`; fixed in `5bce017`. So `77d2af3` on its own does not type-check; the branch tip does.)
+- **Why `native`.** The plugin's four modes: `none` leaves the keyboard on top of the page and tells the page nothing; `body` and `ionic` change the height of one element with script, which would fight the screens above, which already set their own height; `native` shrinks the whole web view to the area above the keyboard. With `native`, the window and `visualViewport` heights are the visible area and there is no panning (offsetTop 0), so the web layout above works unchanged, and it is the same situation the web code handles without the plugin. `native` is also the plugin's own default; it is written out so the choice is explicit and visible in the config.
+- **Accessory bar.** `components/NativeKeyboardSetup.tsx` (rendered in `app/layout.tsx`) calls `Keyboard.setAccessoryBarVisible({ isVisible: false })` once, **only if** `hasNativePlugin("Keyboard")` (`lib/nativeApp.ts`, `Keyboard` added to the plugin list) is true, via a dynamic import, with errors swallowed. Without the plugin (the 1.0 app, desktop browsers) it does nothing at all. I also read the plugin's native source (`Keyboard.m`): it already hides the bar by default (`hideFormAccessoryBar = YES`); the runtime call is belt and braces. **In the 1.0 app the bar will still show**: hiding it needs native code the 1.0 binary does not have.
+- `npx cap sync ios` changed exactly one tracked file: `ios/App/CapApp-SPM/Package.swift` (the new `CapacitorKeyboard` Swift package, path `node_modules/@capacitor/keyboard`). Bundle id, signing, version and build numbers are untouched (`git diff` of `ios/` shows only those two added lines).
+- `cap sync` rewrote the git-ignored `ios/App/App/capacitor.config.json` from the committed config (live-site URL). I put the local-only test settings back (`server.url` = the `build-11-paywall` preview, `allowNavigation` with `vercel.com` and `*.vercel.com`), verified the rest of the file is what sync generated (new `"Keyboard": {"resize": "native"}` and `KeyboardPlugin` in `packageClassList`), and did not commit it. I ran the sync twice (second time to check the `KeyboardResize` fix still loads in the CLI); both times restored.
+
+### Tests
+
+New `scripts/test-message-keyboard.mjs` (**42 checks**, real WebKit, iPhone 14 profile at **390 x 844**, local emulators, a 70-message conversation, both screens). WebKit on a desktop has no on-screen keyboard, so the keyboard is **simulated** two ways, each run for athlete and coach:
+1. **"visible area 500 px, panned to 200":** `window.visualViewport` is replaced by a stand-in reporting height 500 and offsetTop 200, as iOS does without the plugin (it pans the page and shrinks the visual viewport).
+2. **"view resized to 390x500":** the whole viewport shrinks to 390 x 500, as `native` resize mode does.
+
+For each: field focused; header visible and at the top of the visible area; tab menu absent; typing bar ends exactly at the top of the (simulated) keyboard; newest message visible; the screen is exactly the visible height and the page cannot scroll; typing six lines (the box grows) keeps header and newest message in view; then the keyboard is "closed" and the tab menu is back, the page scrolls again, padding is back to normal and the screen is full height. Plus: with a fake Keyboard plugin present the app calls `setAccessoryBarVisible({isVisible:false})`; with it absent there are no native calls and no errors.
+
+- **New code: 42 passed, 0 failed.**
+- **Old code** (the `d4e7a91` versions of both screens, plus only the `data-keyboard-input` attribute so the test can find the field): **24 passed, 18 failed.** The 24 are the "keyboard closed" checks and the plugin checks. The 18 failures:
+  - tab menu still shown while the keyboard is open: 4 (both scenarios, both screens);
+  - typing bar ends at 844 while the keyboard starts at 500 (it sits under the keyboard): 2 (panned scenario, both screens);
+  - header at 0 when the visible area starts at 200 (header scrolled out of sight): 2 (panned);
+  - screen is 844 tall when the visible area is 500, page can scroll: 4 (both scenarios, both screens);
+  - newest message out of view (649 px against a messages area ending at 386 px): 2 (resized scenario);
+  - typing several lines: header or newest message out of view: 4.
+
+Also green on the final tree: `tsc` exit 0, `npm run lint` 0 errors (66 warnings, unchanged), `npm run build`, rules suite 395/395, unit tests (profile-read 39, sign-out 10, login-errors 22, login-diagnostics 19, captions 16, transcribe-route 9), and the browser tests (message-header 20, signin-failures 12, profile-unreachable 16, login-trace 12, profile-missing 9, videos-filter 18, push-token 13 with the current rules and with `main`'s rules, account-switch 10 of 10).
+
+**Files touched:** new `lib/useKeyboardLayout.ts`, `components/NativeKeyboardSetup.tsx`, `scripts/fixtures/seed-conversation.mjs`, `scripts/test-message-keyboard.mjs`; changed `app/coach/messages/page.tsx`, `app/student/messages/page.tsx`, `app/layout.tsx`, `lib/nativeApp.ts`, `capacitor.config.ts`, `package.json`, `package-lock.json`, `ios/App/CapApp-SPM/Package.swift`, `scripts/fixtures/native-app.mjs` and `scripts/test-message-header.mjs` (now share the conversation seeding); this report.
+
+**Commits:** `d6cef81` (web side + the `package.json` pin), `77d2af3` (native config + `Package.swift`), `5bce017` (enum fix), and the report commit.
+
+### Not verified
+
+- **On an iPhone, anything at all.** The keyboard was simulated by overriding `visualViewport` and by resizing the window. Real iOS keyboard behaviour is the point of this step and has not been seen: how the keyboard's slide-in animation looks against the layout change, whether the screen jumps once when the field is tapped, and whether `position: fixed` with `top = visualViewport.offsetTop` lands exactly right on real iOS Safari/WKWebView (the 1.0 case).
+- **Whether `native` resize really makes `visualViewport` and `innerHeight` equal the visible area in the Capacitor 8 WKWebView with a remote `server.url`.** It is what the plugin documents and what the layout assumes; I did not see it happen. The layout also works if it does not, as long as `visualViewport` is accurate (scenario 1).
+- **The accessory bar being gone.** Based on reading the plugin source and its documented API, not on seeing it. The plugin has **never been built in Xcode**: the Swift package resolving and compiling is untested.
+- Focus alone counts as "keyboard open" (it takes effect the moment you tap, before the keyboard has finished appearing), so the tab menu disappears at the tap. The same happens with a hardware keyboard on an iPad, where no on-screen keyboard shows. I think that is what you want; it is a judgment call.
+- The coach's thread list and every other screen are unchanged; only the two conversation screens use the new behaviour.
