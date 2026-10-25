@@ -350,24 +350,21 @@ export default function StudentMessagesPage() {
     // where the browser knows it) and does not scroll itself. A column: pinned
     // header, scrolling messages, pinned typing bar; the bottom menu is fixed.
     <main className="h-screen h-dvh overflow-hidden flex flex-col" style={{ backgroundColor: "#001c48", ...kb.containerStyle }}>
-      {/* Header: pinned (it is outside the scrolling area). The safe-area padding
-          is INLINE on the element: a global CSS rule for it failed on a real
-          iPhone before, and the header must never slide under the status bar. */}
+      {/* Header: pinned (it is outside the scrolling area), so it is ONE slim bar
+          (coach avatar, coach name, a small "Messages" label), not a title block:
+          the space it takes is lost to the conversation for good. The safe-area
+          padding is INLINE on the element: a global CSS rule for it failed on a
+          real iPhone before, and the header must never slide under the status bar. */}
       <div
         data-testid="thread-header"
-        className="pb-4 px-4 shrink-0"
-        style={{ backgroundColor: "#001c48", paddingTop: "calc(3rem + env(safe-area-inset-top))" }}
+        className="px-4 shrink-0"
+        style={{ backgroundColor: "#001c48", paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="flex items-center gap-2 mb-3">
-          <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
+        <div className="flex items-center gap-3 h-14">
+          {coachName && coachId && <InitialsAvatar name={coachName} id={coachId} size={36} variant="coach" />}
+          <p className="flex-1 min-w-0 truncate text-base font-bold leading-tight text-white">{coachName}</p>
+          <h1 className="shrink-0 text-xs font-semibold uppercase tracking-wide" style={{ color: "rgba(1,255,249,0.75)" }}>Messages</h1>
         </div>
-        <h1 className="text-2xl font-extrabold text-white">Messages</h1>
-        {coachName && coachId && (
-          <div className="flex items-center gap-2 mt-1.5">
-            <InitialsAvatar name={coachName} id={coachId} size={28} variant="coach" />
-            <p className="text-sm" style={{ color: "rgba(1,255,249,0.75)" }}>with {coachName}</p>
-          </div>
-        )}
       </div>
 
       {/* Messages area: the one scroller (min-h-0 lets a flex child shrink and scroll) */}
