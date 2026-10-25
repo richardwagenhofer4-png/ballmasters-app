@@ -7,7 +7,8 @@ import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebas
 import { auth } from "@/lib/firebase";
 import { getUserProfile, type UserProfile } from "@/lib/firestore";
 import { isProfileUnreachable } from "@/lib/ownProfile";
-import { isValidRole } from "@/lib/roles";
+import { homeFor, isValidRole } from "@/lib/roles";
+import { classifyLoginError, loginErrorMessage } from "@/lib/loginErrors";
 import { signOutUser } from "@/lib/signOut";
 import { UNREACHABLE_HELP, UNREACHABLE_TITLE } from "@/components/ProfileUnreachable";
 import { setAuthCookies } from "@/lib/cookies";
@@ -15,20 +16,6 @@ import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type S
 import SocialSignInButtons from "@/components/SocialSignInButtons";
 import { loginTrace } from "@/lib/loginDiagnostics";
 import { lastActive } from "@/lib/lastActive";
-
-const FIREBASE_ERROR_MESSAGES: Record<string, string> = {
-  "auth/invalid-credential": "Invalid email or password.",
-  "auth/user-not-found": "No account found with this email.",
-  "auth/wrong-password": "Incorrect password.",
-  "auth/invalid-email": "Please enter a valid email address.",
-  "auth/user-disabled": "This account has been disabled.",
-  "auth/too-many-requests": "Too many failed attempts. Please try again later.",
-  "auth/account-exists-with-different-credential": "This email already has an account with a different sign-in method. Sign in the way you did before.",
-};
-
-function getErrorMessage(code: string): string {
-  return FIREBASE_ERROR_MESSAGES[code] ?? "An unexpected error occurred. Please try again.";
-}
 
 function getCookieValue(name: string): string {
   const match = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
@@ -76,18 +63,11 @@ export default function LoginPage() {
   }
 
   async function runAfterLogin(uid: string, provider: SocialProvider | null): Promise<void> {
-    // A cached role is trusted only for email sign-in, which always has one
-    // after a first successful login. Apple/Google always check the profile:
-    // they must find out whether this account exists at all.
-    const cachedRole = provider ? null : localStorage.getItem("ballmasters_role");
-    loginTrace.step("after_login", { cachedRole: cachedRole ?? "none" });
-    if (isValidRole(cachedRole)) {
-      setAuthCookies(cachedRole);
-      lastActive.request(uid, { force: true });
-      loginTrace.step("route", { to: "/dashboard", role: cachedRole, via: "cached_role" });
-      router.push("/dashboard");
-      return;
-    }
+    // Always read the profile: nobody's destination is decided by a role cached
+    // on this phone (it could belong to the person who used it before; an admin
+    // once landed on the student screens that way). Apple/Google also need it to
+    // find out whether this account exists at all.
+    loginTrace.step("after_login");
     let profile: UserProfile | null;
     try {
       profile = await loginTrace.track(
@@ -119,11 +99,16 @@ export default function LoginPage() {
       router.push("/incomplete-profile");
       return;
     }
+    // (The cached role is only written for diagnostics now; nothing reads it to route.)
     localStorage.setItem("ballmasters_role", role);
     setAuthCookies(role);
     lastActive.request(uid, { force: true });
-    loginTrace.step("route", { to: "/dashboard", role, via: "profile" });
-    router.push("/dashboard");
+    // Straight to this role's screens, using the role just read. NOT through the
+    // /dashboard redirect: the client router remembers redirects, and after an
+    // account switch it replayed the previous account's.
+    const home = homeFor(role);
+    loginTrace.step("route", { to: home, role, via: "profile" });
+    router.push(home);
   }
 
   async function retryAfterUnreachable() {
@@ -136,7 +121,7 @@ export default function LoginPage() {
       if (!loginTrace.active()) loginTrace.begin("restored", pending.uid);
       await afterLogin(pending.uid, pending.provider);
     } catch (err: unknown) {
-      setError(getErrorMessage((err as { code?: string }).code ?? ""));
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -172,7 +157,7 @@ export default function LoginPage() {
             await afterLogin(user.uid);
           } catch (err: unknown) {
             setCheckingAuth(false);
-            setError(getErrorMessage((err as { code?: string }).code ?? ""));
+            setError(loginErrorMessage(err));
           }
         }
       } else {
@@ -190,42 +175,58 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+    const startedAt = Date.now();
     try {
       loginTrace.begin("email");
       const credential = await loginTrace.track("signin", signInWithEmailAndPassword(auth, email, password));
       loginTrace.setUser(credential.user.uid);
       await afterLogin(credential.user.uid);
     } catch (err: unknown) {
-      const code = (err as { code?: string }).code ?? "";
-      // A rejected email/password is the person's answer, not a stall. Anything
-      // else (e.g. the profile read failing) stays open and is reported.
-      if (code.startsWith("auth/")) loginTrace.abandon("signin_rejected", { code });
-      setError(getErrorMessage(code));
+      reportFailedSignIn("signin_failed", err, startedAt, "email");
+      setError(loginErrorMessage(err));
     } finally {
       setLoading(false);
     }
+  }
+
+  // A failed sign-in. Only a credential ANSWER (wrong password, no such account,
+  // and so on) is the person's own answer and is left alone. Anything else (the
+  // network failed, a timeout, an internal or unknown error) is a fault: it goes
+  // to Sentry with its code, how long it took, and whether the phone thought it
+  // was online. Evidence only: nothing is retried or changed because of it.
+  function reportFailedSignIn(name: string, err: unknown, startedAt: number, source: string) {
+    const { kind, code } = classifyLoginError(err);
+    if (kind === "credential") {
+      loginTrace.abandon("signin_rejected", { code });
+      return;
+    }
+    loginTrace.flag(name, { code, kind, source, elapsedMs: Date.now() - startedAt, online: navigator.onLine }, undefined, "warning");
+    loginTrace.abandon("signin_failed_reported", { code });
   }
 
   async function handleSocialLogin(provider: SocialProvider) {
     setError("");
     setSocialBusy(provider);
     socialInFlight.current = true;
+    const startedAt = Date.now();
     try {
-      loginTrace.begin(provider);
-      const credential = await loginTrace.track("social_signin", nativeSocialSignIn(provider), undefined, { provider });
-      loginTrace.setUser(credential.user.uid);
+      // No login trace yet: the person can spend any amount of time on Apple's
+      // or Google's sheet, and the 10-second "login stalled" timer must not run
+      // while they do. It starts once the sheet has handed back an account.
+      const credential = await nativeSocialSignIn(provider);
+      loginTrace.begin(provider, credential.user.uid);
+      loginTrace.step("social_signin_ok", { provider, sheetMs: Date.now() - startedAt });
       // Checks the profile (no account / no valid role: message + sign-out),
       // then routes. See runAfterLogin.
       await afterLogin(credential.user.uid, provider);
     } catch (err: unknown) {
-      if (!isSocialSignInCancel(err)) {
-        const code = (err as { code?: string }).code ?? "";
-        setError(getErrorMessage(code));
+      // Closing Apple's / Google's sheet is the person's choice: nothing shown.
+      if (isSocialSignInCancel(err)) {
+        loginTrace.abandon("social_signin_cancelled");
+      } else {
+        reportFailedSignIn("social_signin_failed", err, startedAt, provider);
+        setError(loginErrorMessage(err));
       }
-      // Closing Apple's / Google's sheet, or a rejected credential, is the
-      // person's choice, not a stall.
-      const failedCode = (err as { code?: string }).code ?? "";
-      if (isSocialSignInCancel(err) || failedCode.startsWith("auth/")) loginTrace.abandon("social_signin_ended", { code: failedCode });
     } finally {
       socialInFlight.current = false;
       setSocialBusy(null);

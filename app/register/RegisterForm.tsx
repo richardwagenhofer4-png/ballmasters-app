@@ -9,6 +9,7 @@ import { setAuthCookies } from "@/lib/cookies";
 import { validateInviteCode } from "@/lib/inviteCodes";
 import { validateCoachInvite } from "@/lib/coachInvites";
 import { getAge } from "@/lib/age";
+import { homeFor, isValidRole } from "@/lib/roles";
 import { isSocialSignInCancel, nativeSocialSignIn, useNativeSocialSignIn, type SocialProvider } from "@/lib/socialSignIn";
 import SocialSignInButtons from "@/components/SocialSignInButtons";
 import GetTheAppCard from "@/components/GetTheAppCard";
@@ -209,8 +210,11 @@ export default function RegisterForm() {
       });
 
       setAuthCookies(savedRole);
-      console.log("[register] complete — redirecting to /dashboard");
-      router.push("/dashboard");
+      // Straight to the new account's own screens (not via the /dashboard
+      // redirect, which the client router may have cached for someone else).
+      const home = isValidRole(savedRole) ? homeFor(savedRole) : "/dashboard";
+      console.log(`[register] complete — redirecting to ${home}`);
+      router.push(home);
     } catch (err: unknown) {
       const fe = err as { code?: string; message?: string };
       console.error("[register] error:", fe.code, fe.message, err);
@@ -271,8 +275,9 @@ export default function RegisterForm() {
       });
 
       setAuthCookies(savedRole);
-      console.log(`[register/${provider}] complete — redirecting to /dashboard`);
-      router.push("/dashboard");
+      const home = isValidRole(savedRole) ? homeFor(savedRole) : "/dashboard";
+      console.log(`[register/${provider}] complete — redirecting to ${home}`);
+      router.push(home);
     } catch (err: unknown) {
       if (isSocialSignInCancel(err)) return;
       const fe = err as { code?: string; message?: string };

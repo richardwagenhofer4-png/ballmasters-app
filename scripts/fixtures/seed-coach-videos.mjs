@@ -16,7 +16,7 @@ function toFs(v) {
   return { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, toFs(x)])) } };
 }
 
-async function put(path, data) {
+export async function put(path, data) {
   // "Bearer owner" is the emulator's admin token: it bypasses the security rules.
   const res = await fetch(`${FS}/${path}`, {
     method: "PATCH",
@@ -26,7 +26,7 @@ async function put(path, data) {
   if (!res.ok) throw new Error(`seed ${path}: ${res.status} ${await res.text()}`);
 }
 
-async function authUser(email, password) {
+export async function authUser(email, password) {
   const res = await fetch(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake`, {
     method: "POST",
     headers: { "content-type": "application/json" },
