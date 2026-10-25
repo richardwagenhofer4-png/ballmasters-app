@@ -6,7 +6,8 @@
 // COACH (annotate, clips and drill screens): open a video from (a) the Videos
 // tab, (b) an athlete's profile, (c) the dashboard, (d) directly by URL, and
 // press Back: it lands on (a) the Videos tab, (b) that athlete's profile, (c) the
-// dashboard, (d) /coach/videos. Also: after a reload, and after a push
+// dashboard, (d) /coach/videos; also from a video link inside a message (Back lands
+// on Messages). Also: after a reload, and after a push
 // notification tap (both have no earlier screen in the app: /coach/videos); a
 // drill and the clips screen; annotate -> clips -> Back -> Back walks back one
 // screen at a time and does not loop; annotate redirecting a drill to its own
@@ -227,6 +228,21 @@ async function openThenBack(page, start, title, videoHref) {
     await page.waitForURL(/\/v1\/clips$/, { timeout: 180000 });
     const landed = await pressBack(page);
     await check("coach: clips opened from an athlete's profile: Back lands on that profile", async () => assert.equal(landed, `/coach/students/${aliceUid}`));
+    await page.close();
+  }
+  {
+    // a video link inside a message (the conversation itself is not a route, so Back lands on the Messages screen)
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/coach/messages`, { waitUntil: "domcontentloaded", timeout: 180000 });
+    await page.getByRole("button", { name: /Alice Adams/ }).first().click({ timeout: 180000 });
+    await TITLE(page, V1).waitFor({ timeout: 60000 });
+    await page.waitForTimeout(2500);
+    const before = await historyLength(page);
+    await TITLE(page, V1).click();
+    await page.waitForURL(/\/v1\/annotate$/, { timeout: 180000 });
+    const landed = await pressBack(page);
+    await check("coach: video opened from a message: Back lands on /coach/messages", async () => assert.equal(landed, "/coach/messages"));
+    await check("coach: video opened from a message: Back goes back (it adds no history entry)", async () => assert.equal(await historyLength(page), before + 1));
     await page.close();
   }
   await ctx.close();
