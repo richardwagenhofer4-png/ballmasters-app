@@ -118,13 +118,18 @@ export default function StudentMessagesPage() {
   const [showVideoSheet, setShowVideoSheet] = useState(false);
   const [pendingVideo, setPendingVideo] = useState<VideoOption | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // The messages area is the ONLY thing on this screen that scrolls: the header
+  // above it and the typing bar below it stay where they are.
+  const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Scroll to bottom on new messages
+  // Scroll to the newest message when messages arrive. `loading` is a dependency
+  // because the conversation (and this scroller) only exists once loading is
+  // over: without it, a conversation that had already loaded opened at its
+  // OLDEST message.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
 
   // Initialize thread
   useEffect(() => {
@@ -334,9 +339,18 @@ export default function StudentMessagesPage() {
   const canSend = (inputText.trim().length > 0 || pendingVideo !== null) && !sending;
 
   return (
-    <main className="min-h-screen flex flex-col" style={{ backgroundColor: "#001c48" }}>
-      {/* Header */}
-      <div style={{ backgroundColor: "#001c48" }} className="pt-12 pb-4 px-4 shrink-0">
+    // The screen is exactly as tall as the visible window (h-screen, then h-dvh
+    // where the browser knows it) and does not scroll itself. A column: pinned
+    // header, scrolling messages, pinned typing bar; the bottom menu is fixed.
+    <main className="h-screen h-dvh overflow-hidden flex flex-col" style={{ backgroundColor: "#001c48" }}>
+      {/* Header: pinned (it is outside the scrolling area). The safe-area padding
+          is INLINE on the element: a global CSS rule for it failed on a real
+          iPhone before, and the header must never slide under the status bar. */}
+      <div
+        data-testid="thread-header"
+        className="pb-4 px-4 shrink-0"
+        style={{ backgroundColor: "#001c48", paddingTop: "calc(3rem + env(safe-area-inset-top))" }}
+      >
         <div className="flex items-center gap-2 mb-3">
           <img src="/logo-light.png" alt="Ball Masters Florida" style={{ height: "32px", width: "auto" }} />
         </div>
@@ -349,8 +363,8 @@ export default function StudentMessagesPage() {
         )}
       </div>
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto pb-20 px-4 py-4 space-y-3 bg-gray-50">
+      {/* Messages area: the one scroller (min-h-0 lets a flex child shrink and scroll) */}
+      <div ref={scrollRef} data-testid="thread-messages" className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 space-y-3 bg-gray-50">
         {!tid && !loading ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <ChatIcon className="h-12 w-12 text-gray-200 mb-4" />
@@ -410,13 +424,14 @@ export default function StudentMessagesPage() {
             })}
           </>
         )}
-        <div ref={messagesEndRef} />
       </div>
 
-      {/* Input row — sticky above bottom nav */}
+      {/* Typing bar: pinned at the bottom of the column; its bottom padding keeps
+          it above the fixed bottom menu and the home-indicator area. */}
       {tid && (
         <div
-          className="sticky bottom-0 bg-white border-t border-gray-200 px-3 py-2"
+          data-testid="thread-input"
+          className="shrink-0 bg-white border-t border-gray-200 px-3 py-2"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}
         >
           {/* Pending video chip */}
