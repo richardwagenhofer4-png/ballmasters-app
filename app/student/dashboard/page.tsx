@@ -241,8 +241,7 @@ export default function StudentDashboard() {
   }, [videos, uid]);
 
   async function handleSignOut() {
-    await signOutUser();
-    router.push("/login");
+    await signOutUser(); // ends with a full page load of /login
   }
 
   // ---- LOADING ----

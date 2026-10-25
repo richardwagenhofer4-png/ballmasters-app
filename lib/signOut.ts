@@ -1,7 +1,9 @@
 // The one way to sign out. Every sign-out button calls this instead of
 // signOut(auth) + clearAuthCookies(): it first removes this account's push
 // token from its profile (best effort, never blocks sign-out), then signs out,
-// then clears the role cookies and cached role. See lib/signOut.core.ts.
+// then clears the role cookies and cached role, then loads /login afresh (a
+// full page load, so nothing the previous account looked at survives in the
+// client router's cache). See lib/signOut.core.ts.
 
 import { signOut } from "firebase/auth";
 import { deleteField, doc, updateDoc } from "firebase/firestore";
@@ -16,6 +18,7 @@ export const signOutUser = createSignOut({
   forgetSavedToken: forgetSavedPushToken,
   signOut: () => signOut(auth),
   clearAuthCookies,
+  hardNavigate: url => window.location.replace(url),
   setTimer: (fn, ms) => setTimeout(fn, ms),
   clearTimer: h => clearTimeout(h as ReturnType<typeof setTimeout>),
   onError: err => console.error("[signOut] couldn't remove the push token", err),

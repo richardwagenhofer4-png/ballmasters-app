@@ -36,6 +36,7 @@ function world({ uid = "u1", removal = async () => {}, signOutFails = false } = 
       state.signedIn = false;
     },
     clearAuthCookies: () => log.push(["cookies"]),
+    hardNavigate: url => log.push(["navigate", url]),
     setTimer: (fn, ms) => { const t = { fn, ms, live: true }; state.timers.push(t); return t; },
     clearTimer: t => { t.live = false; },
     onError: err => log.push(["error", String(err.message)]),
@@ -46,8 +47,30 @@ function world({ uid = "u1", removal = async () => {}, signOutFails = false } = 
 test("the token is removed BEFORE signing out, while still signed in", async () => {
   const w = world();
   await w.signOutUser();
-  assert.deepEqual(w.log.map(e => e[0]), ["remove", "forget", "signOut", "cookies"]);
+  assert.deepEqual(w.log.map(e => e[0]), ["remove", "forget", "signOut", "cookies", "navigate"]);
   assert.equal(w.log[0][2], "signedIn=true", "removal ran after the sign-out would have happened");
+});
+
+test("it ends with a FULL page load of /login, after sign-out and cleanup (never a client-side route change)", async () => {
+  const w = world();
+  await w.signOutUser();
+  const last = w.log.at(-1);
+  assert.deepEqual(last, ["navigate", "/login"]);
+  assert.ok(w.log.findIndex(e => e[0] === "signOut") < w.log.findIndex(e => e[0] === "cookies"));
+  assert.ok(w.log.findIndex(e => e[0] === "cookies") < w.log.findIndex(e => e[0] === "navigate"));
+  assert.equal(w.log.filter(e => e[0] === "navigate").length, 1);
+});
+
+test("account deletion can send the full page load somewhere else (/login?deleted=1)", async () => {
+  const w = world();
+  await w.signOutUser({ removeToken: false, redirectTo: "/login?deleted=1" });
+  assert.deepEqual(w.log.at(-1), ["navigate", "/login?deleted=1"]);
+});
+
+test("the full page load happens even when nobody was signed in", async () => {
+  const w = world({ uid: null });
+  await w.signOutUser();
+  assert.deepEqual(w.log.at(-1), ["navigate", "/login"]);
 });
 
 test("the removal is for the person who is signed in", async () => {
@@ -60,7 +83,7 @@ test("the removal is for the person who is signed in", async () => {
 test("a failing removal is ignored and sign-out still happens", async () => {
   const w = world({ removal: async () => { throw new Error("permission-denied"); } });
   await w.signOutUser();
-  assert.deepEqual(w.log.map(e => e[0]), ["remove", "error", "forget", "signOut", "cookies"]);
+  assert.deepEqual(w.log.map(e => e[0]), ["remove", "error", "forget", "signOut", "cookies", "navigate"]);
 });
 
 test("a removal that never finishes cannot block sign-out: it gets 2 s, then sign-out goes ahead", async () => {
@@ -73,25 +96,26 @@ test("a removal that never finishes cannot block sign-out: it gets 2 s, then sig
   assert.equal(TOKEN_REMOVE_LIMIT_MS, 2000);
   w.state.timers[0].fn();
   await p;
-  assert.deepEqual(w.log.map(e => e[0]), ["remove", "forget", "signOut", "cookies"]);
+  assert.deepEqual(w.log.map(e => e[0]), ["remove", "forget", "signOut", "cookies", "navigate"]);
 });
 
 test("nobody signed in: no removal, but sign-out and cleanup still run", async () => {
   const w = world({ uid: null });
   await w.signOutUser();
-  assert.deepEqual(w.log.map(e => e[0]), ["signOut", "cookies"]);
+  assert.deepEqual(w.log.map(e => e[0]), ["signOut", "cookies", "navigate"]);
 });
 
 test("removeToken: false (account deletion, no profile yet) skips the removal only", async () => {
   const w = world();
   await w.signOutUser({ removeToken: false });
-  assert.deepEqual(w.log.map(e => e[0]), ["signOut", "cookies"]);
+  assert.deepEqual(w.log.map(e => e[0]), ["signOut", "cookies", "navigate"]);
 });
 
 test("if the Firebase sign-out itself fails, the error reaches the caller and cookies are left alone (as before)", async () => {
   const w = world({ signOutFails: true });
   await assert.rejects(w.signOutUser(), /signOut failed/);
   assert.ok(!w.log.some(e => e[0] === "cookies"));
+  assert.ok(!w.log.some(e => e[0] === "navigate"), "must not navigate away from a screen that is still signed in");
 });
 
 await Promise.all(pending);

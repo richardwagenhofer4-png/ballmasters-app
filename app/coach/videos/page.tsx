@@ -418,8 +418,7 @@ function CoachVideosPage() {
   }
 
   async function handleSignOut() {
-    await signOutUser();
-    router.push("/login");
+    await signOutUser(); // ends with a full page load of /login
   }
 
   if (unreachable) return <ProfileUnreachable />;

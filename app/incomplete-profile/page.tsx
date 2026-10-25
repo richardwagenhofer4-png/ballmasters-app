@@ -1,19 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { signOutUser } from "@/lib/signOut";
 
 export default function IncompleteProfilePage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   async function handleSignOut() {
     setLoading(true);
     try {
       // No profile here, so there is no push token to remove from one.
-      await signOutUser({ removeToken: false });
-      router.push("/login");
+      await signOutUser({ removeToken: false }); // ends with a full page load of /login
     } catch {
       setLoading(false);
     }

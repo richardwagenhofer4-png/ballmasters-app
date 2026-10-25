@@ -91,8 +91,7 @@ export default function SettingsPage() {
   }
 
   async function handleSignOut() {
-    await signOutUser();
-    router.push("/login");
+    await signOutUser(); // ends with a full page load of /login
   }
 
   async function handleDeleteAccount() {
@@ -110,8 +109,8 @@ export default function SettingsPage() {
       // The API explains head-coach / last-admin refusals in the error text;
       // show it verbatim rather than a generic failure message.
       if (!res.ok) throw new Error(data.error ?? "Deletion failed");
-      await signOutUser({ removeToken: false }); // the account and its profile are already gone
-      router.push("/login?deleted=1");
+      // The account and its profile are already gone: no token to remove.
+      await signOutUser({ removeToken: false, redirectTo: "/login?deleted=1" });
     } catch (err: unknown) {
       setDeleteError(err instanceof Error ? err.message : "Something went wrong.");
       setDeletingAccount(false);
