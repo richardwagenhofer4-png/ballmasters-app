@@ -871,7 +871,7 @@ For Apple/Google, the login trace (and its 10-second stall timer) now starts whe
 |---|---|
 | `7833af6` | Sign-out ends with a full page load of `/login` (`lib/signOut.core.ts`, `lib/signOut.ts`, the six callers) |
 | `2efa32f` | Login and sign-up route straight to the role's page; cached-role shortcut removed; failed sign-ins classified and reported; social stall timer starts after the sheet (`app/login/page.tsx`, `app/register/RegisterForm.tsx`, `lib/roles.ts`, new `lib/loginErrors.ts`) |
-| `c0e4cf5`, `4adbdfc` and earlier test commits | Tests and fixtures: `test-account-switch`, `test-signin-failures`, `test-login-errors`, extended `test-sign-out`; `BM_PRODUCTION=1` serves the test stack as a production build; the iPhone-app stand-in can now delay, fail or cancel Google sign-in |
+| `64d2f41`, `c0e4cf5`, `4adbdfc` (and `test-account-switch` / `test-login-errors` inside `2efa32f`) | Tests and fixtures: `test-account-switch`, `test-signin-failures`, `test-login-errors`, extended `test-sign-out`; `BM_PRODUCTION=1` serves the test stack as a production build; the iPhone-app stand-in can now delay, fail or cancel Google sign-in |
 
 ### Test evidence (final tree)
 
