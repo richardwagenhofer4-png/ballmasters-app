@@ -8,7 +8,13 @@
 //
 // This function runs INSIDE the page, so it must not use anything outside itself.
 //
-//   config = { googleEmail?: string, googleSub?: string, pushToken?: string }
+//   config = {
+//     googleEmail?: string, googleSub?: string,   who Google signs in as
+//     pushToken?: string,                         push permission granted + this device token
+//     googleDelayMs?: number,                     the Google sheet stays open this long
+//     googleError?: string,                       the Google sheet fails with this error code
+//     googleCancel?: boolean,                     the person closes the Google sheet
+//   }
 
 export function installNativeApp(config) {
   window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
@@ -21,6 +27,9 @@ export function installNativeApp(config) {
     ],
     nativePromise: async (plugin, method) => {
       if (plugin === "FirebaseAuthentication" && method === "signInWithGoogle") {
+        if (config.googleDelayMs) await new Promise(resolve => setTimeout(resolve, config.googleDelayMs));
+        if (config.googleCancel) throw new Error("The user canceled the sign-in flow.");
+        if (config.googleError) throw Object.assign(new Error("native sign-in failed"), { code: config.googleError });
         return { credential: { idToken: JSON.stringify({ sub: config.googleSub ?? "google-test-1", email: config.googleEmail ?? "google@example.test", email_verified: true }) } };
       }
       if (plugin === "FirebaseMessaging" && push) {
