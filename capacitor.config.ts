@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
   appId: 'com.ballmasters.app',
@@ -37,7 +38,7 @@ const config: CapacitorConfig = {
       // 'ionic' resize one element with script, which fights the fixed-height
       // screens. The form accessory bar (up/down arrows + checkmark) is hidden
       // from web code too (components/NativeKeyboardSetup.tsx).
-      resize: 'native',
+      resize: KeyboardResize.Native,
     },
   },
   experimental: {
