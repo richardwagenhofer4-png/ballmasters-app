@@ -1002,3 +1002,38 @@ Also green on the final tree: `tsc` exit 0, `npm run lint` 0 errors (66 warnings
 - **The accessory bar being gone.** Based on reading the plugin source and its documented API, not on seeing it. The plugin has **never been built in Xcode**: the Swift package resolving and compiling is untested.
 - Focus alone counts as "keyboard open" (it takes effect the moment you tap, before the keyboard has finished appearing), so the tab menu disappears at the tap. The same happens with a hardware keyboard on an iPad, where no on-screen keyboard shows. I think that is what you want; it is a judgment call.
 - The coach's thread list and every other screen are unchanged; only the two conversation screens use the new behaviour.
+
+## 17. Step 12
+
+Branch `build-1.1-paywall`, started from `7388bbd`. `ios/`, `firestore.rules`, `main` (`3919c29`), `../rules-interim` and `../ballmasters-1.0-compat` untouched; nothing deployed; **no `npx cap sync`**, so the local `ios/App/App/capacitor.config.json` was not touched either. Web-only change: **no Xcode Run is needed**, only the Vercel preview of this push. **Nothing here has been tried on an iPhone.**
+
+### What you reported
+
+On the athlete's Messages screen the pinned header (logo, big "Messages" title, "with Coach Lukas") was roughly a quarter of the screen, and since Step 10 it stays pinned, so that space is lost for good.
+
+### The change (`app/student/messages/page.tsx` only)
+
+The pinned header is now **one slim bar**: the coach's avatar (36 px), the coach's name (bold, one line, cut off with "…" if it is very long) and a small "MESSAGES" label (12 px, uppercase, the same cyan as before) at the right. Gone: the logo, the 24 px "Messages" title and the "with …" line.
+- **Height: 56 px plus the safe area.** The bar is a fixed `h-14` row; the header's padding-top is `env(safe-area-inset-top)` **inline on the element** (the Step 10/11 rule). The extra 3rem that header used to add on top of the inset is dropped; that was a large part of its height.
+- Measured at 390 x 844 (safe-area inset is 0 in desktop WebKit): **old header 174 px, new header 56 px.** On a notched iPhone both grow by the inset (the old one is about 174 px plus it, which is the "quarter of the screen"); the saving is the same 118 px. That is arithmetic from the desktop measurement, not a phone measurement.
+- "Messages" stays the page's `<h1>` (small and uppercase), so the page keeps its heading.
+- With no coach assigned yet the left side of the bar is empty and only the small label shows; the body underneath already says "No coach assigned yet". If you would rather the label be larger in that one case, say so.
+- **Not changed:** the coach's conversation screen (`app/coach/messages/page.tsx`); the athlete's "locked" (Coached plan) screen, which is not a conversation and keeps its own header with the logo and title.
+- Kept from Steps 10/11 and re-proven by the existing checks: header pinned while scrolling; tab menu hidden while the keyboard is open; typing bar directly above the keyboard; conversation opens at the newest message; `data-testid` hooks.
+
+### Tests
+
+`scripts/test-message-header.mjs` (now **27 checks**, was 20): the "keeps its 3rem" check now applies to the coach only (its header is unchanged). New athlete checks: header **no taller than 64 px plus the safe area** (bar height = header height minus the computed padding-top, and the total against 64 + padding); still a real bar (at least 48 px); under 10% of the screen; no image (logo) in it, contains the coach's name and "Messages", no "with …" line, no heading larger than 16 px; avatar, name and label vertically centred on one line (name not wrapped); a **very long coach name** (set in the page, then restored) neither wraps nor makes the header taller nor overflows sideways. `scripts/test-message-keyboard.mjs` (**44 checks**, was 42): with the keyboard open (500 px visible), the athlete's header is 64 px or less and leaves the messages area at least 330 px, in both scenarios. I looked at a screenshot of the athlete screen from the run to check that it looks as described (avatar, name, label on one dark bar), not only that the numbers pass.
+
+- **New code:** header test 27/27, keyboard test 44/44.
+- **Old header (`7388bbd`) with the new tests:** header test **22 passed, 5 failed**: header bar 126 px / header 174 px; header 174 px of 844 px (over 10%); the logo is still in the header; name and label not on one line (centres 144 vs 108); a long name grows the header (174 to 186). Keyboard test **42 passed, 2 failed**: header 174 px, so the messages area stays under 330 px with the keyboard open.
+
+Also green on the final tree: `tsc` exit 0, `npm run lint` 0 errors (**65** warnings, one fewer than before: the logo `<img>` warning went with the logo), `npm run build`, rules suite 395/395, unit tests (profile-read 39, sign-out 10, login-errors 22, login-diagnostics 19, captions 16, transcribe-route 9), and the browser tests (signin-failures 12, profile-unreachable 16, login-trace 12, profile-missing 9, videos-filter 18, push-token 13 with the current rules and with `main`'s rules, account-switch 10 of 10).
+
+**Commits:** `a69210b` (the header), `910f1a8` (tests), and the report commit. **Files touched:** `app/student/messages/page.tsx`, `scripts/test-message-header.mjs`, `scripts/test-message-keyboard.mjs`, this report.
+
+### Not verified
+
+- **On an iPhone, anything at all**, and in particular the safe area. Desktop WebKit reports an inset of 0, so only the inline `env(safe-area-inset-top)` declaration and the 56 px bar were checked, not a real notch or Dynamic Island. This header no longer has the old extra 3rem below the inset: the avatar sits about 10 px below the top of the bar. If the app's inset were ever not applied, the avatar and name would sit right under the status bar clock, where the old header's 3rem used to hide that. `viewport-fit=cover` is set in `app/layout.tsx`, and every other screen relies on the same inset, so I expect it to be fine; look at it on the phone first. If it is too tight, a small minimum padding is a one-line change.
+- Real-device fonts and text sizes (the checks use desktop WebKit's rendering of the same fonts); very large iOS "Larger Text" settings, which could make a name or the label bigger than the 56 px bar was tested with.
+- The dev-mode "N" badge visible in the bottom-left of the run's screenshot is Next.js's development indicator, not part of the app.
