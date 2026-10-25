@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc, arrayUnion, collection, getDocs, onSnapshot, setDoc, deleteDoc, query, where } from "firebase/firestore";
@@ -476,15 +477,15 @@ export default function VideoPlayerPage() {
     <main className="min-h-screen bg-gray-950 flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900">
-        <Link
-          href="/student/videos"
+        <BackLink
+          fallbackHref="/student/videos"
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition"
         >
           <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
           </svg>
-          All videos
-        </Link>
+          Back
+        </BackLink>
 
         <img src="/logo-light.png" alt="Ball Masters Florida" style={{ width: 80, height: "auto" }} />
 
