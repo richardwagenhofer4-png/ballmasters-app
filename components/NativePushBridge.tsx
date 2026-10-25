@@ -15,6 +15,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/AuthContext";
+import { openAsEntryPoint } from "@/lib/backNavigation";
 import {
   enableNativePush,
   loadMessaging,
@@ -54,7 +55,7 @@ export default function NativePushBridge() {
       });
       const onTap = await FirebaseMessaging.addListener("notificationActionPerformed", ({ notification }) => {
         const url = notificationLink(notification.data);
-        if (url) router.push(url);
+        if (url) openAsEntryPoint(router, url);
       });
       handles.push(onToken, onTap);
       if (cancelled) handles.forEach(h => void h.remove());
