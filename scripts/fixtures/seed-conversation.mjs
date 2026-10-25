@@ -13,7 +13,7 @@ async function patch(path, fields) {
   if (!res.ok) throw new Error(`seed ${path}: ${res.status} ${await res.text()}`);
 }
 
-export async function seedConversation(seeded, messages = 70) {
+export async function seedConversation(seeded, messages = 70, { videoMessage = null } = {}) {
   const aliceUid = seeded.athletes["Alice Adams"];
   const tid = `${seeded.coachUid}__${aliceUid}`;
   const t0 = Date.now() - messages * 60_000;
@@ -30,6 +30,14 @@ export async function seedConversation(seeded, messages = 70) {
       text: str(`Message ${i + 1}: ${fromCoach ? "Nice work on the drill, keep your head up through the finish." : "Thanks coach, I'll film the next set tomorrow."}`),
       videoId: { nullValue: null }, videoTitle: { nullValue: null },
       createdAt: ts(t0 + i * 60_000),
+    });
+  }
+  if (videoMessage) {
+    // a final message from the coach that links to a video: { id, title }
+    await patch(`threads/${tid}/messages/m999`, {
+      senderId: str(seeded.coachUid), senderRole: str("coach"), text: str("Here is your video."),
+      videoId: str(videoMessage.id), videoTitle: str(videoMessage.title),
+      createdAt: ts(Date.now()),
     });
   }
   return { tid, aliceUid };

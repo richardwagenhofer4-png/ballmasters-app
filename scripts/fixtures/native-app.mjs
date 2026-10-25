@@ -15,6 +15,9 @@
 //     googleError?: string,                       the Google sheet fails with this error code
 //     googleCancel?: boolean,                     the person closes the Google sheet
 //     keyboard?: boolean,                         the keyboard plugin is "installed" (a later 1.1 build)
+//     pushTaps?: boolean,                         (with pushToken) FirebaseMessaging keeps the page's listeners, and
+//                                                 window.__fireNative(event, data) calls them: a tapped notification is
+//                                                 __fireNative("notificationActionPerformed", { notification: { data: { url } } })
 //   }
 //
 // Every native call is recorded in window.__nativeCalls as [plugin, method, options].
@@ -26,10 +29,20 @@ export function installNativeApp(config) {
   window.Capacitor = {
     PluginHeaders: [
       { name: "Purchases", methods: [] },
-      { name: "FirebaseMessaging", methods: push ? ["checkPermissions", "requestPermissions", "getToken", "addListener"].map(name => ({ name, rtype: "promise" })) : [] },
+      { name: "FirebaseMessaging", methods: !push ? [] : [
+        ...["checkPermissions", "requestPermissions", "getToken", ...(config.pushTaps ? [] : ["addListener"])].map(name => ({ name, rtype: "promise" })),
+        // a "callback" method is how Capacitor hands the page's listener function to the native side
+        ...(config.pushTaps ? ["addListener", "removeListener"].map(name => ({ name, rtype: "callback" })) : []),
+      ] },
       { name: "FirebaseAuthentication", methods: [{ name: "signInWithGoogle", rtype: "promise" }, { name: "signInWithApple", rtype: "promise" }] },
       ...(config.keyboard ? [{ name: "Keyboard", methods: ["setAccessoryBarVisible", "hide", "setResizeMode", "getResizeMode", "setScroll", "setStyle", "addListener", "removeAllListeners"].map(name => ({ name, rtype: "promise" })) }] : []),
     ],
+    nativeCallback: (plugin, method, options, callback) => {
+      window.__nativeCalls.push([plugin, method, options ?? null]);
+      if (method !== "addListener") return undefined;
+      ((window.__nativeListeners ??= {})[options.eventName] ??= []).push(callback);
+      return `listener-${options.eventName}`;
+    },
     nativePromise: async (plugin, method, options) => {
       window.__nativeCalls.push([plugin, method, options ?? null]);
       if (plugin === "Keyboard") return method === "addListener" ? { remove: async () => {} } : {};
@@ -47,4 +60,5 @@ export function installNativeApp(config) {
       return {};
     },
   };
+  window.__fireNative = (event, data) => (window.__nativeListeners?.[event] ?? []).forEach(cb => cb(data));
 }
