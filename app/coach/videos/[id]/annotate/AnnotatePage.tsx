@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { useParams, useRouter } from "next/navigation";
 import { Capacitor } from "@capacitor/core";
 import { onAuthStateChanged } from "firebase/auth";
@@ -1100,16 +1101,16 @@ export default function AnnotatePage() {
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
-        <Link
-          href="/coach/dashboard"
-          aria-label="Back to dashboard"
+        <BackLink
+          fallbackHref="/coach/videos"
+          aria-label="Back"
           className="flex items-center justify-center sm:justify-start gap-1.5 text-sm text-gray-400 hover:text-white transition min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
         >
           <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
             <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z" clipRule="evenodd" />
           </svg>
-          <span className="hidden sm:inline">Dashboard</span>
-        </Link>
+          <span className="hidden sm:inline">Back</span>
+        </BackLink>
         <div className="flex items-center gap-2 min-w-0">
           <img src="/logo-light.png" alt="Ball Masters Florida" className="hidden sm:block" style={{ height: "32px", width: "auto" }} />
           <span className="text-sm font-bold text-white whitespace-nowrap">Annotation Editor</span>
