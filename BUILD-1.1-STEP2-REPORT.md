@@ -827,3 +827,63 @@ Evidence for the three problems came from the phone test of 24 Oct on release `c
 - **The 8-minute hang itself was reproduced by holding requests open**, not by an actual idle phone. Whether a real dead connection behaves the same way when `disableNetwork`/`enableNetwork` is called is untested.
 - **The "wrong screens" cause is shown as a possible mechanism, not proven for that day's report.**
 - Under `main`'s live rules the old bug B reproduces; the branch's rules (not yet deployed) already refuse client-created profiles, so after the rules deploy that part of B cannot recur by itself, though the role-less-document handling still matters for existing token-only documents.
+
+
+---
+
+## 14. Step 9
+
+Branch `build-1.1-paywall`, started from `6fe212b`. Nothing under `ios/` touched, `firestore.rules` untouched, `main` untouched, no `npx cap sync`, nothing deployed. Paywall switch still **off**. **Nothing here has been tested on an iPhone.**
+
+### (1) An admin lands on the student screens after switching accounts
+
+**Cause (from Sentry JAVASCRIPT-NEXTJS-5), now reproduced:** the login routed to `/dashboard`, which is a middleware redirect decided by the role cookie. The Next.js client router had cached the `/dashboard → /student/dashboard` redirect from the student's session and replayed it for the admin, with no network request.
+
+I could only reproduce it in a **production build** (`next build` + `next start`, which is how Vercel serves it): in `next dev` the old code switched accounts correctly 5 times out of 5. In a production build, with the old code, **0 of 10** admins landed on `/coach/dashboard`: all 10 ended on `/student/dashboard` **with the cookie saying admin**, exactly the Sentry picture.
+
+**What changed**
+- **Straight to the role's page.** After login (`app/login/page.tsx`) and after sign-up (`app/register/RegisterForm.tsx`, both the email and the Apple/Google paths), the app goes directly to `/coach/dashboard` (coach, admin) or `/student/dashboard` (student) with the role just read or returned (`homeFor` in `lib/roles.ts`). The `/dashboard` middleware relay is untouched and still serves direct visits.
+- **The cached-role shortcut is removed.** Email login used to trust `localStorage ballmasters_role` and skip the profile read, so a role cached for someone else could decide the next person's destination. The profile is now always read (one extra read per email login, a few hundred milliseconds). The cached role is still written, but only for diagnostics; nothing routes by it.
+- **Sign-out ends with a full page load** of `/login`: `signOutUser` now calls `window.location.replace(redirectTo ?? "/login")` after the Firebase sign-out and cookie cleanup (account deletion passes `redirectTo: "/login?deleted=1"`; the callers no longer navigate themselves). *Why that and not `router.refresh()`:* the bug is the client router replaying a redirect it remembered. A full page load discards the router's cache and every other bit of in-memory state of the previous account, and does so no matter what is in the cache. `router.refresh()` is meant to re-fetch the current route and I could not show that it reliably drops redirects cached for other routes. The cost is one page load on sign-out. The same hard navigation also covers a similar risk on `/login` itself, which the middleware also redirects by cookie.
+
+**Proof** (`scripts/test-account-switch.mjs`, real WebKit with the iPhone profile, emulators, one continuous browser session per run): a student signs in, taps through My Videos, Profile and Home with the bottom menu (client-side), signs out; an admin signs in on the same phone and must land on `/coach/dashboard`, stay there, with the admin cookie.
+
+| Code | Production build | `next dev` |
+|---|---|---|
+| Old (`6fe212b`) | **0 of 10** landed on `/coach/dashboard` (all 10 on `/student/dashboard`) | 5 of 5 fine (does not reproduce) |
+| New | **10 of 10** | **10 of 10** |
+
+### (2) Long spin, then "An unexpected error occurred" on email login
+
+No evidence yet, so this step only makes the next one visible and honest (no retries, no other behaviour change).
+- `lib/loginErrors.ts`: only true credential answers (`invalid-credential`, `user-not-found`, `wrong-password`, `invalid-email`, `user-disabled`, `too-many-requests`, plus "different sign-in method") are the person's own answer and stay unreported.
+- Any other failure (`network-request-failed`, `internal-error`, a timeout, anything unknown) is sent to Sentry as "Login: signin_failed" (warning) with the **code, the elapsed milliseconds and `navigator.onLine`**. Social sign-in does the same ("Login: social_signin_failed").
+- `auth/network-request-failed`, `auth/timeout` and Firestore's offline codes now show **"Couldn't reach Ball Masters. Check your connection and try again."** Before, `network-request-failed` was not in the message table, so it showed "An unexpected error occurred": that is the most likely face of what was seen, though it is not proven. A network problem is never described as "unexpected" now.
+- `signInWithEmailAndPassword` itself still has no time limit of its own (not changed, per the brief). If it hangs, the next occurrence will not show a message until the SDK gives up; the report would then say how long it took.
+
+### (3) Tracer false alarm
+
+For Apple/Google, the login trace (and its 10-second stall timer) now starts when the sheet has handed back an account (`begin(provider, uid)`), not when the button is tapped. A person who takes a long time on the sheet no longer raises "Login did not finish within 10 seconds", and closing or failing the sheet is not a stall either.
+
+### Commits
+
+| Commit | Change |
+|---|---|
+| `7833af6` | Sign-out ends with a full page load of `/login` (`lib/signOut.core.ts`, `lib/signOut.ts`, the six callers) |
+| `2efa32f` | Login and sign-up route straight to the role's page; cached-role shortcut removed; failed sign-ins classified and reported; social stall timer starts after the sheet (`app/login/page.tsx`, `app/register/RegisterForm.tsx`, `lib/roles.ts`, new `lib/loginErrors.ts`) |
+| `c0e4cf5`, `4adbdfc` and earlier test commits | Tests and fixtures: `test-account-switch`, `test-signin-failures`, `test-login-errors`, extended `test-sign-out`; `BM_PRODUCTION=1` serves the test stack as a production build; the iPhone-app stand-in can now delay, fail or cancel Google sign-in |
+
+### Test evidence (final tree)
+
+- `npx tsc --noEmit` exit **0**; `npm run lint` **0 errors** (66 warnings, unchanged); `npm run build` ✅; rules emulator suite **395/395**.
+- Unit: `test-profile-read` 39, `test-sign-out` **10** (3 new: the page load is last, after sign-out and cleanup; custom target; never navigates away if sign-out failed), `test-login-errors` **22** (new), `test-login-diagnostics` 19, `test-captions` 16, `test-transcribe-route` 9.
+- Browser (WebKit/emulators): `test-account-switch` **10/10** in both modes, `test-signin-failures` **12** (new), `test-profile-unreachable` 16, `test-login-trace` 12, `test-profile-missing` 9, `test-videos-filter` 18, `test-push-token` 13 (under this branch's rules and `main`'s live rules).
+- `test-signin-failures` against the old code: **7 of 12 fail**: a network failure shows "An unexpected error occurred" and Sentry hears nothing, an internal error is not reported, a 12-second Google sheet raises "Login did not finish within 10 seconds".
+
+### Not verified
+
+- **Nothing on a real iPhone or Capacitor.** In particular, `window.location.replace("/login")` inside the app's WebView was not exercised; it is a same-origin load of the site the app already shows, but that is an assumption.
+- **The production build was local** (`next start` against the emulators), not Vercel. It reproduces the exact Sentry picture, which is the evidence I have; I did not test Vercel's own caching layers.
+- **Which of the two layers matters:** I did not test direct routing and the hard sign-out navigation separately; both are in. Either alone may have been enough.
+- **(2) is not diagnosed.** The network-failure message is the likely explanation for the "unexpected error" seen once, but only the next occurrence (now reported with its code, time and online state) will say.
+- The `/dashboard` middleware relay is unchanged, so someone who opens `/dashboard` directly after an account switch inside one page session is still served by whatever the router has cached for that URL; nothing in the app links there any more.
