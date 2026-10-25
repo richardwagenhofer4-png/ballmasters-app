@@ -5,7 +5,7 @@
 // Needs Java 11+ and the Firebase CLI on PATH. Ports: 9099 (Auth), 8080
 // (Firestore), and the one you pass for the app. stop() shuts everything down.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, openSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -52,19 +52,24 @@ export async function startStack({ port }) {
   const { seed, COACH } = await import("./seed-coach-videos.mjs");
   const seeded = await seed();
 
-  procs.push(spawn("npx", ["next", "dev", "-p", String(port)], {
+  const appEnv = {
+    ...process.env,
+    NODE_OPTIONS: `--require ${join(root, "scripts/fixtures/block-sentry.cjs")}`,
+    NEXT_PUBLIC_FIREBASE_EMULATOR: "true",
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-ballmasters",
+    NEXT_PUBLIC_FIREBASE_API_KEY: "fake",
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "localhost",
+    NEXT_PUBLIC_FIREBASE_APP_ID: "1:1:web:1",
+  };
+  // BM_PRODUCTION=1: a production build served with `next start`, as Vercel serves it
+  // (the client router caches differently from `next dev`). Takes a minute to build.
+  const production = process.env.BM_PRODUCTION === "1";
+  if (production) execFileSync("npx", ["next", "build"], { cwd: root, env: appEnv, stdio: "ignore" });
+  procs.push(spawn("npx", ["next", production ? "start" : "dev", "-p", String(port)], {
     cwd: root,
     stdio: logTo("next-dev.log"),
     detached: true,
-    env: {
-      ...process.env,
-      NODE_OPTIONS: `--require ${join(root, "scripts/fixtures/block-sentry.cjs")}`,
-      NEXT_PUBLIC_FIREBASE_EMULATOR: "true",
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: "demo-ballmasters",
-      NEXT_PUBLIC_FIREBASE_API_KEY: "fake",
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "localhost",
-      NEXT_PUBLIC_FIREBASE_APP_ID: "1:1:web:1",
-    },
+    env: appEnv,
   }));
   const BASE = `http://localhost:${port}`;
   await waitFor(async () => (await fetch(`${BASE}/login`)).ok, "next dev");
