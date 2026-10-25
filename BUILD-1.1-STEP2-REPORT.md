@@ -887,3 +887,59 @@ For Apple/Google, the login trace (and its 10-second stall timer) now starts whe
 - **Which of the two layers matters:** I did not test direct routing and the hard sign-out navigation separately; both are in. Either alone may have been enough.
 - **(2) is not diagnosed.** The network-failure message is the likely explanation for the "unexpected error" seen once, but only the next occurrence (now reported with its code, time and online state) will say.
 - The `/dashboard` middleware relay is unchanged, so someone who opens `/dashboard` directly after an account switch inside one page session is still served by whatever the router has cached for that URL; nothing in the app links there any more.
+
+
+---
+
+## 15. Step 10
+
+Branch `build-1.1-paywall`, started from `74fd49e`. Nothing under `ios/` touched in this repository, `firestore.rules` untouched, `main` untouched, nothing deployed. Part 1 is committed and pushed. **Part 2 is not committed anywhere**: it lives in a separate folder next to the repo. **Nothing here has been tried on an iPhone.**
+
+### Part 1: the conversation header stays pinned
+
+**Problem.** In a conversation, the page itself was the thing that scrolled (the screen was `min-h-screen`, so it grew with the messages). The header scrolled away with it; only the typing bar was `sticky`. Measured on the old layout at 390 x 844 with a 70-message conversation: the page was about 7,100 px tall in an 844 px window, and the coach's header sat at **-207 px** (off the top of the screen).
+
+**Fix**, on both screens (`app/coach/messages/page.tsx`, `app/student/messages/page.tsx`):
+- The conversation screen is now exactly as tall as the visible window and does not scroll itself: `h-screen h-dvh overflow-hidden`, laid out as a column.
+- **Header** (name, avatar, back arrow on the coach's; logo, "Messages" and the coach's name on the athlete's): a fixed-size block above the scrolling area, so it cannot scroll away.
+- **Messages area**: the only scroller (`flex-1 min-h-0 overflow-y-auto overscroll-contain`).
+- **Typing bar**: a fixed-size block below the scrolling area. Its bottom padding (unchanged: `env(safe-area-inset-bottom) + 64px`) keeps it above the fixed bottom menu.
+- **Safe area, inline.** The header's top padding is now `style={{ paddingTop: "calc(3rem + env(safe-area-inset-top))" }}` on the header element itself (the same 3rem it always had plus the inset), and the `pt-12` class that relied on the global CSS rule is gone from those headers.
+- The coach's **thread list** is unchanged: it still scrolls as a page; only the open conversation switches to the pinned layout.
+- Scrolling to the newest message now scrolls the messages area itself (`scrollTo`) rather than `scrollIntoView`.
+
+**One adjacent defect fixed, found by the test:** the athlete's conversation could open at its **oldest** message. The "scroll to newest" effect ran when messages arrived, but at that moment the screen was still showing its loading spinner, so the scroller did not exist yet. The effect now also depends on `loading`.
+
+**Tests.** New `scripts/test-message-header.mjs` (**20 checks**, real WebKit, iPhone 14 profile at **390 x 844**, a 70-message conversation, both screens): the conversation is long; the page does not scroll; the header's safe-area padding is inline and keeps its 3rem; the header is at the very top; the typing bar is below the header and above the bottom menu inside the screen; after scrolling the messages up by more than 1,000 px the header, the typing bar and the page scroll position did not move; scrolling back to the newest message leaves both in place; the coach's back arrow still works after scrolling; the list view is back to normal page scrolling. Screenshots of both screens scrolled up look right (`SHOT_DIR=...` saves them). Against the **old layout** (with only the test hooks added) **13 of 20 fail** (page 7,113 px tall, coach header at -207 px).
+Also green on the final tree: `tsc` exit 0, `npm run lint` 0 errors (66 warnings, unchanged), `npm run build`, rules suite 395/395, unit tests (profile-read 39, sign-out 10, login-errors 22, login-diagnostics 19, captions 16, transcribe-route 9), and the browser tests (signin-failures 12, profile-unreachable 16, login-trace 12, profile-missing 9, videos-filter 18, push-token 13, account-switch 10 of 10).
+
+**Files touched:** `app/coach/messages/page.tsx`, `app/student/messages/page.tsx`, new `scripts/test-message-header.mjs`, this report.
+
+**Not verified (Part 1)**
+- **On an iPhone, anything at all.** In particular: a real notch (safe-area insets are 0 in desktop WebKit, so only the inline declaration and the 3rem minimum were checked); real touch scrolling and momentum; and the **on-screen keyboard**: with the keyboard up, iOS may still shift the screen to keep the text field visible, and I could not see how that interacts with a header that no longer scrolls with the page.
+- `h-dvh` (the dynamic viewport height) needs a recent iOS; older versions fall back to `h-screen`.
+- Mobile WebKit has no mouse wheel, so scrolling in the test is done by script, not by a swipe.
+- Design note, not changed: the athlete's header (logo, "Messages", coach line) is about a quarter of the screen height (about 205 px of 844), which is now permanent. A more compact pinned header is an easy follow-up if it feels heavy.
+
+### Part 2: a 1.0 compatibility build (nothing committed or pushed)
+
+Goal: test the **new website** (the `build-1.1-paywall` preview) inside an app built from the **1.0 native code**.
+
+**What I did**
+1. `git worktree add --detach ../ballmasters-1.0-compat 3919c29`, a separate folder at `/Users/richardwagenhofer/dev/BallmastersApp/ballmasters-1.0-compat`. The main checkout's branch and files were not changed (I only read its local `ios/App/App/capacitor.config.json`).
+2. `npm ci` there, from that commit's own lockfile.
+3. Locally, uncommitted, in the worktree's `capacitor.config.ts`: `server.url` set to `https://ballmasters-app-git-build-11-paywall-ballmasters1.vercel.app`. I also added `vercel.com` and `*.vercel.com` to `allowNavigation`, because the 1.1 test app's local config has those two entries for the same preview site; the brief only named the URL, so say if you would rather not have them.
+4. `npx cap sync ios` in the worktree.
+
+**Confirmed from the actual files**
+- `ios/App/App/capacitor.config.json` in the worktree has that `server.url` (and the two extra `allowNavigation` entries); `packageClassList` is just `FirebaseAuthenticationPlugin`.
+- The worktree has **no `@revenuecat` and no `@capacitor-firebase/messaging`** packages (`node_modules/@revenuecat` does not exist; zero mentions in `package.json` or `package-lock.json`), and nothing in its `ios/` folder mentions Purchases, FirebaseMessaging or RevenueCat. `cap sync` found exactly **one** native plugin.
+- **A correction to the premise:** that one plugin is `@capacitor-firebase/authentication` 8.3.0 (Google only). The 1.0 native app **does** contain the Google sign-in plugin; it has no Apple sign-in, no push plugin and no RevenueCat. The new website recognises a 1.1 binary by the presence of Purchases + FirebaseMessaging, so it will treat this app as 1.0 and hide the Apple/Google buttons, as designed.
+- Signing, bundle id and build numbers are untouched from that commit: `com.ballmasters.app`, version `1.0`, build `3`, team `5BK9783699`, automatic signing. `git status` in the worktree shows exactly one modified file, `capacitor.config.ts`.
+
+**To open in Xcode:** `/Users/richardwagenhofer/dev/BallmastersApp/ballmasters-1.0-compat/ios/App/App.xcodeproj`.
+- It uses the **same app id** as the 1.1 test app, so **running it replaces the 1.1 test app on the phone**.
+- The first time, Xcode downloads the Swift packages (a few minutes, needs internet).
+- **To put the 1.1 test app back:** open `/Users/richardwagenhofer/dev/BallmastersApp/ballmasters-app/ios/App/App.xcodeproj` and press Run. **Do not run `npx cap sync` in the main checkout**: that would reset its server address to the live site.
+
+**Not verified (Part 2):** I did not open the project in Xcode or build or run it; no `xcodebuild`, no device. Whether Xcode resolves the packages and signs cleanly is untested.
