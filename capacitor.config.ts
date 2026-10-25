@@ -26,6 +26,19 @@ const config: CapacitorConfig = {
       // Show pushes as banners (with sound and badge) while the app is open.
       presentationOptions: ['alert', 'badge', 'sound'],
     },
+    Keyboard: {
+      // 'native': when the keyboard opens, iOS shrinks the whole web view to
+      // the area above it (so the visible area is what the page sees as its
+      // height, and nothing is panned or covered). The message screens
+      // (lib/useKeyboardLayout.ts) already size themselves to the visible area,
+      // so this works with them as is, and it is the same layout the web gets
+      // from Safari/1.0 with no plugin. 'none' would leave the keyboard on top
+      // of the page with nothing telling the page how tall it is; 'body' and
+      // 'ionic' resize one element with script, which fights the fixed-height
+      // screens. The form accessory bar (up/down arrows + checkmark) is hidden
+      // from web code too (components/NativeKeyboardSetup.tsx).
+      resize: 'native',
+    },
   },
   experimental: {
     ios: {
