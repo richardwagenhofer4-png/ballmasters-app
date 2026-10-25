@@ -14,18 +14,25 @@
 //     googleDelayMs?: number,                     the Google sheet stays open this long
 //     googleError?: string,                       the Google sheet fails with this error code
 //     googleCancel?: boolean,                     the person closes the Google sheet
+//     keyboard?: boolean,                         the keyboard plugin is "installed" (a later 1.1 build)
 //   }
+//
+// Every native call is recorded in window.__nativeCalls as [plugin, method, options].
 
 export function installNativeApp(config) {
   window.webkit = { messageHandlers: { bridge: { postMessage() {} } } };
   const push = typeof config.pushToken === "string";
+  window.__nativeCalls = [];
   window.Capacitor = {
     PluginHeaders: [
       { name: "Purchases", methods: [] },
       { name: "FirebaseMessaging", methods: push ? ["checkPermissions", "requestPermissions", "getToken", "addListener"].map(name => ({ name, rtype: "promise" })) : [] },
       { name: "FirebaseAuthentication", methods: [{ name: "signInWithGoogle", rtype: "promise" }, { name: "signInWithApple", rtype: "promise" }] },
+      ...(config.keyboard ? [{ name: "Keyboard", methods: ["setAccessoryBarVisible", "hide", "setResizeMode", "getResizeMode", "setScroll", "setStyle", "addListener", "removeAllListeners"].map(name => ({ name, rtype: "promise" })) }] : []),
     ],
-    nativePromise: async (plugin, method) => {
+    nativePromise: async (plugin, method, options) => {
+      window.__nativeCalls.push([plugin, method, options ?? null]);
+      if (plugin === "Keyboard") return method === "addListener" ? { remove: async () => {} } : {};
       if (plugin === "FirebaseAuthentication" && method === "signInWithGoogle") {
         if (config.googleDelayMs) await new Promise(resolve => setTimeout(resolve, config.googleDelayMs));
         if (config.googleCancel) throw new Error("The user canceled the sign-in flow.");

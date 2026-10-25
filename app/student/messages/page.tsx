@@ -23,6 +23,7 @@ import { getOrCreateThread, markThreadRead, sendMessage, threadId as makeThreadI
 import { useNotificationCounts } from "@/lib/NotificationsContext";
 import { UPGRADE_HREF, useEntitlements } from "@/lib/EntitlementsContext";
 import { LockIcon, NavLockDot } from "@/components/PlanLock";
+import { KEYBOARD_INPUT_ATTR, useKeyboardLayout, useStickToBottom } from "@/lib/useKeyboardLayout";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -130,6 +131,12 @@ export default function StudentMessagesPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  // While the on-screen keyboard is open: the screen shrinks to the visible area
+  // (header stays on top, typing bar directly above the keyboard), the bottom menu
+  // is hidden, and the newest message stays in view. See lib/useKeyboardLayout.ts.
+  const kb = useKeyboardLayout(true);
+  useStickToBottom(scrollRef, !authLoading && !loading && !redirecting && !unreachable && !messagingLocked);
 
   // Initialize thread
   useEffect(() => {
@@ -342,7 +349,7 @@ export default function StudentMessagesPage() {
     // The screen is exactly as tall as the visible window (h-screen, then h-dvh
     // where the browser knows it) and does not scroll itself. A column: pinned
     // header, scrolling messages, pinned typing bar; the bottom menu is fixed.
-    <main className="h-screen h-dvh overflow-hidden flex flex-col" style={{ backgroundColor: "#001c48" }}>
+    <main className="h-screen h-dvh overflow-hidden flex flex-col" style={{ backgroundColor: "#001c48", ...kb.containerStyle }}>
       {/* Header: pinned (it is outside the scrolling area). The safe-area padding
           is INLINE on the element: a global CSS rule for it failed on a real
           iPhone before, and the header must never slide under the status bar. */}
@@ -432,7 +439,9 @@ export default function StudentMessagesPage() {
         <div
           data-testid="thread-input"
           className="shrink-0 bg-white border-t border-gray-200 px-3 py-2"
-          style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}
+          // Room for the fixed bottom menu and the home-indicator area; with the
+          // keyboard open the menu is gone and the keyboard sits right below.
+          style={{ paddingBottom: kb.keyboardOpen ? "8px" : "calc(env(safe-area-inset-bottom) + 64px)" }}
         >
           {/* Pending video chip */}
           {pendingVideo && (
@@ -469,6 +478,7 @@ export default function StudentMessagesPage() {
             {/* Textarea */}
             <textarea
               ref={textareaRef}
+              {...{ [KEYBOARD_INPUT_ATTR]: "" }}
               value={inputText}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
@@ -528,8 +538,8 @@ export default function StudentMessagesPage() {
         </div>
       )}
 
-      {/* Bottom Nav */}
-      {bottomNav}
+      {/* Bottom Nav: hidden while the keyboard is open (it only wastes space) */}
+      {!kb.keyboardOpen && bottomNav}
     </main>
   );
 }

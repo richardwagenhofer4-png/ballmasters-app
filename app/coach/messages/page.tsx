@@ -11,6 +11,7 @@ import { readOwnUserDoc } from "@/lib/ownProfile";
 import { useAuth } from "@/lib/AuthContext";
 import { markThreadRead, sendMessage } from "@/lib/messaging";
 import { useNotificationCounts } from "@/lib/NotificationsContext";
+import { KEYBOARD_INPUT_ATTR, useKeyboardLayout, useStickToBottom } from "@/lib/useKeyboardLayout";
 import InitialsAvatar from "@/components/InitialsAvatar";
 
 // ---------------------------------------------------------------------------
@@ -126,6 +127,14 @@ export default function CoachMessagesPage() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // While the on-screen keyboard is open in a conversation: the screen shrinks to
+  // the visible area (header stays on top, typing bar directly above the keyboard),
+  // the bottom menu is hidden, and the newest message stays in view. The thread
+  // list is not affected. See lib/useKeyboardLayout.ts.
+  const inThread = view === "thread" && activeThread !== null;
+  const kb = useKeyboardLayout(inThread);
+  useStickToBottom(scrollRef, inThread && !authLoading);
 
   // Auth guard
   useEffect(() => {
@@ -293,6 +302,7 @@ export default function CoachMessagesPage() {
           ? "h-screen h-dvh overflow-hidden flex flex-col bg-gray-50"
           : "min-h-screen flex flex-col bg-gray-50 pb-20"
       }
+      style={kb.containerStyle}
     >
 
       {/* --------------------------------------------------------------------- */}
@@ -445,7 +455,9 @@ export default function CoachMessagesPage() {
           <div
             data-testid="thread-input"
             className="shrink-0 bg-white border-t border-gray-200 px-3 py-2"
-            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 64px)" }}
+            // Room for the fixed bottom menu and the home-indicator area; with the
+            // keyboard open the menu is gone and the keyboard sits right below.
+            style={{ paddingBottom: kb.keyboardOpen ? "8px" : "calc(env(safe-area-inset-bottom) + 64px)" }}
           >
             {/* Pending video chip */}
             {pendingVideo && (
@@ -482,6 +494,7 @@ export default function CoachMessagesPage() {
               {/* Textarea */}
               <textarea
                 ref={textareaRef}
+                {...{ [KEYBOARD_INPUT_ATTR]: "" }}
                 value={inputText}
                 onChange={handleTextareaChange}
                 onKeyDown={handleKeyDown}
@@ -542,7 +555,8 @@ export default function CoachMessagesPage() {
         </>
       )}
 
-      {/* Bottom Nav */}
+      {/* Bottom Nav: hidden while the keyboard is open in a conversation (it only wastes space) */}
+      {!(inThread && kb.keyboardOpen) && (
       <nav className="fixed bottom-0 inset-x-0 bg-gray-900 border-t border-gray-800 flex" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {NAV_ITEMS.map(item => {
           const isActive = pathname === item.href;
@@ -567,6 +581,7 @@ export default function CoachMessagesPage() {
           );
         })}
       </nav>
+      )}
     </main>
   );
 }

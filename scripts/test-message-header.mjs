@@ -18,6 +18,7 @@
 
 import assert from "node:assert/strict";
 import { startStack, signedInPage } from "./fixtures/local-stack.mjs";
+import { seedConversation } from "./fixtures/seed-conversation.mjs";
 
 let playwright;
 try {
@@ -37,35 +38,9 @@ try {
 }
 const { BASE, COACH, seeded, stop } = stack;
 const ALICE = { email: "alice@example.test", password: "password1" };
-const aliceUid = seeded.athletes["Alice Adams"];
 
-// ---- a long conversation, written the way an admin would (bypasses the rules) ----------------
-const FS = "http://127.0.0.1:8080/v1/projects/demo-ballmasters/databases/(default)/documents";
-const OWNER = { "Authorization": "Bearer owner", "content-type": "application/json" };
-const str = v => ({ stringValue: v });
-const ts = ms => ({ timestampValue: new Date(ms).toISOString() });
-async function patch(path, fields) {
-  const res = await fetch(`${FS}/${path}`, { method: "PATCH", headers: OWNER, body: JSON.stringify({ fields }) });
-  if (!res.ok) throw new Error(`seed ${path}: ${res.status} ${await res.text()}`);
-}
-const TID = `${seeded.coachUid}__${aliceUid}`;
 const MESSAGES = 70;
-const t0 = Date.now() - MESSAGES * 60_000;
-await patch(`threads/${TID}`, {
-  coachId: str(seeded.coachUid), athleteId: str(aliceUid), coachName: str("Coach Carter"), athleteName: str("Alice Adams"),
-  athleteAvatarId: str(""), lastMessage: str("last"), lastSenderRole: str("coach"), lastAt: ts(Date.now()),
-  unreadForCoach: { integerValue: "0" }, unreadForAthlete: { integerValue: "0" },
-});
-for (let i = 0; i < MESSAGES; i++) {
-  const fromCoach = i % 2 === 0;
-  await patch(`threads/${TID}/messages/m${String(i).padStart(3, "0")}`, {
-    senderId: str(fromCoach ? seeded.coachUid : aliceUid),
-    senderRole: str(fromCoach ? "coach" : "student"),
-    text: str(`Message ${i + 1}: ${fromCoach ? "Nice work on the drill, keep your head up through the finish." : "Thanks coach, I'll film the next set tomorrow."}`),
-    videoId: { nullValue: null }, videoTitle: { nullValue: null },
-    createdAt: ts(t0 + i * 60_000),
-  });
-}
+await seedConversation(seeded, MESSAGES);
 
 const browser = await webkit.launch();
 const makeContext = async () => {

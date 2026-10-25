@@ -8,12 +8,13 @@
 //
 //   Purchases          @revenuecat/purchases-capacitor   (1.1+)
 //   FirebaseMessaging  @capacitor-firebase/messaging     (1.1+)
+//   Keyboard           @capacitor/keyboard               (a later 1.1 build)
 //
 // On the web every check is false.
 
 import { Capacitor } from "@capacitor/core";
 
-export type NativePlugin = "Purchases" | "FirebaseMessaging" | "FirebaseAuthentication";
+export type NativePlugin = "Purchases" | "FirebaseMessaging" | "FirebaseAuthentication" | "Keyboard";
 
 export function isNativeApp(): boolean {
   if (typeof window === "undefined") return false;

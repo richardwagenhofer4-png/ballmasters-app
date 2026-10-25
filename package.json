@@ -17,6 +17,7 @@
     "@capacitor-firebase/messaging": "8.3.0",
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
+    "@capacitor/keyboard": "8.0.6",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@revenuecat/purchases-capacitor": "13.6.1",
     "@sentry/nextjs": "^10.65.0",
