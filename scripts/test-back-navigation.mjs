@@ -94,7 +94,7 @@ async function open(page, start, title) {
   await page.goto(`${BASE}${start}`, { waitUntil: "domcontentloaded", timeout: 180000 });
   try {
     await TITLE(page, title).waitFor({ timeout: 60000 });
-  } catch (err) {
+  } catch {
     const text = await page.evaluate(() => document.body.innerText.replace(/\s+/g, " ").slice(0, 300)).catch(() => "?");
     throw new Error(`"${title}" never showed on ${start}: the page is at ${page.url()} and says: ${text}`);
   }
