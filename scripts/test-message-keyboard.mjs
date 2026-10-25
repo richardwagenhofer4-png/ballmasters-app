@@ -141,6 +141,14 @@ async function keyboardChecks(label, page, { open, close, visibleOpen, pan }) {
     assert.ok(kb.header.bottom <= bottomOfVisible, "header runs past the visible area");
     assert.equal(kb.header.height, before.header.height, "header changed size");
   });
+  if (label.startsWith("athlete")) {
+    // Build 1.1 step 12: the athlete's header is one slim bar, so with the keyboard up
+    // the conversation gets most of the 500 px that are left (it was about 205 px of header).
+    await check(`${label}: keyboard open: the slim header (64 px or less) leaves the messages at least 330 px`, async () => {
+      assert.ok(kb.header.height <= 64, `header is ${kb.header.height}px tall`);
+      assert.ok(kb.scroller.height >= 330, `messages area is ${kb.scroller.height}px tall in a ${visibleOpen.height}px visible area`);
+    });
+  }
   await check(`${label}: keyboard open: the bottom tab menu is hidden`, async () => assert.equal(kb.navVisible, false));
   await check(`${label}: keyboard open: the typing bar is inside the visible area, directly above the keyboard`, async () => {
     assert.ok(kb.input.top > kb.header.bottom, "typing bar overlaps the header");

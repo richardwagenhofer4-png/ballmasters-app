@@ -8,9 +8,11 @@
 // scroll; scrolling the messages up leaves the header exactly where it was and
 // fully visible (top of the screen, never above it); the typing bar stays put,
 // below the header and above the bottom menu; the header's safe-area padding is
-// INLINE on the element (env(safe-area-inset-top)) and its padding is at least
-// the 3rem it always had (safe-area insets are 0 in desktop WebKit, so only the
-// declaration can be checked here, not a real notch).
+// INLINE on the element (env(safe-area-inset-top)) (safe-area insets are 0 in
+// desktop WebKit, so only the declaration can be checked here, not a real notch).
+// The coach's header keeps the 3rem it always had. The athlete's header is ONE
+// slim bar (Build 1.1 step 12): coach avatar + coach name + a small "Messages"
+// label, no logo, no big title, no taller than 64 px plus the safe area.
 //
 // Needs: npm i --no-save playwright && npx playwright install webkit; Java; Firebase CLI.
 // Run:  node scripts/test-message-header.mjs      Ports: 9099, 8080, 3125
@@ -40,6 +42,7 @@ const { BASE, COACH, seeded, stop } = stack;
 const ALICE = { email: "alice@example.test", password: "password1" };
 
 const MESSAGES = 70;
+const HEADER_MAX_PX = 64; // the athlete's slim header, not counting the safe area
 await seedConversation(seeded, MESSAGES);
 
 const browser = await webkit.launch();
@@ -67,6 +70,9 @@ const metrics = page => page.evaluate(() => {
     header: r(header),
     headerStyle: header.getAttribute("style") ?? "",
     headerPaddingTop: parseFloat(getComputedStyle(header).paddingTop),
+    headerText: header.textContent.replace(/\s+/g, " ").trim(), // textContent: innerText would give the CSS-uppercased "MESSAGES"
+    headerImages: header.querySelectorAll("img").length,
+    headerHeadings: [...header.querySelectorAll("h1,h2,h3")].map(h => ({ text: h.innerText.trim(), fontSize: parseFloat(getComputedStyle(h).fontSize) })),
     input: r(input),
     textarea: r(ta),
     nav: nav ? r(nav) : null,
@@ -76,7 +82,7 @@ const metrics = page => page.evaluate(() => {
   };
 });
 
-async function checksFor(who, page) {
+async function checksFor(who, page, { slimHeader }) {
   await page.waitForSelector('[data-testid="thread-messages"]', { timeout: 60000 });
   await page.waitForSelector("text=Message 70:", { timeout: 60000 });
   await page.waitForTimeout(2500); // the smooth scroll to the newest message finishes
@@ -89,10 +95,63 @@ async function checksFor(who, page) {
     assert.ok(before.docScrollHeight <= before.innerHeight + 1, `page is ${before.docScrollHeight}px tall in a ${before.innerHeight}px window`);
     assert.equal(before.pageScrollY, 0);
   });
-  await check(`${who}: the header's safe-area padding is inline on the header, and it keeps its 3rem`, async () => {
+  await check(`${who}: the header's safe-area padding is inline on the header`, async () => {
     assert.match(before.headerStyle, /env\(safe-area-inset-top\)/);
-    assert.ok(before.headerPaddingTop >= 48, `padding-top ${before.headerPaddingTop}`);
   });
+  if (!slimHeader) {
+    await check(`${who}: the header keeps its 3rem of top padding`, async () => {
+      assert.ok(before.headerPaddingTop >= 48, `padding-top ${before.headerPaddingTop}`);
+    });
+  } else {
+    await check(`${who}: the header is no taller than 64 px plus the safe area (${HEADER_MAX_PX} px at inset 0)`, async () => {
+      const height = before.header.height - before.headerPaddingTop; // the bar itself; padding-top is the safe area (0 in desktop WebKit)
+      assert.ok(height <= HEADER_MAX_PX, `header bar is ${height}px tall (header ${before.header.height}px, padding-top ${before.headerPaddingTop}px)`);
+      assert.ok(before.header.height <= HEADER_MAX_PX + before.headerPaddingTop, `header is ${before.header.height}px`);
+    });
+    await check(`${who}: ...and it is still a real bar, not collapsed (at least 48 px)`, async () => {
+      assert.ok(before.header.height - before.headerPaddingTop >= 48, `header bar is ${before.header.height - before.headerPaddingTop}px`);
+    });
+    await check(`${who}: the header takes well under a quarter of the screen (less than 10%)`, async () => {
+      assert.ok(before.header.height < before.innerHeight * 0.1, `header is ${before.header.height}px of ${before.innerHeight}px`);
+    });
+    await check(`${who}: the header is coach avatar + coach name + a small "Messages" label: no logo, no big title`, async () => {
+      assert.equal(before.headerImages, 0, "the header still has an image (the logo)");
+      assert.match(before.headerText, /Coach Carter/, before.headerText);
+      assert.match(before.headerText, /Messages/, before.headerText);
+      assert.doesNotMatch(before.headerText, /\bwith\b/i, `old "with Coach ..." line is still there: ${before.headerText}`);
+      const big = before.headerHeadings.filter(h => h.fontSize > 16);
+      assert.equal(big.length, 0, `heading too big: ${JSON.stringify(big)}`);
+    });
+    await check(`${who}: avatar, name and label are on one line`, async () => {
+      const row = await page.evaluate(() => {
+        const header = document.querySelector('[data-testid="thread-header"]');
+        const mid = el => { const b = el.getBoundingClientRect(); return { cy: b.top + b.height / 2, h: b.height }; };
+        const name = [...header.querySelectorAll("p")].find(p => /Coach Carter/.test(p.innerText));
+        const label = header.querySelector("h1");
+        const avatar = name?.previousElementSibling ?? null; // the avatar is rendered just before the name
+        return { name: name ? mid(name) : null, label: label ? mid(label) : null, avatar: avatar ? mid(avatar) : null };
+      });
+      assert.ok(row.name && row.label && row.avatar, `missing: ${JSON.stringify(row)}`);
+      assert.ok(Math.abs(row.name.cy - row.label.cy) <= 4, `name and label centres differ: ${row.name.cy} vs ${row.label.cy}`);
+      assert.ok(Math.abs(row.name.cy - row.avatar.cy) <= 4, `avatar and name centres differ: ${row.avatar.cy} vs ${row.name.cy}`);
+      assert.ok(row.name.h < 26, `name is ${row.name.h}px tall: it wrapped`);
+    });
+    await check(`${who}: a very long coach name stays on one line and the header does not grow`, async () => {
+      const grown = await page.evaluate(() => {
+        const header = document.querySelector('[data-testid="thread-header"]');
+        const name = [...header.querySelectorAll("p")].find(p => /Coach Carter/.test(p.innerText));
+        const h0 = header.getBoundingClientRect().height;
+        const original = name.textContent;
+        name.textContent = "Coach Maximilian Alexander Bartholomew Featherstonehaugh-Montgomery the Third";
+        const out = { h0, h1: header.getBoundingClientRect().height, nameH: name.getBoundingClientRect().height, headerScroll: header.scrollWidth - header.clientWidth };
+        name.textContent = original;
+        return out;
+      });
+      assert.equal(grown.h1, grown.h0, `header grew from ${grown.h0} to ${grown.h1}`);
+      assert.ok(grown.nameH < 26, `name wrapped (${grown.nameH}px)`);
+      assert.ok(grown.headerScroll <= 0, "the header overflows sideways");
+    });
+  }
   await check(`${who}: the header is at the very top of the screen`, async () => assert.equal(before.header.top, 0));
   await check(`${who}: the typing bar is below the header and above the bottom menu, inside the screen`, async () => {
     assert.ok(before.input.top > before.header.bottom, "typing bar overlaps the header");
@@ -145,7 +204,7 @@ async function checksFor(who, page) {
   if (!signed) throw new Error("could not sign in as the athlete");
   const { ctx, page } = signed;
   await page.goto(`${BASE}/student/messages`, { waitUntil: "domcontentloaded", timeout: 180000 });
-  await checksFor("athlete", page);
+  await checksFor("athlete", page, { slimHeader: true });
   await ctx.close();
 }
 
@@ -156,7 +215,7 @@ async function checksFor(who, page) {
   const { ctx, page } = signed;
   await page.goto(`${BASE}/coach/messages`, { waitUntil: "domcontentloaded", timeout: 180000 });
   await page.getByRole("button", { name: /Alice Adams/ }).first().click({ timeout: 60000 });
-  await checksFor("coach", page);
+  await checksFor("coach", page, { slimHeader: false });
   await check("coach: the back arrow in the pinned header still works after scrolling", async () => {
     await page.locator('[data-testid="thread-header"] button').first().click();
     await page.waitForSelector("text=/\\d+ conversations?/", { timeout: 15000 });
